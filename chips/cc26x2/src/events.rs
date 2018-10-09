@@ -15,7 +15,7 @@ pub enum EVENT_PRIORITY {
 }
 }
 
-use cortexm::support::{atomic_read, atomic_write};
+use cortexm::support::{atomic, atomic_read};
 
 pub fn has_event() -> bool {
     let event_flags;
@@ -44,16 +44,18 @@ pub fn next_pending() -> Option<EVENT_PRIORITY> {
 #[inline]
 pub fn set_event_flag(priority: EVENT_PRIORITY) {
     unsafe {
-        let mut val = atomic_read(&EVENTS);
-        val |= 0b1 << (priority as u8) as u64;
-        atomic_write(&mut EVENTS, val);
+        let bm = 0b1 << (priority as u8) as u64;
+        atomic(|| {
+            EVENTS |= bm;
+        })
     };
 }
 
 pub fn clear_event_flag(priority: EVENT_PRIORITY) {
     unsafe {
-        let mut val = atomic_read(&EVENTS);
-        val &= !0b1 << (priority as u8) as u64;
-        atomic_write(&mut EVENTS, val);
+        let bm = !0b1 << (priority as u8) as u64;
+        atomic(|| {
+            EVENTS &= bm;
+        })
     };
 }
