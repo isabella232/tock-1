@@ -17,13 +17,13 @@ extern "C" {
     fn _estack();
 }
 
-use events;
+use event_priority::{EVENT_FLAGS, EVENT_PRIORITY};
 macro_rules! generic_isr {
     ($label:tt, $priority:expr) => {
         #[cfg(target_os = "none")]
         unsafe extern "C" fn $label() {
             enter_kernel_space();
-            events::set_event_flag($priority);
+            //EVENT_FLAGS.set_event_flag($priority as usize);
             disable_specific_nvic();
         }
     };
@@ -34,20 +34,20 @@ macro_rules! custom_isr {
         #[cfg(target_os = "none")]
         unsafe extern "C" fn $label() {
             enter_kernel_space();
-            events::set_event_flag($priority);
+            //EVENT_FLAGS.set_event_flag($priority as usize);
             $isr();
             //nvic not disabled - it is the responsibility of $isr to determine
         }
     };
 }
 
-generic_isr!(gpio_nvic, events::EVENT_PRIORITY::GPIO);
-generic_isr!(i2c0_nvic, events::EVENT_PRIORITY::I2C0);
-generic_isr!(aon_rtc_nvic, events::EVENT_PRIORITY::AON_RTC);
+generic_isr!(gpio_nvic, EVENT_PRIORITY::GPIO);
+generic_isr!(i2c0_nvic, EVENT_PRIORITY::I2C0);
+generic_isr!(aon_rtc_nvic, EVENT_PRIORITY::AON_RTC);
 
 use uart::{uart0_isr, uart1_isr};
-custom_isr!(uart0_nvic, events::EVENT_PRIORITY::UART0, uart0_isr);
-custom_isr!(uart1_nvic, events::EVENT_PRIORITY::UART1, uart1_isr);
+custom_isr!(uart0_nvic, EVENT_PRIORITY::UART0, uart0_isr);
+custom_isr!(uart1_nvic, EVENT_PRIORITY::UART1, uart1_isr);
 
 unsafe extern "C" fn unhandled_interrupt() {
     'loop0: loop {}

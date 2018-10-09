@@ -1,11 +1,11 @@
 use cortexm4;
-use events;
-use events::EVENT_PRIORITY;
+use event_priority::{EVENT_FLAGS, EVENT_PRIORITY};
 use gpio;
 use i2c;
 use kernel;
 use rtc;
 use uart;
+use enum_primitive::cast::FromPrimitive;
 
 pub struct Cc26X2 {
     mpu: cortexm4::mpu::MPU,
@@ -19,6 +19,7 @@ impl Cc26X2 {
             // The systick clocks with 48MHz by default
             systick: cortexm4::systick::SysTick::new_with_calibration(48 * 1000000),
         }
+
     }
 }
 
@@ -36,8 +37,12 @@ impl kernel::Chip for Cc26X2 {
 
     fn service_pending_interrupts(&self) {
         unsafe {
-            while let Some(event) = events::next_pending() {
-                events::clear_event_flag(event);
+            while let Some(event_flag) = EVENT_FLAGS.next_pending() {
+                let event = EVENT_PRIORITY::from_usize(event_flag)
+                    .expect("Unmapped EVENT_PRIORITY");
+                debug!("!");
+                EVENT_FLAGS.clear_event_flag(event_flag);
+
                 match event {
                     EVENT_PRIORITY::GPIO => gpio::PORT.handle_events(),
                     EVENT_PRIORITY::AON_RTC => rtc::RTC.handle_events(),
@@ -45,14 +50,14 @@ impl kernel::Chip for Cc26X2 {
                     EVENT_PRIORITY::UART0 => uart::UART0.handle_events(),
                     EVENT_PRIORITY::UART1 => uart::UART1.handle_events(),
                     EVENT_PRIORITY::AON_PROG => (),
-                    _ => panic!("unhandled event {:?} ", event),
+                    _ => panic!("unhandled event {:?} ", event_flag),
                 }
             }
         }
     }
 
     fn has_pending_interrupts(&self) -> bool {
-        events::has_event()
+        EVENT_FLAGS.has_event()
     }
 
     fn sleep(&self) {

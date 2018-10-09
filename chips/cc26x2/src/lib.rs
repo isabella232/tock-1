@@ -13,7 +13,7 @@ extern crate enum_primitive;
 pub mod aon;
 pub mod chip;
 pub mod crt1;
-pub mod events;
+pub mod event_priority;
 pub mod gpio;
 pub mod i2c;
 pub mod peripheral_interrupts;

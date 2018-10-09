@@ -166,6 +166,9 @@ unsafe fn configure_pins() {
     // analog   cc26x2::gpio::PORT[30]
 }
 
+use kernel::hil::uart::UART;
+
+
 #[no_mangle]
 pub unsafe fn reset_handler() {
     cc26x2::init();
@@ -290,6 +293,38 @@ pub unsafe fn reset_handler() {
         kernel::debug::DebugWriterWrapper::new(debugger)
     );
     kernel::debug::set_debug_writer_wrapper(debug_wrapper);
+
+    // Add the snippet below to main if you want to enable echo on UART1 and UART2
+    // Create a virtual device for echo test
+    let echo0_uart = static_init!(UartDevice, UartDevice::new(uart_mux, true));
+    echo0_uart.setup();
+    let echo0 = static_init!(
+            uart_echo::UartEcho<UartDevice, UartDevice>,
+            uart_echo::UartEcho::new(
+                echo0_uart,
+                echo0_uart,
+                &mut uart_echo::OUT_BUF0,
+                &mut uart_echo::IN_BUF0,
+            )
+        );
+
+    hil::uart::UART::set_client(echo0_uart, echo0);
+    echo0.initialize();
+
+    // Directly hook up UART1 for echo test
+    let echo1 = static_init!(
+            uart_echo::UartEcho<cc26x2::uart::UART, cc26x2::uart::UART>,
+            uart_echo::UartEcho::new(
+                &cc26x2::uart::UART1,
+                &cc26x2::uart::UART1,
+                &mut uart_echo::OUT_BUF1,
+                &mut uart_echo::IN_BUF1,
+            )
+        );
+    hil::uart::UART::set_client(&cc26x2::uart::UART1, echo1);
+    cc26x2::uart::UART1.initialize();
+    cc26x2::uart::UART1.configure(uart_echo::UART_PARAMS);
+    echo1.initialize();
 
     // TODO(alevy): Enable I2C, but it's not used anywhere yet. We need a system
     // call driver
