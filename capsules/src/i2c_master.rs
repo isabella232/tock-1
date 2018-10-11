@@ -69,6 +69,7 @@ impl<I: 'static + I2CMaster> I2CMasterDriver<I> {
                             read_start: OptionalCell::new(write_len as usize),
                             read_stop: len,
                         });
+                        app.slice = Some(app_buffer);
                         self.i2c.write_read(addr, buffer, write_len, read_len);
                         return ReturnCode::SUCCESS;
                     });
@@ -165,12 +166,13 @@ impl<I: I2CMaster> Driver for I2CMasterDriver<I> {
 
 impl<I: I2CMaster> I2CHwMasterClient for I2CMasterDriver<I> {
     fn command_complete(&self, buffer: &'static mut [u8], _error: Error) {
-        debug!("command complete");
 
         self.tx.take().map(|tx| {
             self.apps.enter(tx.app_id, |app, _| {
                 if let Some(read_start) = tx.read_start.take() {
+
                     if let Some(mut app_buffer) = app.slice.take() {
+                        debug!("Wa {:?}", buffer);
                         for n in read_start..tx.read_stop {
                             app_buffer.as_mut()[n] = buffer[n]
                         }
