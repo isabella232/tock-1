@@ -290,6 +290,7 @@ impl<U: UART> Client for Console<'a, U> {
         // Either print more from the AppSlice or send a callback to the
         // application.
         self.tx_buffer.replace(buffer);
+
         self.tx_in_progress.take().map(|appid| {
             self.apps.enter(appid, |app, _| {
                 match self.send_continue(appid, app) {

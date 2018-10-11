@@ -69,7 +69,6 @@ impl<I: 'static + I2CMaster> I2CMasterDriver<I> {
                             read_start: OptionalCell::new(write_len as usize),
                             read_stop: len,
                         });
-
                         self.i2c.write_read(addr, buffer, write_len, read_len);
                         return ReturnCode::SUCCESS;
                     });
@@ -99,13 +98,16 @@ impl<I: I2CMaster> Driver for I2CMasterDriver<I> {
         allow_num: usize,
         slice: Option<AppSlice<Shared, u8>>,
     ) -> ReturnCode {
+
         match allow_num {
-            1 => self
+            1 => {
+                self
                 .apps
                 .enter(appid, |app, _| {
                     app.slice = slice;
                     ReturnCode::SUCCESS
-                }).unwrap_or_else(|err| err.into()),
+                }).unwrap_or_else(|err| err.into())
+            },
             _ => ReturnCode::ENOSUPPORT,
         }
     }
@@ -121,6 +123,7 @@ impl<I: I2CMaster> Driver for I2CMasterDriver<I> {
         callback: Option<Callback>,
         app_id: AppId,
     ) -> ReturnCode {
+
         match subscribe_num {
             1 /* write_read_done */ => {
                 self.apps.enter(app_id, |app, _| {
@@ -144,6 +147,7 @@ impl<I: I2CMaster> Driver for I2CMasterDriver<I> {
     /// - `3`: Cancel any in progress receives and return (via callback)
     ///        what has been received so far.
     fn command(&self, cmd_num: usize, arg1: usize, arg2: usize, appid: AppId) -> ReturnCode {
+
         match cmd_num {
             0 /* check if present */ => ReturnCode::SUCCESS,
             1 /* write_read */ => {
@@ -161,6 +165,7 @@ impl<I: I2CMaster> Driver for I2CMasterDriver<I> {
 
 impl<I: I2CMaster> I2CHwMasterClient for I2CMasterDriver<I> {
     fn command_complete(&self, buffer: &'static mut [u8], _error: Error) {
+        debug!("command complete");
 
         self.tx.take().map(|tx| {
             self.apps.enter(tx.app_id, |app, _| {

@@ -20,6 +20,7 @@ use kernel::capabilities;
 use kernel::hil;
 use kernel::hil::entropy::Entropy32;
 use kernel::hil::rng::Rng;
+use kernel::hil::i2c::I2CMaster;
 
 #[macro_use]
 pub mod io;
@@ -57,6 +58,8 @@ pub struct Platform {
     rng: &'static capsules::rng::RngDriver<'static>,
     radio:
         &'static capsules::simple_rfcore::VirtualRadioDriver<'static, cc26x2::radio::subghz::Radio>,
+    i2c_master:
+        &'static capsules::i2c_master::I2CMasterDriver<cc26x2::i2c::I2CMaster<'static>>,
 }
 
 impl kernel::Platform for Platform {
@@ -72,6 +75,7 @@ impl kernel::Platform for Platform {
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules::simple_rfcore::DRIVER_NUM => f(Some(self.radio)),
+            capsules::i2c_master::DRIVER_NUM => f(Some(self.i2c_master)),
             _ => f(None),
         }
     }
@@ -268,25 +272,6 @@ pub unsafe fn reset_handler() {
     );
     hil::uart::UART::set_client(&cc26x2::uart::UART0, uart_mux);
 
-    // Create a UartDevice for the console.
-    let console_uart = static_init!(UartDevice, UartDevice::new(uart_mux, true));
-    console_uart.setup();
-
-    cc26x2::uart::UART0.initialize();
-
-    let console = static_init!(
-        capsules::console::Console<UartDevice>,
-        capsules::console::Console::new(
-            console_uart,
-            115200,
-            &mut capsules::console::WRITE_BUF,
-            &mut capsules::console::READ_BUF,
-            board_kernel.create_grant(&memory_allocation_capability)
-        )
-    );
-    kernel::hil::uart::UART::set_client(console_uart, console);
-    console.initialize();
-
     // Create virtual device for kernel debug.
     let debugger_uart = static_init!(UartDevice, UartDevice::new(uart_mux, false));
     debugger_uart.setup();
@@ -306,9 +291,38 @@ pub unsafe fn reset_handler() {
     );
     kernel::debug::set_debug_writer_wrapper(debug_wrapper);
 
-    // TODO(alevy): Enable I2C, but it's not used anywhere yet. We need a system
-    // call driver
+    // Create a UartDevice for the console.
+    let console_uart = static_init!(UartDevice, UartDevice::new(uart_mux, true));
+    console_uart.setup();
+
+    cc26x2::uart::UART0.initialize();
+
+    let console = static_init!(
+        capsules::console::Console<UartDevice>,
+        capsules::console::Console::new(
+            console_uart,
+            115200,
+            &mut capsules::console::WRITE_BUF,
+            &mut capsules::console::READ_BUF,
+            board_kernel.create_grant(&memory_allocation_capability)
+        )
+    );
+    kernel::hil::uart::UART::set_client(console_uart, console);
+    console.initialize();
+
     cc26x2::i2c::I2C0.initialize();
+
+    let i2c_master = static_init!(
+        capsules::i2c_master::I2CMasterDriver<cc26x2::i2c::I2CMaster<'static>>,
+        capsules::i2c_master::I2CMasterDriver::new(
+            &cc26x2::i2c::I2C0,
+            &mut capsules::i2c_master::BUF,
+            board_kernel.create_grant(&memory_allocation_capability)
+        )
+    );
+
+    cc26x2::i2c::I2C0.set_client(i2c_master);
+    cc26x2::i2c::I2C0.enable();
 
     // Setup for remaining GPIO pins
     let gpio_pins = static_init!(
@@ -396,6 +410,7 @@ pub unsafe fn reset_handler() {
         alarm,
         rng,
         radio: virtual_radio,
+        i2c_master
     };
 
     let chip = cc26x2::chip::Cc26X2::new();
