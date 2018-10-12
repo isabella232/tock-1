@@ -1,4 +1,6 @@
-pub static mut EVENTS: u64 = 0;
+use kernel::common::cells::VolatileCell;
+
+pub static mut EVENTS: VolatileCell<u64> = VolatileCell::new(0);
 
 use enum_primitive::cast::FromPrimitive;
 
@@ -23,14 +25,22 @@ pub enum EVENT_PRIORITY {
 use cortexm::support::{atomic, atomic_read};
 
 pub fn has_event() -> bool {
-    let event_flags;
-    unsafe { event_flags = atomic_read(&EVENTS) }
+    let mut event_flags = 0;
+    unsafe {
+        atomic(|| {
+                event_flags = EVENTS.get();
+        });
+    }
     event_flags != 0
 }
 
 pub fn next_pending() -> Option<EVENT_PRIORITY> {
-    let mut event_flags;
-    unsafe { event_flags = atomic_read(&EVENTS) }
+    let mut event_flags = 0;
+    unsafe {
+        atomic(|| {
+            event_flags = EVENTS.get();
+         });
+    }
 
     let mut count = 0;
     // stay in loop until we found the flag
@@ -51,7 +61,8 @@ pub fn set_event_flag(priority: EVENT_PRIORITY) {
     unsafe {
         let bm = 0b1 << (priority as u8) as u64;
         atomic(|| {
-            EVENTS |= bm;
+            let current = EVENTS.get();
+            EVENTS.set( current | bm );
         })
     };
 }
@@ -60,7 +71,8 @@ pub fn clear_event_flag(priority: EVENT_PRIORITY) {
     unsafe {
         let bm = !0b1 << (priority as u8) as u64;
         atomic(|| {
-            EVENTS &= bm;
+            let current = EVENTS.get();
+            EVENTS.set( current & bm );
         })
     };
 }

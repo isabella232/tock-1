@@ -163,32 +163,32 @@ impl<I: I2CMaster> Driver for I2CMasterDriver<I> {
 impl<I: I2CMaster> I2CHwMasterClient for I2CMasterDriver<I> {
     fn command_complete(&self, buffer: &'static mut [u8], _error: Error) {
 
-        // self.tx.take().map(|tx| {
-        //     self.apps.enter(tx.app_id, |app, _| {
-                // if let Some(read_start) = tx.read_start.take() {
+        self.tx.take().map(|tx| {
+            self.apps.enter(tx.app_id, |app, _| {
+                if let Some(read_len) = tx.read_len.take() {
 
-                //     if let Some(mut app_buffer) = app.slice.take() {
-                //         debug!("Wa {:?}", buffer);
-                //         for n in read_start..tx.read_stop {
-                //             app_buffer.as_mut()[n] = buffer[n]
-                //         }
-                //     }
-                //     else{
-                //       // app has requested read but we have no buffer
-                //       // should not arrive here
-                //     }
+                    if let Some(mut app_buffer) = app.slice.take() {
+                        debug!("Wa {:?}", buffer);
+                        for n in 0..read_len {
+                            app_buffer.as_mut()[n] = buffer[n]
+                        }
+                    }
+                    else{
+                      // app has requested read but we have no buffer
+                      // should not arrive here
+                    }
 
-                // }
+                }
 
-                // // signal to driver that tx complete
-                // app.callback.map(|mut cb| {
-                //     cb.schedule(0, 0, 0);
-                // });
-        //     })
-        // });
+                // signal to driver that tx complete
+                app.callback.map(|mut cb| {
+                    cb.schedule(0, 0, 0);
+                });
+            })
+        });
 
-        // recover buffer
-        //self.buf.put(Some(buffer));
+        //recover buffer
+        self.buf.put(Some(buffer));
     }
 }
 

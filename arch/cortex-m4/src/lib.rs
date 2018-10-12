@@ -64,7 +64,6 @@ pub unsafe extern "C" fn generic_isr() {
     disable_specific_nvic();
 }
 
-#[naked]
 pub unsafe extern "C" fn enter_kernel_space() {
     asm!(
         "
@@ -87,7 +86,6 @@ pub unsafe extern "C" fn enter_kernel_space() {
     );
 }
 
-#[naked]
 pub unsafe extern "C" fn disable_specific_nvic() {
     asm!(
         "

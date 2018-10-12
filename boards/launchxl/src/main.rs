@@ -421,7 +421,7 @@ pub unsafe fn reset_handler() {
     }
 
     let ipc = &kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
-
+    ::core::ptr::write_volatile(0xE000E008 as *mut u32, 0x2);
     kernel::procs::load_processes(
         board_kernel,
         &cortexm4::syscall::SysCall::new(),
