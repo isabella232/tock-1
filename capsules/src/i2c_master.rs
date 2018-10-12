@@ -168,7 +168,6 @@ impl<I: I2CMaster> I2CHwMasterClient for I2CMasterDriver<I> {
                 if let Some(read_len) = tx.read_len.take() {
 
                     if let Some(mut app_buffer) = app.slice.take() {
-                        debug!("Wa {:?}", buffer);
                         for n in 0..read_len {
                             app_buffer.as_mut()[n] = buffer[n]
                         }

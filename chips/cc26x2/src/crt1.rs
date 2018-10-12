@@ -21,6 +21,7 @@ use events;
 macro_rules! generic_isr {
     ($label:tt, $priority:expr) => {
         #[cfg(target_os = "none")]
+        #[naked]
         unsafe extern "C" fn $label() {
             enter_kernel_space();
             events::set_event_flag($priority);
@@ -32,6 +33,7 @@ macro_rules! generic_isr {
 macro_rules! custom_isr {
     ($label:tt, $priority:expr, $isr:ident) => {
         #[cfg(target_os = "none")]
+        #[naked]
         unsafe extern "C" fn $label() {
             enter_kernel_space();
             events::set_event_flag($priority);

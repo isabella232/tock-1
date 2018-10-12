@@ -381,7 +381,7 @@ pub unsafe fn reset_handler() {
         rng,
         i2c_master
     };
-
+    ::core::ptr::write_volatile(0xE000E008 as *mut u32, 0x2);
     let chip = cc26x2::chip::Cc26X2::new();
 
     extern "C" {

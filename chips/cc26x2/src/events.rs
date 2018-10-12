@@ -42,6 +42,7 @@ pub fn next_pending() -> Option<EVENT_PRIORITY> {
 }
 
 #[inline]
+#[naked]
 pub fn set_event_flag(priority: EVENT_PRIORITY) {
     unsafe {
         let bm = 0b1 << (priority as u8) as u64;
