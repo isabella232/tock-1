@@ -1,5 +1,6 @@
-pub static mut EVENTS: u64 = 0;
+pub static mut EVENTS: u32 = 0;
 
+use core::ptr;
 use enum_primitive::cast::FromPrimitive;
 
 enum_from_primitive!{
@@ -15,17 +16,17 @@ pub enum EVENT_PRIORITY {
 }
 }
 
-use cortexm::support::{atomic, atomic_read};
+use cortexm::support::atomic;
 
 pub fn has_event() -> bool {
     let event_flags;
-    unsafe { event_flags = atomic_read(&EVENTS) }
+    unsafe { event_flags = ptr::read_volatile(&EVENTS) }
     event_flags != 0
 }
 
 pub fn next_pending() -> Option<EVENT_PRIORITY> {
     let mut event_flags;
-    unsafe { event_flags = atomic_read(&EVENTS) }
+    unsafe { event_flags = ptr::read_volatile(&EVENTS) }
 
     let mut count = 0;
     // stay in loop until we found the flag
@@ -41,21 +42,23 @@ pub fn next_pending() -> Option<EVENT_PRIORITY> {
     None
 }
 
-#[inline]
+#[inline(never)]
 pub fn set_event_flag(priority: EVENT_PRIORITY) {
     unsafe {
-        let bm = 0b1 << (priority as u8) as u64;
+        let bm = 0b1 << (priority as u8) as u32;
         atomic(|| {
-            EVENTS |= bm;
+            let new_value = ptr::read_volatile(&EVENTS) | bm;
+            EVENTS = new_value;
         })
     };
 }
 
 pub fn clear_event_flag(priority: EVENT_PRIORITY) {
     unsafe {
-        let bm = !0b1 << (priority as u8) as u64;
+        let bm = !0b1 << (priority as u8) as u32;
         atomic(|| {
-            EVENTS &= bm;
+            let new_value = ptr::read_volatile(&EVENTS) & bm;
+            EVENTS = new_value;
         })
     };
 }

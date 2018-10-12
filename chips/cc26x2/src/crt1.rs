@@ -1,6 +1,6 @@
 use cortexm4::{
-    disable_specific_nvic, enter_kernel_space, generic_isr, hard_fault_handler, nvic, svc_handler,
-    systick_handler,
+    disable_specific_nvic, generic_isr, hard_fault_handler, nvic, set_privileged_thread,
+    stash_process_state, svc_handler, systick_handler,
 };
 
 extern "C" {
@@ -21,10 +21,20 @@ use events;
 macro_rules! generic_isr {
     ($label:tt, $priority:expr) => {
         #[cfg(target_os = "none")]
+        #[naked]
         unsafe extern "C" fn $label() {
-            enter_kernel_space();
-            events::set_event_flag($priority);
+            stash_process_state();
+            asm!("
+                // Set event flag
+                orr $0, $2
+                isb
+                "
+                : "={r0}"(events::EVENTS)
+                : "{r0}"(events::EVENTS), "{r1}"(0b1<<($priority as u8))
+                : : "volatile" "volatile"
+            );
             disable_specific_nvic();
+            set_privileged_thread();
         }
     };
 }
@@ -32,11 +42,19 @@ macro_rules! generic_isr {
 macro_rules! custom_isr {
     ($label:tt, $priority:expr, $isr:ident) => {
         #[cfg(target_os = "none")]
+        #[naked]
         unsafe extern "C" fn $label() {
-            enter_kernel_space();
-            events::set_event_flag($priority);
+            stash_process_state();
+            asm!("
+                // Set event flag
+                orr $0, $2
+                "
+                : "={r0}"(events::EVENTS)
+                : "{r0}"(events::EVENTS), "{r1}"(0b1<<($priority as u8))
+                : : "volatile" "volatile"
+            );
             $isr();
-            //nvic not disabled - it is the responsibility of $isr to determine
+            set_privileged_thread();
         }
     };
 }
