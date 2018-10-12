@@ -180,7 +180,7 @@ unsafe fn configure_pins() {
 #[no_mangle]
 pub unsafe fn reset_handler() {
     cc26x2::init();
-
+    ::core::ptr::write_volatile(0xE000E008 as *mut u32, 0x2);
     // Create capabilities that the board needs to call certain protected kernel
     // functions.
     let process_management_capability =
