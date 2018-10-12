@@ -18,30 +18,23 @@ extern "C" {
     fn _estack();
 }
 
-macro_rules! generic_isr_impl {
-    ($label:tt, $priority:tt) => {
+use events;
+macro_rules! generic_isr {
+    ($label:tt, $priority:expr) => {
         #[cfg(target_os = "none")]
         #[naked]
         unsafe extern "C" fn $label() {
             enter_kernel_space();
-            asm!(
-                "and EVENTS, EVENTS, #$priority"
-            );
+            events::set_event_flag($priority);
             disable_specific_nvic();
         }
-    };
-}
-
-use events;
-macro_rules! generic_isr {
-    ($label:tt, $priority:expr) => {
-        generic_isr_impl!($label, (0b1 << $priority as u8));
     };
 }
 
 macro_rules! custom_isr {
     ($label:tt, $priority:expr, $isr:ident) => {
         #[cfg(target_os = "none")]
+        #[naked]
         unsafe extern "C" fn $label() {
             enter_kernel_space();
 
