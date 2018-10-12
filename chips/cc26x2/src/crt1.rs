@@ -1,6 +1,6 @@
 use cortexm4::{
     disable_specific_nvic, enter_kernel_space, generic_isr, hard_fault_handler, nvic, svc_handler,
-    systick_handler,
+    systick_handler, enter_kernel_space_hack
 };
 use setup;
 
@@ -24,8 +24,14 @@ macro_rules! generic_isr {
         #[cfg(target_os = "none")]
         #[naked]
         unsafe extern "C" fn $label() {
-            enter_kernel_space();
-            events::set_event_flag($priority);
+            enter_kernel_space_hack();
+            //events::set_event_flag($priority);
+            asm!(
+                "
+                /* Find the ISR number by looking at the low byte of the IPSR registers */
+                orr $0, #64"
+                : "=r"(events::EVENTS)
+                : : : "volatile" );
             disable_specific_nvic();
         }
     };
@@ -37,7 +43,6 @@ macro_rules! custom_isr {
         #[naked]
         unsafe extern "C" fn $label() {
             enter_kernel_space();
-
             events::set_event_flag($priority);
             $isr();
             //nvic not disabled - it is the responsibility of $isr to determine
@@ -83,16 +88,16 @@ pub static BASE_VECTORS: [unsafe extern "C" fn(); 54] = [
     systick_handler,     // Systick
     gpio_nvic,           // GPIO Int handler
     i2c0_nvic,           // I2C0
-    rfc_cpe1_isr,        // RF Core Command & Packet Engine 1
+    generic_isr,        // RF Core Command & Packet Engine 1
     generic_isr,         // AON SpiSplave Rx, Tx and CS
-    aon_rtc_nvic,        // AON RTC
+    generic_isr,        // AON RTC
     uart0_nvic,          // UART0 Rx and Tx
     generic_isr,         // AUX software event 0
     generic_isr,         // SSI0 Rx and Tx
     generic_isr,         // SSI1 Rx and Tx
-    rfc_cpe0_isr,        // RF Core Command & Packet Engine 0
-    rfc_hw_isr,          // RF Core Hardware
-    rfc_cmd_ack_isr,     // RF Core Command Acknowledge
+    generic_isr,        // RF Core Command & Packet Engine 0
+    generic_isr,          // RF Core Hardware
+    generic_isr,     // RF Core Command Acknowledge
     generic_isr,         // I2S
     generic_isr,         // AUX software event 1
     generic_isr,         // Watchdog timer
@@ -117,7 +122,7 @@ pub static BASE_VECTORS: [unsafe extern "C" fn(); 54] = [
     generic_isr, // AUX ADC new sample or ADC DMA
     // done, ADC underflow, ADC overflow
     generic_isr, // TRNG event (hw_ints.h 49)
-    osc_isr,
+    generic_isr,
     generic_isr,
     uart1_nvic, //uart1_generic_isr,//uart::uart1_isr, // 52 allegedly UART1 (http://e2e.ti.com/support/wireless_connectivity/proprietary_sub_1_ghz_simpliciti/f/156/t/662981?CC1312R-UART1-can-t-work-correctly-in-sensor-oad-cc1312lp-example-on-both-cc1312-launchpad-and-cc1352-launchpad)
     generic_isr,

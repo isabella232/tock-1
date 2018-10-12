@@ -88,6 +88,29 @@ pub unsafe extern "C" fn enter_kernel_space() {
 }
 
 #[naked]
+pub unsafe extern "C" fn enter_kernel_space_hack() {
+    asm!(
+        "
+    /* Skip saving process state if not coming from user-space */
+    cmp lr, #0xfffffffd
+    bne 1f
+    /* We need the most recent kernel's version of r1, which points */
+    /* to the Process struct's stored registers field. The kernel's r1 */
+    /* lives in the second word of the hardware stacked registers on MSP */
+    mov r1, sp
+    ldr r1, [r1, #4]
+    stmia r1, {r4-r11}
+    /* Set thread mode to privileged */
+    mov r0, #0
+    msr CONTROL, r0
+    movw LR, #0xFFF9
+    movt LR, #0xFFFF
+  1:"
+    : : : : "volatile"
+    );
+}
+
+#[naked]
 pub unsafe extern "C" fn disable_specific_nvic() {
     asm!(
         "
