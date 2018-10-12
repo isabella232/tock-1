@@ -18,9 +18,7 @@ struct Transaction {
     /// the client
     app_id: AppId,
     /// The total amount to transmit
-    read_start: OptionalCell<usize>,
-    /// The index of the byte currently being sent
-    read_stop: usize,
+    read_len: OptionalCell<usize>,
 }
 
 pub struct I2CMasterDriver<I: 'static + I2CMaster> {
@@ -60,14 +58,12 @@ impl<I: 'static + I2CMaster> I2CMasterDriver<I> {
             .enter(app_id, |_, _| {
                 if let Some(app_buffer) = app.slice.take() {
                     self.buf.take().map(|buffer| {
-                        let len = write_len as usize + read_len as usize;
-                        for n in 0..len {
+                        for n in 0..write_len as usize {
                             buffer[n] = app_buffer.as_ref()[n];
                         }
                         self.tx.put( Transaction {
                             app_id,
-                            read_start: OptionalCell::new(write_len as usize),
-                            read_stop: len,
+                            read_len: OptionalCell::new(read_len as usize),
                         });
                         app.slice = Some(app_buffer);
                         self.i2c.write_read(addr, buffer, write_len, read_len);
@@ -167,32 +163,32 @@ impl<I: I2CMaster> Driver for I2CMasterDriver<I> {
 impl<I: I2CMaster> I2CHwMasterClient for I2CMasterDriver<I> {
     fn command_complete(&self, buffer: &'static mut [u8], _error: Error) {
 
-        self.tx.take().map(|tx| {
-            self.apps.enter(tx.app_id, |app, _| {
-                if let Some(read_start) = tx.read_start.take() {
+        // self.tx.take().map(|tx| {
+        //     self.apps.enter(tx.app_id, |app, _| {
+                // if let Some(read_start) = tx.read_start.take() {
 
-                    if let Some(mut app_buffer) = app.slice.take() {
-                        debug!("Wa {:?}", buffer);
-                        for n in read_start..tx.read_stop {
-                            app_buffer.as_mut()[n] = buffer[n]
-                        }
-                    }
-                    else{
-                      // app has requested read but we have no buffer
-                      // should not arrive here
-                    }
+                //     if let Some(mut app_buffer) = app.slice.take() {
+                //         debug!("Wa {:?}", buffer);
+                //         for n in read_start..tx.read_stop {
+                //             app_buffer.as_mut()[n] = buffer[n]
+                //         }
+                //     }
+                //     else{
+                //       // app has requested read but we have no buffer
+                //       // should not arrive here
+                //     }
 
-                }
+                // }
 
-                // signal to driver that tx complete
-                app.callback.map(|mut cb| {
-                    cb.schedule(0, 0, 0);
-                });
-            })
-        });
+                // // signal to driver that tx complete
+                // app.callback.map(|mut cb| {
+                //     cb.schedule(0, 0, 0);
+                // });
+        //     })
+        // });
 
         // recover buffer
-        self.buf.put(Some(buffer));
+        //self.buf.put(Some(buffer));
     }
 }
 
