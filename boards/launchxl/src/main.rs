@@ -18,6 +18,8 @@ use kernel::capabilities;
 use kernel::hil;
 use kernel::hil::entropy::Entropy32;
 use kernel::hil::rng::Rng;
+use kernel::hil::i2c::I2CMaster;
+
 
 #[macro_use]
 pub mod io;
@@ -53,6 +55,8 @@ pub struct Platform {
         capsules::virtual_alarm::VirtualMuxAlarm<'static, cc26x2::rtc::Rtc>,
     >,
     rng: &'static capsules::rng::RngDriver<'static>,
+    i2c_master:
+        &'static capsules::i2c_master::I2CMasterDriver<cc26x2::i2c::I2CMaster<'static>>,
 }
 
 impl kernel::Platform for Platform {
@@ -67,6 +71,7 @@ impl kernel::Platform for Platform {
             capsules::button::DRIVER_NUM => f(Some(self.button)),
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules::rng::DRIVER_NUM => f(Some(self.rng)),
+            capsules::i2c_master::DRIVER_NUM => f(Some(self.i2c_master)),
             _ => f(None),
         }
     }
@@ -295,6 +300,18 @@ pub unsafe fn reset_handler() {
     // call driver
     cc26x2::i2c::I2C0.initialize();
 
+    let i2c_master = static_init!(
+        capsules::i2c_master::I2CMasterDriver<cc26x2::i2c::I2CMaster<'static>>,
+        capsules::i2c_master::I2CMasterDriver::new(
+            &cc26x2::i2c::I2C0,
+            &mut capsules::i2c_master::BUF,
+            board_kernel.create_grant(&memory_allocation_capability)
+        )
+    );
+
+    cc26x2::i2c::I2C0.set_client(i2c_master);
+    cc26x2::i2c::I2C0.enable();
+
     // Setup for remaining GPIO pins
     let gpio_pins = static_init!(
         [&'static cc26x2::gpio::GPIOPin; 5],
@@ -362,6 +379,7 @@ pub unsafe fn reset_handler() {
         button,
         alarm,
         rng,
+        i2c_master
     };
 
     let chip = cc26x2::chip::Cc26X2::new();

@@ -30,6 +30,7 @@ pub mod fxos8700cq;
 pub mod gpio;
 pub mod gpio_async;
 pub mod humidity;
+pub mod i2c_master;
 pub mod i2c_master_slave_driver;
 pub mod ieee802154;
 pub mod isl29035;
