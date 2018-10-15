@@ -1,5 +1,5 @@
 use kernel::common::cells::{MapCell, OptionalCell, TakeCell};
-use kernel::hil::i2c::{Error, I2CHwMasterClient, I2CMaster};
+use kernel::hil::i2c;
 use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
 
 /// Syscall driver number.
@@ -13,6 +13,7 @@ pub struct App {
 
 pub static mut BUF: [u8; 64] = [0; 64];
 
+
 struct Transaction {
     /// The buffer containing the bytes to transmit as it should be returned to
     /// the client
@@ -21,14 +22,14 @@ struct Transaction {
     read_len: OptionalCell<usize>,
 }
 
-pub struct I2CMasterDriver<I: 'static + I2CMaster> {
+pub struct I2CMasterDriver<I: 'static + i2c::I2CMaster> {
     i2c: &'static I,
     buf: TakeCell<'static, [u8]>,
     tx: MapCell<Transaction>,
     apps: Grant<App>,
 }
 
-impl<I: 'static + I2CMaster> I2CMasterDriver<I> {
+impl<I: 'static + i2c::I2CMaster> I2CMasterDriver<I> {
     pub fn new(i2c: &'static I, buf: &'static mut [u8], apps: Grant<App>) -> I2CMasterDriver<I> {
         I2CMasterDriver {
             i2c,
@@ -38,37 +39,42 @@ impl<I: 'static + I2CMaster> I2CMasterDriver<I> {
         }
     }
 
-    pub fn initialize(&self) {
-        // self.uart.configure(uart::UARTParameters {
-        //     baud_rate: self.baud_rate,
-        //     stop_bits: uart::StopBits::One,
-        //     parity: uart::Parity::None,
-        //     hw_flow_control: false,
-        // });
-    }
-
-    /// Internal helper function for setting up a new send transaction
-    fn write_read(
+    fn operation(
         &self,
         app_id: AppId,
         app: &mut App,
+        command: CMD,
         addr: u8,
-        write_len: u8,
-        read_len: u8,
+        wlen: u8,
+        rlen: u8,
     ) -> ReturnCode {
         self.apps
             .enter(app_id, |_, _| {
                 if let Some(app_buffer) = app.slice.take() {
                     self.buf.take().map(|buffer| {
-                        for n in 0..write_len as usize {
+                        for n in 0..wlen as usize {
                             buffer[n] = app_buffer.as_ref()[n];
+                        }
+
+                        let read_len: OptionalCell<usize>;
+                        if rlen == 0 {
+                            read_len = OptionalCell::empty();
+                        }
+                        else {
+                            read_len = OptionalCell::new(rlen as usize);
                         }
                         self.tx.put(Transaction {
                             app_id,
-                            read_len: OptionalCell::new(read_len as usize),
+                            read_len
                         });
                         app.slice = Some(app_buffer);
-                        self.i2c.write_read(addr, buffer, write_len, read_len);
+
+                        match command {
+                            CMD::PING => return ReturnCode::EINVAL,
+                            CMD::WRITE => self.i2c.write(addr, buffer, wlen),
+                            CMD::READ => self.i2c.read(addr, buffer, rlen),
+                            CMD::WRITE_READ => self.i2c.write_read(addr, buffer, wlen, rlen),
+                        }
                         return ReturnCode::SUCCESS;
                     });
                     // buffer has not been returned by I2C
@@ -82,9 +88,22 @@ impl<I: 'static + I2CMaster> I2CMasterDriver<I> {
             }).expect("Appid does not map to app");
         ReturnCode::ENOSUPPORT
     }
+
 }
 
-impl<I: I2CMaster> Driver for I2CMasterDriver<I> {
+use enum_primitive::cast::FromPrimitive;
+
+enum_from_primitive!{
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum CMD {
+    PING = 0,
+    WRITE = 1,
+    READ = 2,
+    WRITE_READ = 3,
+}
+}
+
+impl<I: i2c::I2CMaster> Driver for I2CMasterDriver<I> {
     /// Setup shared buffers.
     ///
     /// ### `allow_num`
@@ -129,36 +148,46 @@ impl<I: I2CMaster> Driver for I2CMasterDriver<I> {
         }
     }
 
-    /// Initiate serial transfers
-    ///
-    /// ### `command_num`
-    ///
-    /// - `0`: Driver check.
-    /// - `1`: Transmits a buffer passed via `allow`, up to the length
-    ///        passed in `arg1`
-    /// - `2`: Receives into a buffer passed via `allow`, up to the length
-    ///        passed in `arg1`
-    /// - `3`: Cancel any in progress receives and return (via callback)
-    ///        what has been received so far.
+    /// Initiate transfers
     fn command(&self, cmd_num: usize, arg1: usize, arg2: usize, appid: AppId) -> ReturnCode {
-        match cmd_num {
-            0 /* check if present */ => ReturnCode::SUCCESS,
-            1 /* write_read */ => {
-                let addr = arg1 as u8;
-                let write_len = arg1 >> 8; // can extend to 24 bit write length
-                let read_len = arg2;       // can extend to 32 bit read length
-                self.apps.enter(appid, |app, _| {
-                    self.write_read(appid, app, addr, write_len as u8, read_len as u8);
-                    ReturnCode::SUCCESS
-                }).unwrap_or_else(|err| err.into())
-            },
-            _ => ReturnCode::ENOSUPPORT
+        if let Some(cmd) = CMD::from_usize(cmd_num){
+            match cmd {
+                CMD::PING => ReturnCode::SUCCESS,
+                CMD::WRITE => {
+                    self.apps.enter(appid, |app, _| {
+                        let addr = arg1 as u8;
+                        let write_len = arg2;
+                        self.operation(appid, app, CMD::WRITE, addr, write_len as u8, 0);
+                        ReturnCode::SUCCESS
+                    }).unwrap_or_else(|err| err.into())
+                },
+                CMD::READ => {
+                    self.apps.enter(appid, |app, _| {
+                        let addr = arg1 as u8;
+                        let read_len = arg2;
+                        self.operation(appid, app, CMD::READ, addr, 0, read_len as u8);
+                        ReturnCode::SUCCESS
+                    }).unwrap_or_else(|err| err.into())
+                },
+                CMD::WRITE_READ => {
+                    let addr = arg1 as u8;
+                    let write_len = arg1 >> 8; // can extend to 24 bit write length
+                    let read_len = arg2;       // can extend to 32 bit read length
+                    self.apps.enter(appid, |app, _| {
+                        self.operation(appid, app, CMD::WRITE_READ, addr, write_len as u8, read_len as u8);
+                        ReturnCode::SUCCESS
+                    }).unwrap_or_else(|err| err.into())
+                }
+            }
+        }
+        else{
+            ReturnCode::ENOSUPPORT
         }
     }
 }
 
-impl<I: I2CMaster> I2CHwMasterClient for I2CMasterDriver<I> {
-    fn command_complete(&self, buffer: &'static mut [u8], _error: Error) {
+impl<I: i2c::I2CMaster> i2c::I2CHwMasterClient for I2CMasterDriver<I> {
+    fn command_complete(&self, buffer: &'static mut [u8], _error: i2c::Error) {
         self.tx.take().map(|tx| {
             self.apps.enter(tx.app_id, |app, _| {
                 if let Some(read_len) = tx.read_len.take() {

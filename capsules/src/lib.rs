@@ -7,6 +7,8 @@
 #[allow(unused_imports)]
 #[macro_use(debug)]
 extern crate kernel;
+#[macro_use]
+extern crate enum_primitive;
 
 pub mod test;
 
