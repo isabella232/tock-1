@@ -3,6 +3,8 @@ use cortexm4::{
     stash_process_state, svc_handler, systick_handler,
 };
 
+use events::set_event_flag_from_isr;
+
 extern "C" {
     // Symbols defined in the linker file
     static mut _erelocate: u32;
@@ -17,22 +19,14 @@ extern "C" {
     fn _estack();
 }
 
-use events;
+use event_priority;
 macro_rules! generic_isr {
     ($label:tt, $priority:expr) => {
         #[cfg(target_os = "none")]
         #[naked]
         unsafe extern "C" fn $label() {
             stash_process_state();
-            asm!("
-                // Set event flag
-                orr $0, $2
-                isb
-                "
-                : "={r0}"(events::EVENTS)
-                : "{r0}"(events::EVENTS), "{r1}"(0b1<<($priority as u8))
-                : : "volatile" "volatile"
-            );
+            set_event_flag_from_isr($priority);
             disable_specific_nvic();
             set_privileged_thread();
         }
@@ -45,27 +39,20 @@ macro_rules! custom_isr {
         #[naked]
         unsafe extern "C" fn $label() {
             stash_process_state();
-            asm!("
-                // Set event flag
-                orr $0, $2
-                "
-                : "={r0}"(events::EVENTS)
-                : "{r0}"(events::EVENTS), "{r1}"(0b1<<($priority as u8))
-                : : "volatile" "volatile"
-            );
+            set_event_flag_from_isr($priority);
             $isr();
             set_privileged_thread();
         }
     };
 }
 
-generic_isr!(gpio_nvic, events::EVENT_PRIORITY::GPIO);
-generic_isr!(i2c0_nvic, events::EVENT_PRIORITY::I2C0);
-generic_isr!(aon_rtc_nvic, events::EVENT_PRIORITY::AON_RTC);
+generic_isr!(gpio_nvic, event_priority::EVENT_PRIORITY::GPIO);
+generic_isr!(i2c0_nvic, event_priority::EVENT_PRIORITY::I2C0);
+generic_isr!(aon_rtc_nvic, event_priority::EVENT_PRIORITY::AON_RTC);
 
 use uart::{uart0_isr, uart1_isr};
-custom_isr!(uart0_nvic, events::EVENT_PRIORITY::UART0, uart0_isr);
-custom_isr!(uart1_nvic, events::EVENT_PRIORITY::UART1, uart1_isr);
+custom_isr!(uart0_nvic, event_priority::EVENT_PRIORITY::UART0, uart0_isr);
+custom_isr!(uart1_nvic, event_priority::EVENT_PRIORITY::UART1, uart1_isr);
 
 unsafe extern "C" fn unhandled_interrupt() {
     'loop0: loop {}
