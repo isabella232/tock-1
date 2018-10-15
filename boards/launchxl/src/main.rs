@@ -17,9 +17,8 @@ use cc26x2::prcm;
 use kernel::capabilities;
 use kernel::hil;
 use kernel::hil::entropy::Entropy32;
-use kernel::hil::rng::Rng;
 use kernel::hil::i2c::I2CMaster;
-
+use kernel::hil::rng::Rng;
 
 #[macro_use]
 pub mod io;
@@ -55,8 +54,7 @@ pub struct Platform {
         capsules::virtual_alarm::VirtualMuxAlarm<'static, cc26x2::rtc::Rtc>,
     >,
     rng: &'static capsules::rng::RngDriver<'static>,
-    i2c_master:
-        &'static capsules::i2c_master::I2CMasterDriver<cc26x2::i2c::I2CMaster<'static>>,
+    i2c_master: &'static capsules::i2c_master::I2CMasterDriver<cc26x2::i2c::I2CMaster<'static>>,
 }
 
 impl kernel::Platform for Platform {
@@ -379,7 +377,7 @@ pub unsafe fn reset_handler() {
         button,
         alarm,
         rng,
-        i2c_master
+        i2c_master,
     };
 
     let chip = cc26x2::chip::Cc26X2::new();
