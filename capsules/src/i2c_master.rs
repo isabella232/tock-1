@@ -13,7 +13,6 @@ pub struct App {
 
 pub static mut BUF: [u8; 64] = [0; 64];
 
-
 struct Transaction {
     /// The buffer containing the bytes to transmit as it should be returned to
     /// the client
@@ -59,14 +58,10 @@ impl<I: 'static + i2c::I2CMaster> I2CMasterDriver<I> {
                         let read_len: OptionalCell<usize>;
                         if rlen == 0 {
                             read_len = OptionalCell::empty();
-                        }
-                        else {
+                        } else {
                             read_len = OptionalCell::new(rlen as usize);
                         }
-                        self.tx.put(Transaction {
-                            app_id,
-                            read_len
-                        });
+                        self.tx.put(Transaction { app_id, read_len });
                         app.slice = Some(app_buffer);
 
                         match command {
@@ -88,7 +83,6 @@ impl<I: 'static + i2c::I2CMaster> I2CMasterDriver<I> {
             }).expect("Appid does not map to app");
         ReturnCode::ENOSUPPORT
     }
-
 }
 
 use enum_primitive::cast::FromPrimitive;
@@ -150,37 +144,44 @@ impl<I: i2c::I2CMaster> Driver for I2CMasterDriver<I> {
 
     /// Initiate transfers
     fn command(&self, cmd_num: usize, arg1: usize, arg2: usize, appid: AppId) -> ReturnCode {
-        if let Some(cmd) = CMD::from_usize(cmd_num){
+        if let Some(cmd) = CMD::from_usize(cmd_num) {
             match cmd {
                 CMD::PING => ReturnCode::SUCCESS,
-                CMD::WRITE => {
-                    self.apps.enter(appid, |app, _| {
+                CMD::WRITE => self
+                    .apps
+                    .enter(appid, |app, _| {
                         let addr = arg1 as u8;
                         let write_len = arg2;
                         self.operation(appid, app, CMD::WRITE, addr, write_len as u8, 0);
                         ReturnCode::SUCCESS
-                    }).unwrap_or_else(|err| err.into())
-                },
-                CMD::READ => {
-                    self.apps.enter(appid, |app, _| {
+                    }).unwrap_or_else(|err| err.into()),
+                CMD::READ => self
+                    .apps
+                    .enter(appid, |app, _| {
                         let addr = arg1 as u8;
                         let read_len = arg2;
                         self.operation(appid, app, CMD::READ, addr, 0, read_len as u8);
                         ReturnCode::SUCCESS
-                    }).unwrap_or_else(|err| err.into())
-                },
+                    }).unwrap_or_else(|err| err.into()),
                 CMD::WRITE_READ => {
                     let addr = arg1 as u8;
                     let write_len = arg1 >> 8; // can extend to 24 bit write length
-                    let read_len = arg2;       // can extend to 32 bit read length
-                    self.apps.enter(appid, |app, _| {
-                        self.operation(appid, app, CMD::WRITE_READ, addr, write_len as u8, read_len as u8);
-                        ReturnCode::SUCCESS
-                    }).unwrap_or_else(|err| err.into())
+                    let read_len = arg2; // can extend to 32 bit read length
+                    self.apps
+                        .enter(appid, |app, _| {
+                            self.operation(
+                                appid,
+                                app,
+                                CMD::WRITE_READ,
+                                addr,
+                                write_len as u8,
+                                read_len as u8,
+                            );
+                            ReturnCode::SUCCESS
+                        }).unwrap_or_else(|err| err.into())
                 }
             }
-        }
-        else{
+        } else {
             ReturnCode::ENOSUPPORT
         }
     }

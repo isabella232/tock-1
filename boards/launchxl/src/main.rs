@@ -76,26 +76,23 @@ impl kernel::Platform for Platform {
     }
 }
 
-mod pin_mapping_cc1312r;
-use pin_mapping_cc1312r::PIN_FN as PIN_FN;
+mod pin_mapping_cc1352p;
+use pin_mapping_cc1352p::PIN_FN;
 ///
 unsafe fn configure_pins() {
-
     cc26x2::gpio::PORT[PIN_FN::UART0_RX as usize].enable_uart0_rx();
     cc26x2::gpio::PORT[PIN_FN::UART0_TX as usize].enable_uart0_tx();
 
     cc26x2::gpio::PORT[PIN_FN::I2C0_SCL as usize].enable_i2c_scl();
     cc26x2::gpio::PORT[PIN_FN::I2C0_SDA as usize].enable_i2c_sda();
 
-    cc26x2::gpio::PORT[PIN_FN::RED_LED as usize].enable_gpio(); // Red LED
-    cc26x2::gpio::PORT[PIN_FN::GREEN_LED as usize].enable_gpio(); // Green LED
+    cc26x2::gpio::PORT[PIN_FN::RED_LED as usize].enable_gpio();
+    cc26x2::gpio::PORT[PIN_FN::GREEN_LED as usize].enable_gpio();
 
     cc26x2::gpio::PORT[PIN_FN::BUTTON_1 as usize].enable_gpio();
     cc26x2::gpio::PORT[PIN_FN::BUTTON_2 as usize].enable_gpio();
 
     cc26x2::gpio::PORT[PIN_FN::GPIO0 as usize].enable_gpio();
-
-
 }
 
 #[no_mangle]

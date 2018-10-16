@@ -10,7 +10,7 @@ pub enum PIN_FN {
     TDI = 17,
     RED_LED = 6,
     GREEN_LED = 7,
-    BUTTON_1 = 13,
+    BUTTON_1 = 15,
     BUTTON_2 = 14,
     GPIO0 = 24,
 }
