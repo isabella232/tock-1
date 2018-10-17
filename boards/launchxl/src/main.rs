@@ -18,13 +18,11 @@ use cc26x2::prcm;
 use kernel::capabilities;
 use kernel::hil;
 use kernel::hil::entropy::Entropy32;
+use kernel::hil::gpio::InterruptMode;
+use kernel::hil::gpio::Pin;
+use kernel::hil::gpio::PinCtl;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::rng::Rng;
-use kernel::hil::gpio::PinCtl;
-use kernel::hil::gpio::Pin;
-use kernel::hil::gpio::InterruptMode;
-
-
 
 #[macro_use]
 pub mod io;

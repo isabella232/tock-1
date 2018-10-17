@@ -331,12 +331,11 @@ impl Port {
         // Clear all interrupts by setting their bits to 1 in evflags
         regs.evflags.set(evflags);
 
-
         // evflags indicate which pins has triggered an interrupt,
         // we need to call the respective handler for positive bit in evflags.
 
         let mut count = 0;
-        while evflags !=0 && count < self.pins.len(){
+        while evflags != 0 && count < self.pins.len() {
             if (evflags & 0b1) != 0 {
                 self.pins[count].handle_interrupt();
             }
