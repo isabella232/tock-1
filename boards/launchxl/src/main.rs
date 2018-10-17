@@ -20,6 +20,11 @@ use kernel::hil;
 use kernel::hil::entropy::Entropy32;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::rng::Rng;
+use kernel::hil::gpio::PinCtl;
+use kernel::hil::gpio::Pin;
+use kernel::hil::gpio::InterruptMode;
+
+
 
 #[macro_use]
 pub mod io;
@@ -158,6 +163,7 @@ pub unsafe fn reset_handler() {
             ), // Button 2
         ]
     );
+
     let button = static_init!(
         capsules::button::Button<'static, cc26x2::gpio::GPIOPin>,
         capsules::button::Button::new(
@@ -165,8 +171,13 @@ pub unsafe fn reset_handler() {
             board_kernel.create_grant(&memory_allocation_capability)
         )
     );
+
+    let mut count = 0;
     for &(btn, _) in button_pins.iter() {
+        btn.set_input_mode(hil::gpio::InputMode::PullUp);
+        btn.enable_interrupt(count, InterruptMode::FallingEdge);
         btn.set_client(button);
+        count += 1;
     }
 
     // UART
@@ -220,23 +231,6 @@ pub unsafe fn reset_handler() {
     );
     kernel::debug::set_debug_writer_wrapper(debug_wrapper);
 
-    let echo0_uart = static_init!(UartDevice, UartDevice::new(uart_mux, true));
-    echo0_uart.setup();
-    let echo0 = static_init!(
-        uart_echo::UartEcho<UartDevice, UartDevice>,
-        uart_echo::UartEcho::new(
-            echo0_uart,
-            echo0_uart,
-            &mut uart_echo::OUT_BUF0,
-            &mut uart_echo::IN_BUF0,
-        )
-    );
-
-    hil::uart::UART::set_client(echo0_uart, echo0);
-    echo0.initialize();
-
-    // TODO(alevy): Enable I2C, but it's not used anywhere yet. We need a system
-    // call driver
     cc26x2::i2c::I2C0.initialize();
 
     let i2c_master = static_init!(

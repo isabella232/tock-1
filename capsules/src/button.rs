@@ -72,7 +72,7 @@ pub enum GpioMode {
 
 /// Values that are passed to userspace to identify if the button is pressed
 /// or not.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum ButtonState {
     NotPressed = 0,
     Pressed = 1,
@@ -237,8 +237,8 @@ impl<G: hil::gpio::Pin + hil::gpio::PinCtl> Client for Button<'a, G> {
     fn fired(&self, pin_num: usize) {
         // Read the value of the pin and get the button state.
         let button_state = self.get_button_state(pin_num);
-        let interrupt_count = Cell::new(0);
 
+        let interrupt_count = Cell::new(0);
         // schedule callback with the pin number and value
         self.apps.each(|cntr| {
             cntr.0.map(|mut callback| {
@@ -253,7 +253,7 @@ impl<G: hil::gpio::Pin + hil::gpio::PinCtl> Client for Button<'a, G> {
         // (and didn't unregister the interrupt). Lazily disable interrupts for
         // this button if so.
         if interrupt_count.get() == 0 {
-            self.pins[pin_num].0.disable_interrupt();
+           self.pins[pin_num].0.disable_interrupt();
         }
     }
 }
