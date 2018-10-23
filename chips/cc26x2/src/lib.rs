@@ -13,6 +13,8 @@ extern crate enum_primitive;
 extern crate bitfield;
 extern crate fixedvec;
 
+pub mod adc;
+pub mod adi;
 pub mod aon;
 pub mod aux;
 pub mod chip;
@@ -22,6 +24,7 @@ pub mod events;
 pub mod gpio;
 pub mod i2c;
 pub mod ioc;
+pub mod memory_map;
 pub mod osc;
 pub mod peripheral_interrupts;
 pub mod prcm;

@@ -6,8 +6,6 @@ pub mod oscfh;
 #[allow(unused_variables, unused_mut, non_snake_case)]
 pub mod ddi;
 
-pub mod aux_sysif;
-
 pub mod ti_driverlib_rom;
 /*
  * Copyright (c) 2015, Texas Instruments Incorporated - http://www.ti.com/
@@ -38,6 +36,7 @@ pub mod ti_driverlib_rom;
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
  * OF THE POSSIBILITY OF SUCH DAMAGE.
 */
+use aux;
 use gpio;
 use prcm;
 use rtc;
@@ -288,7 +287,11 @@ unsafe extern "C" fn TrimAfterColdResetWakeupFromShutDown(mut ui32Fcfg1Revision:
     // -Configure HPOSC.
     // -Setup the LF clock.
     SetupAfterColdResetWakeupFromShutDownCfg3(ccfg_ModeConfReg);
-    aux_sysif::AUXSYSIFOpModeChange(0x02u32);
+    //aux_sysif::AUXSYSIFOpModeChange(0x02u32);
+    aux::sysif::REGISTERS
+        .op_mode_req
+        .write(aux::sysif::OpModeReq::CLOCK::PowerDownActive);
+
     // Disable EFUSE clock
     *(((0x40030000i32 + 0x24i32) as (usize) & 0xf0000000usize
         | 0x2000000usize
