@@ -12,7 +12,7 @@ use kernel::common::StaticRef;
 pub struct HARD_API {
     crc32: unsafe extern "C" fn(*mut u8, u32, u32) -> u32,
     flag_get_size: unsafe extern "C" fn() -> u32,
-    get_chip_id: unsafe extern "C" fn() -> u32,
+    pub get_chip_id: unsafe extern "C" fn() -> u32,
     _reserved_location_1: unsafe extern "C" fn(u32) -> u32,
     _reserved_location_2: unsafe extern "C" fn() -> u32,
     _reserved_location_3: unsafe extern "C" fn(*mut u8, u32, u32) -> u32,
