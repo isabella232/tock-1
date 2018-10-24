@@ -3,9 +3,9 @@ use adi::AuxAdi4Registers;
 use aux;
 use kernel::common::StaticRef;
 
-// currently only AUX_ADI4 is implemented
 use memory_map::AUX_ADI4_BASE;
 
+// Redeclaration of bitfield enums s.t. client only needs adc.rs dependency
 #[allow(non_camel_case_types)]
 pub enum SAMPLE_CYCLE {
     _2p7_us,  // 2.7  uS
@@ -42,8 +42,17 @@ impl Adc {
         Adc { aux_adi4: AUX_ADI4 }
     }
 
+    pub fn flush(&self) {
+        aux::anaif::REG
+            .adc_ctl
+            .write(aux::anaif::AdcCtl::CMD::FlushFifo);
+        aux::anaif::REG
+            .adc_ctl
+            .write(aux::anaif::AdcCtl::CMD::Enable);
+    }
+
     // todo: recurring event mode
-    pub fn enable(&self, source: SOURCE, _sample_time: SAMPLE_CYCLE) {
+    pub fn enable(&self, source: SOURCE, sample_time: SAMPLE_CYCLE) {
         // Enable ADC reference
         let source_value;
         match source {
@@ -66,44 +75,35 @@ impl Adc {
 
         // Enable the ADC data interface
         // assume manual for now
+        aux::anaif::REG
+            .adc_ctl
+            .write(aux::anaif::AdcCtl::START_SRC::NO_EVENT + aux::anaif::AdcCtl::CMD::Enable);
+        // Notes on how to do it with special events
+        // GPT trigger: Configure event routing via MCU_EV to the AUX domain
+        // HWREG(EVENT_BASE + EVENT_O_AUXSEL0) = trigger;
+        // HWREG(AUX_ANAIF_BASE + AUX_ANAIF_O_ADCCTL) = AUX_ANAIF_ADCCTL_START_SRC_MCU_EV | AUX_ANAIF_ADCCTL_CMD_EN;
 
-        //         // Manual trigger: No need to configure event routing from GPT
-        //         HWREG(AUX_ANAIF_BASE + AUX_ANAIF_O_ADCCTL) = AUX_ANAIF_ADCCTL_START_SRC_NO_EVENT | AUX_ANAIF_ADCCTL_CMD_EN;
-        //     } else {
-        //         // GPT trigger: Configure event routing via MCU_EV to the AUX domain
-        //         HWREG(EVENT_BASE + EVENT_O_AUXSEL0) = trigger;
-        //         HWREG(AUX_ANAIF_BASE + AUX_ANAIF_O_ADCCTL) = AUX_ANAIF_ADCCTL_START_SRC_MCU_EV | AUX_ANAIF_ADCCTL_CMD_EN;
-        //     }
+        let sample_time_value;
+        match sample_time {
+            SAMPLE_CYCLE::_2p7_us => sample_time_value = adi::Control0::SAMPLE_CYCLE::_2P7_US,
+            SAMPLE_CYCLE::_5p3_us => sample_time_value = adi::Control0::SAMPLE_CYCLE::_5P3_US,
+            SAMPLE_CYCLE::_10p6_us => sample_time_value = adi::Control0::SAMPLE_CYCLE::_10P6_US,
+            SAMPLE_CYCLE::_21p3_us => sample_time_value = adi::Control0::SAMPLE_CYCLE::_21P3_US,
+            SAMPLE_CYCLE::_42p6_us => sample_time_value = adi::Control0::SAMPLE_CYCLE::_42P6_US,
+            SAMPLE_CYCLE::_85p3_us => sample_time_value = adi::Control0::SAMPLE_CYCLE::_85P3_US,
+            SAMPLE_CYCLE::_170_us => sample_time_value = adi::Control0::SAMPLE_CYCLE::_170_US,
+            SAMPLE_CYCLE::_341_us => sample_time_value = adi::Control0::SAMPLE_CYCLE::_341_US,
+            SAMPLE_CYCLE::_682_us => sample_time_value = adi::Control0::SAMPLE_CYCLE::_682_US,
+            SAMPLE_CYCLE::_1p37_us => sample_time_value = adi::Control0::SAMPLE_CYCLE::_1P37_MS,
+            SAMPLE_CYCLE::_2p73_us => sample_time_value = adi::Control0::SAMPLE_CYCLE::_2P73_MS,
+            SAMPLE_CYCLE::_5p46_ms => sample_time_value = adi::Control0::SAMPLE_CYCLE::_5P46_US,
+            SAMPLE_CYCLE::_10p9_ms => sample_time_value = adi::Control0::SAMPLE_CYCLE::_10P9_US,
+        }
 
-        //self.aux_adi4.Reference0.write( source_value + adi::Reference0::EN::SET + adi::Reference0::SAMPLE_MODE_SYNC);
-
-        // let sample_time_value;
-        // match sample_time {
-        //     SAMPLE_CYCLE::_2p7_us => sample_time_value = adi::Control::SAMPLE_CYCLE::_2P7_US,
-        //     SAMPLE_CYCLE::_5p3_us => sample_time_value = adi::Control::SAMPLE_CYCLE::_5P3_US,
-        //     SAMPLE_CYCLE::_10p6_us => sample_time_value = adi::Control::SAMPLE_CYCLE::_10P6_US,
-        //     SAMPLE_CYCLE::_21p3_us => sample_time_value = adi::Control::SAMPLE_CYCLE::_21P3_US,
-        //     SAMPLE_CYCLE::_42p6_us => sample_time_value = adi::Control::SAMPLE_CYCLE::_42P6_US,
-        //     SAMPLE_CYCLE::_85p3_us => sample_time_value = adi::Control::SAMPLE_CYCLE::_85P3_US,
-        //     SAMPLE_CYCLE::_170_us => sample_time_value = adi::Control::SAMPLE_CYCLE::_170_US,
-        //     SAMPLE_CYCLE::_341_us => sample_time_value = adi::Control::SAMPLE_CYCLE::_341_US,
-        //     SAMPLE_CYCLE::_682_us => sample_time_value = adi::Control::SAMPLE_CYCLE::_682_US,
-        //     SAMPLE_CYCLE::_1p37_us => sample_time_value = adi::Control::SAMPLE_CYCLE::_1P37_MS,
-        //     SAMPLE_CYCLE::_2p73_us => sample_time_value = adi::Control::SAMPLE_CYCLE::_2P73_MS,
-        //     SAMPLE_CYCLE::_5p46_ms => sample_time_value = adi::Control::SAMPLE_CYCLE::_5P46_US,
-        //     SAMPLE_CYCLE::_10p9_ms => sample_time_value = adi::Control::SAMPLE_CYCLE::_10P9_US,
-        // }
+        self.aux_adi4
+            .control0
+            .write(sample_time_value + adi::Control0::RESET_N::SET + adi::Control0::EN::SET);
     }
-
-    // {
-    //     // Enable the ADC reference, with the following options:
-    //     // - SRC: Set when using relative reference
-    //     // - REF_ON_IDLE: Set when using fixed reference and sample time < 21.3 us
-    //     uint8_t adcref0 = refSource | ADI_4_AUX_ADCREF0_EN_M;
-    //     if (!refSource && (sampleTime < AUXADC_SAMPLE_TIME_21P3_US)) {
-    //         adcref0 |= ADI_4_AUX_ADCREF0_REF_ON_IDLE_M;
-    //     }
-    //     ADI8BitsSet(AUX_ADI4_BASE, ADI_4_AUX_O_ADCREF0, adcref0);
 
     //     // Enable the ADC clock
     //     HWREG(AUX_SYSIF_BASE + AUX_SYSIF_O_ADCCLKCTL) = AUX_SYSIF_ADCCLKCTL_REQ_M;

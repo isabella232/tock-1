@@ -5,7 +5,7 @@ pub struct AuxAdi4Registers {
     pub current_source: ReadWrite<u8, CurrentSource::Register>,
     pub comparator: ReadWrite<u8, Comparator::Register>,
     _reserved_mux4: u8,
-    pub control0: ReadWrite<u8, Control::Register>,
+    pub control0: ReadWrite<u8, Control0::Register>,
     _reserved_control1: u8, // the HWAPI touches these for you
     pub reference0: ReadWrite<u8, Reference0::Register>,
     pub reference1: ReadWrite<u8, Reference1::Register>,
@@ -31,7 +31,7 @@ register_bitfields![
         COMPA_REF_CURR_EN OFFSET(6) NUMBITS(1) [],  // enable 2uA IPTAT current from ISRC to COMPA
         COMPA_REF_RES_EN OFFSET(7) NUMBITS(1) []    // enables 400kohm resisitance to ground
     ],
-    Control [
+    Control0 [
         EN  OFFSET(0) NUMBITS(1) [],
         RESET_N  OFFSET(1) NUMBITS(1) [], // reset required after every reconfigure
         SAMPLE_CYCLE OFFSET(3) NUMBITS(3) [     // only applies to synchronous mode sampling
