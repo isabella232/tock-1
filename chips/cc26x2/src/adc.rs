@@ -2,6 +2,7 @@ use adi;
 use adi::AuxAdi4Registers;
 use aux;
 use kernel::common::StaticRef;
+use rom;
 
 use memory_map::AUX_ADI4_BASE;
 
@@ -42,6 +43,26 @@ impl Adc {
         Adc { aux_adi4: AUX_ADI4 }
     }
 
+    pub fn set_input(pin: usize){
+        let hapi_param;
+        // extracted from code
+        // doesn't match table 13-2 which is odd
+        match pin {
+            30 => hapi_param = rom::ADC_COMPB_IN::AUXIO0,
+            29 => hapi_param = rom::ADC_COMPB_IN::AUXIO1,
+            28 => hapi_param = rom::ADC_COMPB_IN::AUXIO2,
+            27 => hapi_param = rom::ADC_COMPB_IN::AUXIO3,
+            26 => hapi_param = rom::ADC_COMPB_IN::AUXIO4,
+            25 => hapi_param = rom::ADC_COMPB_IN::AUXIO5,
+            24 => hapi_param = rom::ADC_COMPB_IN::AUXIO6,
+            23 => hapi_param = rom::ADC_COMPB_IN::AUXIO7,
+            _ => {
+                return;
+            }
+        }
+        unsafe {(rom::HAPI.select_adc_comp_b_input)(hapi_param)};
+    }
+
     pub fn flush(&self) {
         aux::anaif::REG
             .adc_ctl
@@ -51,8 +72,20 @@ impl Adc {
             .write(aux::anaif::AdcCtl::CMD::Enable);
     }
 
+    pub fn has_data() -> bool {
+        aux::anaif::REG
+            .adc_fifo_status
+            .read(aux::anaif::AdcFifoStatus::EMPTY)
+            != 0
+    }
+
+    // Returns 12 bit value from FIFO
+    pub fn pop_fifo() -> u16 {
+        aux::anaif::REG.adc_fifo.read(aux::anaif::AdcFifo::DATA) as u16
+    }
+
     // todo: recurring event mode
-    pub fn enable(&self, source: SOURCE, sample_time: SAMPLE_CYCLE) {
+    pub fn single_shot(&self, source: SOURCE, sample_time: SAMPLE_CYCLE) {
         // Enable ADC reference
         let source_value;
         match source {
@@ -78,6 +111,7 @@ impl Adc {
         aux::anaif::REG
             .adc_ctl
             .write(aux::anaif::AdcCtl::START_SRC::NO_EVENT + aux::anaif::AdcCtl::CMD::Enable);
+
         // Notes on how to do it with special events
         // GPT trigger: Configure event routing via MCU_EV to the AUX domain
         // HWREG(EVENT_BASE + EVENT_O_AUXSEL0) = trigger;
@@ -104,25 +138,4 @@ impl Adc {
             .control0
             .write(sample_time_value + adi::Control0::RESET_N::SET + adi::Control0::EN::SET);
     }
-
-    //     // Enable the ADC clock
-    //     HWREG(AUX_SYSIF_BASE + AUX_SYSIF_O_ADCCLKCTL) = AUX_SYSIF_ADCCLKCTL_REQ_M;
-    //     while (!(HWREG(AUX_SYSIF_BASE + AUX_SYSIF_O_ADCCLKCTL) & AUX_SYSIF_ADCCLKCTL_ACK_M));
-
-    //     // Enable the ADC data interface
-    //     if (trigger == AUXADC_TRIGGER_MANUAL) {
-    //         // Manual trigger: No need to configure event routing from GPT
-    //         HWREG(AUX_ANAIF_BASE + AUX_ANAIF_O_ADCCTL) = AUX_ANAIF_ADCCTL_START_SRC_NO_EVENT | AUX_ANAIF_ADCCTL_CMD_EN;
-    //     } else {
-    //         // GPT trigger: Configure event routing via MCU_EV to the AUX domain
-    //         HWREG(EVENT_BASE + EVENT_O_AUXSEL0) = trigger;
-    //         HWREG(AUX_ANAIF_BASE + AUX_ANAIF_O_ADCCTL) = AUX_ANAIF_ADCCTL_START_SRC_MCU_EV | AUX_ANAIF_ADCCTL_CMD_EN;
-    //     }
-
-    //     // Configure the ADC
-    //     ADI8BitsSet(AUX_ADI4_BASE, ADI_4_AUX_O_ADC0, sampleTime << ADI_4_AUX_ADC0_SMPL_CYCLE_EXP_S);
-
-    //     // Release reset and enable the ADC
-    //     ADI8BitsSet(AUX_ADI4_BASE, ADI_4_AUX_O_ADC0, ADI_4_AUX_ADC0_EN_M | ADI_4_AUX_ADC0_RESET_N_M);
-    // }
 }

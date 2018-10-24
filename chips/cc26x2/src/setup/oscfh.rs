@@ -32,7 +32,7 @@
 // The registers and fields are undefined in the technical reference
 // manual necesistating this component until it is revealed to the world.
 use setup::ddi;
-use setup::ti_driverlib_rom;
+use rom;
 
 #[derive(Copy)]
 #[repr(C)]
@@ -92,7 +92,7 @@ unsafe fn source_ready() -> bool {
 }
 
 pub unsafe fn source_switch() {
-    (ti_driverlib_rom::ROM_HAPI.hf_source_safe_switch)();
+    (rom::HAPI.hf_source_safe_switch)();
 }
 
 /*

@@ -32,6 +32,7 @@ pub mod radio;
 pub mod rat;
 pub mod rtc;
 pub mod setup;
+pub mod rom;
 pub mod trng;
 pub mod uart;
 pub use crt1::init;

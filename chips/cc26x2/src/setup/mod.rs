@@ -6,7 +6,6 @@ pub mod oscfh;
 #[allow(unused_variables, unused_mut, non_snake_case)]
 pub mod ddi;
 
-pub mod ti_driverlib_rom;
 /*
  * Copyright (c) 2015, Texas Instruments Incorporated - http://www.ti.com/
  * All rights reserved.

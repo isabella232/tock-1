@@ -33,7 +33,8 @@ pub struct HARD_API {
 
 const ROM_HAPI_TABLE_ADDR: usize = 0x1000_0048;
 
-pub const ROM_HAPI: StaticRef<HARD_API> =
+// struct that carries the hardware API
+pub const HAPI: StaticRef<HARD_API> =
     unsafe { StaticRef::new(ROM_HAPI_TABLE_ADDR as *const HARD_API) };
 
 // Defines for input parameter to the select_comp_a_input function.
