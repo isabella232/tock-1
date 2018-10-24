@@ -23,13 +23,13 @@ pub const REG: StaticRef<Registers> = unsafe { StaticRef::new(AUX_ANAIF_BASE as 
 
 #[repr(C)]
 pub struct Registers {
-    _reserved0: [ReadOnly<u8>; 0x10],
+    _reserved0: [ReadOnly<u32>; 4],
     pub adc_ctl: ReadWrite<u32, AdcCtl::Register>,
     pub adc_fifo_status: ReadWrite<u32, AdcFifoStatus::Register>,
     pub adc_fifo: ReadOnly<u32, AdcFifo::Register>,
     pub adc_trigger: ReadWrite<u32, AdcTrigger::Register>,
     pub isrc_ctl: ReadWrite<u32, IsrcCtl::Register>,
-    _reserved1: [ReadOnly<u8>; 0x06],
+    _reserved1: [ReadOnly<u32>; 4],
     dac_ctl: ReadWrite<u32, DacCtl::Register>,
     lpmb_ctl: ReadWrite<u32, LpmbCtl::Register>,
     dac_smpl_ctl: ReadWrite<u32, DacSmplCtl::Register>,
@@ -46,7 +46,7 @@ register_bitfields! [
             RISING = 0x0,
             FALLING = 0b1
         ],
-        START_SRC OFFSET(8) NUMBITS(5) [    // Select ADC trigger event source from the async AUX event
+        START_SRC OFFSET(8) NUMBITS(6) [    // Select ADC trigger event source from the async AUX event
             AUXIO0 = 0x0,                   // Set START_SRC to NO_EVENT if you want to tuse ADCTRIG.START
             AUXIO1 = 0x1,
             AUXIO2 = 0x2,
@@ -158,7 +158,7 @@ register_bitfields! [
             Three = 0x2,
             Four = 0x3
         ],
-        SETUP_COUNT OFFSET(8) NUMBITS(3) [      // setup count
+        SETUP_COUNT OFFSET(8) NUMBITS(4) [      // setup count
             One = 0x0,
             Two = 0x1,
             Three = 0x2,

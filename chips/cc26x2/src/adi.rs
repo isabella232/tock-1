@@ -1,9 +1,25 @@
 use kernel::common::registers::ReadWrite;
 
+// Table 19-40. ADI_4_AUX_MMAP1 Registers
+
+// Offset       Acronym      Register Name      Section
+// 0h           MUX0         Internal           Section 19.8.1.1
+// 1h           MUX1         Internal           Section 19.8.1.2
+// 2h           MUX2         Internal           Section 19.8.1.3
+// 3h           MUX3         Internal           Section 19.8.1.4
+// 4h           ISRC         Current Source     Section 19.8.1.5
+// 5h           COMP         Comparator         Section 19.8.1.6
+// 7h           MUX4         Internal           Section 19.8.1.7
+// 8h           ADC0         ADC Control 0      Section 19.8.1.8
+// 9h           ADC1         ADC Control 1      Section 19.8.1.9
+// Ah           ADCREF0      ADC Reference 0    Section 19.8.1.10
+// Bh           ADCREF1      ADC Reference 1    Section 19.8.1.11
+
 pub struct AuxAdi4Registers {
     _reserved_mux0to3: [u8; 0x4], // the HWAPI touches these for you
     pub current_source: ReadWrite<u8, CurrentSource::Register>,
     pub comparator: ReadWrite<u8, Comparator::Register>,
+    _reserved_skipped: u8,
     _reserved_mux4: u8,
     pub control0: ReadWrite<u8, Control0::Register>,
     _reserved_control1: u8, // the HWAPI touches these for you
@@ -33,8 +49,8 @@ register_bitfields![
     ],
     Control0 [
         EN  OFFSET(0) NUMBITS(1) [],
-        RESET_N  OFFSET(1) NUMBITS(1) [], // reset required after every reconfigure
-        SAMPLE_CYCLE OFFSET(3) NUMBITS(3) [     // only applies to synchronous mode sampling
+        RESET_N  OFFSET(1) NUMBITS(1) [],       // reset required after every reconfigure
+        SAMPLE_CYCLE OFFSET(3) NUMBITS(4) [     // only applies to synchronous mode sampling
             _2P7_US = 0x3,  // 2.7  uS
             _5P3_US = 0x4,  // 5.3  uS
             _10P6_US = 0x5, // 10.6 uS
@@ -49,7 +65,7 @@ register_bitfields![
             _5P46_US = 0xE, // 5.46 mS
             _10P9_US = 0xF  // 10.9 mS
         ],
-        SAMPLE_MODE OFFSET(7) NUMBITS(3) [
+        SAMPLE_MODE OFFSET(7) NUMBITS(1) [
             SYNC = 0,
             ASYNC = 1
         ]
@@ -65,7 +81,7 @@ register_bitfields![
         REF_ON_IDLE OFFSET(6) NUMBITS(1) []
     ],
     Reference1 [
-        VRTIM OFFSET(0) NUMBITS(5) [ // 64 steps, 2s complement
+        VRTIM OFFSET(0) NUMBITS(6) [ // 64 steps, 2s complement
             // A few examples
             NOMINAL = 0x00,  //nominal voltage = 1.43V
             NOMINAL_PLUS_ONE = 0x01, //nominal voltage + 0.4% = 1.435V

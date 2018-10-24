@@ -13,6 +13,8 @@ extern crate kernel;
 
 use capsules::virtual_uart::{UartDevice, UartMux};
 use cc26x2::aon;
+use cc26x2::adc;
+use cc26x2::osc;
 use cc26x2::prcm;
 use cc26x2::radio;
 use kernel::capabilities;
@@ -164,14 +166,14 @@ unsafe fn configure_pins() {
     cc26x2::gpio::PORT[21].enable_gpio();
     cc26x2::gpio::PORT[22].enable_gpio();
 
-    // analog   cc26x2::gpio::PORT[23]
-    // analog   cc26x2::gpio::PORT[24]
-    // analog   cc26x2::gpio::PORT[25]
-    // analog   cc26x2::gpio::PORT[26]
-    // analog   cc26x2::gpio::PORT[27]
-    // analog   cc26x2::gpio::PORT[28]
-    // analog   cc26x2::gpio::PORT[29]
-    // analog   cc26x2::gpio::PORT[30]
+    cc26x2::gpio::PORT[23].enable_analog_input();
+    cc26x2::gpio::PORT[24].enable_analog_input();
+    cc26x2::gpio::PORT[25].enable_analog_input();
+    cc26x2::gpio::PORT[26].enable_analog_input();
+    cc26x2::gpio::PORT[27].enable_analog_input();
+    cc26x2::gpio::PORT[28].enable_analog_input();
+    cc26x2::gpio::PORT[29].enable_analog_input();
+    cc26x2::gpio::PORT[30].enable_analog_input();
 }
 
 #[no_mangle]
@@ -198,6 +200,9 @@ pub unsafe fn reset_handler() {
     prcm::Power::enable_domain(prcm::PowerDomain::Serial);
 
     while !prcm::Power::is_enabled(prcm::PowerDomain::Serial) {}
+
+    osc::OSC.request_switch_to_hf_xosc();
+    osc::OSC.switch_to_hf_xosc();
 
     let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&PROCESSES));
 
@@ -387,7 +392,7 @@ pub unsafe fn reset_handler() {
     );
 
     let rfc = &cc26x2::radio::MULTIMODE_RADIO;
-    rfc.run_tests();
+    //rfc.run_tests();
 
     let launchxl = Platform {
         console,
@@ -406,7 +411,22 @@ pub unsafe fn reset_handler() {
         static _sapps: u8;
     }
 
+
     let ipc = &kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
+
+    adc::ADC.configure(adc::SOURCE::NominalVdds, adc::SAMPLE_CYCLE::_170_us);
+
+    for n in 23..30 {
+        adc::ADC.set_input(n);
+        adc::ADC.flush_fifo();
+        adc::ADC.single_shot();
+        while !adc::ADC.has_data() {}
+
+        debug!("READ {} = {}", n,  adc::ADC.pop_fifo());
+    }
+
+
+    debug!("Launching Processes");
 
     kernel::procs::load_processes(
         board_kernel,

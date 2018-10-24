@@ -43,7 +43,7 @@ impl Adc {
         Adc { aux_adi4: AUX_ADI4 }
     }
 
-    pub fn set_input(pin: usize){
+    pub fn set_input(&self, pin: usize){
         let hapi_param;
         // extracted from code
         // doesn't match table 13-2 which is odd
@@ -63,7 +63,7 @@ impl Adc {
         unsafe {(rom::HAPI.select_adc_comp_b_input)(hapi_param)};
     }
 
-    pub fn flush(&self) {
+    pub fn flush_fifo(&self) {
         aux::anaif::REG
             .adc_ctl
             .write(aux::anaif::AdcCtl::CMD::FlushFifo);
@@ -72,20 +72,19 @@ impl Adc {
             .write(aux::anaif::AdcCtl::CMD::Enable);
     }
 
-    pub fn has_data() -> bool {
+    pub fn has_data(&self) -> bool {
         aux::anaif::REG
             .adc_fifo_status
             .read(aux::anaif::AdcFifoStatus::EMPTY)
-            != 0
+            == 0
     }
 
     // Returns 12 bit value from FIFO
-    pub fn pop_fifo() -> u16 {
+    pub fn pop_fifo(&self) -> u16 {
         aux::anaif::REG.adc_fifo.read(aux::anaif::AdcFifo::DATA) as u16
     }
 
-    // todo: recurring event mode
-    pub fn single_shot(&self, source: SOURCE, sample_time: SAMPLE_CYCLE) {
+    pub fn configure(&self, source: SOURCE, sample_time: SAMPLE_CYCLE) {
         // Enable ADC reference
         let source_value;
         match source {
@@ -100,11 +99,12 @@ impl Adc {
         // Enable ADC Clock
         let adc_clk_ctl = &aux::sysif::REGISTERS.adc_clk_ctl;
         adc_clk_ctl.req().write(aux::sysif::Req::CLOCK::Enable);
-        // Wait for it to start
+
         while !adc_clk_ctl
             .ack()
             .matches_all(aux::sysif::Ack::CLOCK::Enabled)
-        {}
+        {
+        }
 
         // Enable the ADC data interface
         // assume manual for now
@@ -136,6 +136,18 @@ impl Adc {
 
         self.aux_adi4
             .control0
-            .write(sample_time_value + adi::Control0::RESET_N::SET + adi::Control0::EN::SET);
+            .write(adi::Control0::RESET_N::CLEAR);
+
+        self.aux_adi4
+            .control0
+            .write(sample_time_value + adi::Control0::SAMPLE_MODE::SYNC + adi::Control0::RESET_N::SET + adi::Control0::EN::SET);
+    }
+
+
+    // todo: recurring event mode
+    pub fn single_shot(&self) {
+        //unsafe { *(0x400C901c as *mut usize) = 0b1 };
+        aux::anaif::REG
+            .adc_trigger.write(aux::anaif::AdcTrigger::START::SET);
     }
 }

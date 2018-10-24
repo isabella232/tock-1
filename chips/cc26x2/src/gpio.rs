@@ -180,6 +180,14 @@ impl GPIOPin {
         self.standard_output(ioc::Config::PORT_ID::UART1_TX);
     }
 
+    pub fn enable_analog_input(&self) {
+        self.standard_output(ioc::Config::PORT_ID::AUX_DOMAIN_IO);
+    }
+
+    pub fn enable_analog_output(&self) {
+        self.standard_output(ioc::Config::PORT_ID::AUX_DOMAIN_IO);
+    }
+
     // configure a pin as an input for 32kHz system clock
     pub fn enable_32khz_system_clock_input(&self) {
         let pin_ioc = &self.ioc_registers.cfg[self.pin];
