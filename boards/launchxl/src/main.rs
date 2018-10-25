@@ -120,7 +120,7 @@ pub unsafe fn reset_handler() {
     let main_loop_capability = create_capability!(capabilities::MainLoopCapability);
     let memory_allocation_capability = create_capability!(capabilities::MemoryAllocationCapability);
 
-    // Setup AON event defaults
+     // Setup AON event defaults
     aon::AON.setup();
 
     // Power on peripherals (eg. GPIO)
@@ -128,6 +128,11 @@ pub unsafe fn reset_handler() {
 
     // Wait for it to turn on until we continue
     while !prcm::Power::is_enabled(prcm::PowerDomain::Peripherals) {}
+
+    // Power on Serial domain
+    prcm::Power::enable_domain(prcm::PowerDomain::Serial);
+
+    while !prcm::Power::is_enabled(prcm::PowerDomain::Serial) {}
 
     osc::OSC.request_switch_to_hf_xosc();
     osc::OSC.switch_to_hf_xosc();

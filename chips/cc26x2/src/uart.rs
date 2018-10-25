@@ -7,6 +7,8 @@ use kernel::hil::uart;
 use kernel::ReturnCode;
 use prcm;
 
+use memory_map::{UART0_BASE, UART1_BASE};
+
 use core::cmp;
 
 const MCU_CLOCK: u32 = 48_000_000;
@@ -30,8 +32,8 @@ struct UartRegisters {
     dmactl: ReadWrite<u32>,
 }
 
-pub static mut UART0: UART = UART::new(&UART0_BASE);
-pub static mut UART1: UART = UART::new(&UART1_BASE);
+pub static mut UART0: UART = UART::new(&UART0_REG);
+pub static mut UART1: UART = UART::new(&UART1_REG);
 
 register_bitfields![
     u32,
@@ -83,11 +85,11 @@ register_bitfields![
     ]
 ];
 
-const UART0_BASE: StaticRef<UartRegisters> =
-    unsafe { StaticRef::new(0x40001000 as *const UartRegisters) };
+const UART0_REG: StaticRef<UartRegisters> =
+    unsafe { StaticRef::new(UART0_BASE as *const UartRegisters) };
 
-const UART1_BASE: StaticRef<UartRegisters> =
-    unsafe { StaticRef::new(0x4000B000 as *const UartRegisters) };
+const UART1_REG: StaticRef<UartRegisters> =
+    unsafe { StaticRef::new(UART1_BASE as *const UartRegisters) };
 
 /// Stores an ongoing TX transaction
 struct Transaction {

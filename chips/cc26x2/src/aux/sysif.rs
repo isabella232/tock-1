@@ -1,10 +1,10 @@
 use kernel::common::registers::{ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 
-// use memory_map::AUX_SYSIF_BASE;
-const AUX_SYSIF_BASE: usize = 0x400C6000;
+use memory_map::AUX_EVCTL_BASE;
+
 pub const REGISTERS: StaticRef<Registers> =
-    unsafe { StaticRef::new(AUX_SYSIF_BASE as *const Registers) };
+    unsafe { StaticRef::new(AUX_EVCTL_BASE as *const Registers) };
 
 pub union SimpleAckReq {
     pub ack: ReadOnly<u32, Ack::Register>,
