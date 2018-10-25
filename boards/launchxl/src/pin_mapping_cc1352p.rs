@@ -12,6 +12,14 @@ pub enum PIN_FN {
     GREEN_LED = 7,
     BUTTON_1 = 15,
     BUTTON_2 = 14,
-    GPIO0 = 24,
+    GPIO0 = 20,
+    ADC0 = 30,
+    ADC1 = 29,
+    ADC2 = 28,
+    ADC3 = 27,
+    ADC4 = 26,
+    ADC5 = 25,
+    ADC6 = 24,
+    ADC7 = 23,
 }
 }

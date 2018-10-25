@@ -13,7 +13,9 @@ extern crate cc26x2;
 extern crate kernel;
 
 use capsules::virtual_uart::{UartDevice, UartMux};
+use cc26x2::adc;
 use cc26x2::aon;
+use cc26x2::osc;
 use cc26x2::prcm;
 use kernel::capabilities;
 use kernel::hil;
@@ -57,6 +59,7 @@ pub struct Platform {
     >,
     rng: &'static capsules::rng::RngDriver<'static>,
     i2c_master: &'static capsules::i2c_master::I2CMasterDriver<cc26x2::i2c::I2CMaster<'static>>,
+    adc: &'static capsules::adc::Adc<'static, cc26x2::adc::Adc>,
 }
 
 impl kernel::Platform for Platform {
@@ -72,13 +75,14 @@ impl kernel::Platform for Platform {
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules::i2c_master::DRIVER_NUM => f(Some(self.i2c_master)),
+            capsules::adc::DRIVER_NUM => f(Some(self.adc)),
             _ => f(None),
         }
     }
 }
 
-mod pin_mapping_cc1352p;
-use pin_mapping_cc1352p::PIN_FN;
+mod pin_mapping_cc1312r;
+use pin_mapping_cc1312r::PIN_FN;
 ///
 unsafe fn configure_pins() {
     cc26x2::gpio::PORT[PIN_FN::UART0_RX as usize].enable_uart0_rx();
@@ -94,6 +98,15 @@ unsafe fn configure_pins() {
     cc26x2::gpio::PORT[PIN_FN::BUTTON_2 as usize].enable_gpio();
 
     cc26x2::gpio::PORT[PIN_FN::GPIO0 as usize].enable_gpio();
+
+    cc26x2::gpio::PORT[PIN_FN::ADC7 as usize].enable_analog_input();
+    cc26x2::gpio::PORT[PIN_FN::ADC6 as usize].enable_analog_input();
+    cc26x2::gpio::PORT[PIN_FN::ADC5 as usize].enable_analog_input();
+    cc26x2::gpio::PORT[PIN_FN::ADC4 as usize].enable_analog_input();
+    cc26x2::gpio::PORT[PIN_FN::ADC3 as usize].enable_analog_input();
+    cc26x2::gpio::PORT[PIN_FN::ADC2 as usize].enable_analog_input();
+    cc26x2::gpio::PORT[PIN_FN::ADC1 as usize].enable_analog_input();
+    cc26x2::gpio::PORT[PIN_FN::ADC0 as usize].enable_analog_input();
 }
 
 #[no_mangle]
@@ -115,6 +128,9 @@ pub unsafe fn reset_handler() {
 
     // Wait for it to turn on until we continue
     while !prcm::Power::is_enabled(prcm::PowerDomain::Peripherals) {}
+
+    osc::OSC.request_switch_to_hf_xosc();
+    osc::OSC.switch_to_hf_xosc();
 
     let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&PROCESSES));
 
@@ -291,6 +307,41 @@ pub unsafe fn reset_handler() {
     cc26x2::trng::TRNG.set_client(entropy_to_random);
     entropy_to_random.set_client(rng);
 
+        // set nominal voltage
+    cc26x2::adc::ADC.nominal_voltage = Some(3300);
+    cc26x2::adc::ADC.configure(adc::Source::Fixed4P5V, adc::SampleCycle::_10p9_ms);
+
+    // Setup ADC
+    let adc_channels = static_init!(
+        [&cc26x2::adc::Input; 8],
+        [
+            &cc26x2::adc::Input::Auxio0, // pin 30
+            &cc26x2::adc::Input::Auxio1, // pin 29
+            &cc26x2::adc::Input::Auxio2, // pin 28
+            &cc26x2::adc::Input::Auxio3, // pin 27
+            &cc26x2::adc::Input::Auxio4, // pin 26
+            &cc26x2::adc::Input::Auxio5, // pin 25
+            &cc26x2::adc::Input::Auxio6, // pin 24
+            &cc26x2::adc::Input::Auxio7, // pin 23
+        ]
+    );
+
+    let adc = static_init!(
+        capsules::adc::Adc<'static, cc26x2::adc::Adc>,
+        capsules::adc::Adc::new(
+            &mut cc26x2::adc::ADC,
+            adc_channels,
+            &mut capsules::adc::ADC_BUFFER1,
+            &mut capsules::adc::ADC_BUFFER2,
+            &mut capsules::adc::ADC_BUFFER3
+        )
+    );
+
+    for channel in adc_channels.iter() {
+        cc26x2::adc::ADC.set_client(adc, channel);
+    }
+
+
     let launchxl = Platform {
         console,
         gpio,
@@ -299,6 +350,7 @@ pub unsafe fn reset_handler() {
         alarm,
         rng,
         i2c_master,
+        adc
     };
 
     let chip = static_init!(cc26x2::chip::Cc26X2, cc26x2::chip::Cc26X2::new());

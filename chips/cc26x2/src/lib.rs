@@ -10,11 +10,15 @@ extern crate kernel;
 extern crate enum_primitive;
 
 pub mod aon;
+pub mod adc;
+pub mod adi;
 pub mod aux;
 pub mod chip;
 pub mod crt1;
 pub mod gpio;
 pub mod i2c;
+pub mod ioc;
+pub mod memory_map;
 pub mod osc;
 pub mod peripheral_interrupts;
 pub mod prcm;
