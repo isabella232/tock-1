@@ -26,10 +26,10 @@ use kernel::common::registers::{ReadOnly, ReadWrite};
 // 1FF8h   CCFG_PROT_95_64         Protect Sectors 64-95           Section 11.2.1.21
 // 1FFCh   CCFG_PROT_127_96        Protect Sectors 96-127          Section 11.2.1.22
 
-#[allow(dead_code)]
+#[repr(C)]
 pub struct Registers {
-    _offset: [ReadOnly<u8>; 0x1FA8],
-    ext_lf_clk: ReadWrite<u32, ExtLfClk::Register>,
+    //_offset: [ReadOnly<u8>; 0x1FA8],
+    pub ext_lf_clk: ReadWrite<u32, ExtLfClk::Register>,
     mode_conf1: ReadWrite<u32, ModeConf1::Register>,
     size_and_dis_flags: ReadWrite<u32, SizeAndDisFlags::Register>,
     mode_conf0: ReadWrite<u32, ModeConf0::Register>,
@@ -43,10 +43,51 @@ pub struct Registers {
     iee_ble1: ReadWrite<u32>,
     bl_config: ReadWrite<u32, BlConfig::Register>,
     erase_config: ReadWrite<u32, EraseConfig::Register>,
-    ti_options: ReadWrite<u32, TiOptions::Register>,
-    tap_dap0: ReadWrite<u32, TapDap0::Register>,
-    tap_dap1: ReadWrite<u32, TapDap1::Register>,
-    image_valid: ReadWrite<u32, ImageValid::Register>,
+    ti_options: ReadOnly<u32, TiOptions::Register>,
+    tap_dap0: ReadOnly<u32, TapDap0::Register>,
+    tap_dap1: ReadOnly<u32, TapDap1::Register>,
+    image_valid: ReadOnly<u32, ImageValid::Register>,
+    ccfg_prot_31_0: ReadWrite<u32>,
+    ccfg_prot_63_32: ReadWrite<u32>,
+    ccfg_prot_95_64: ReadWrite<u32>,
+    ccfg_prot_127_96: ReadWrite<u32>,
+}
+
+// a reduced version of Registers for constructing
+pub struct RegisterInitializer {
+    pub ext_lf_clk: ReadWrite<u32, ExtLfClk::Register>,
+    pub mode_conf0: ReadWrite<u32, ModeConf0::Register>,
+    pub mode_conf1: ReadWrite<u32, ModeConf1::Register>,
+    pub bl_config: ReadWrite<u32, BlConfig::Register>,
+}
+
+impl Registers {
+    pub const fn new( init: RegisterInitializer ) -> Registers {
+        Registers {
+            ext_lf_clk: init.ext_lf_clk,
+            mode_conf1: init.mode_conf1,
+            size_and_dis_flags: ReadWrite::new(0x0058FFFE),
+            mode_conf0: init.mode_conf0,
+            _volt_load0: ReadOnly::new(0xFFFFFFFF),
+            _volt_load1: ReadOnly::new(0xFFFFFFFF),
+            _rtc_offset: ReadOnly::new(0xFFFFFFFF),
+            _freq_offset: ReadOnly::new(0xFFFFFFFF),
+            iee_mac0: ReadWrite::new(0xFFFFFFFF),
+            iee_mac1: ReadWrite::new(0xFFFFFFFF),
+            iee_ble0: ReadWrite::new(0xFFFFFFFF),
+            iee_ble1: ReadWrite::new(0xFFFFFFFF),
+            bl_config: init.bl_config,
+            erase_config: ReadWrite::new(0xFFFFFFFF),
+            ti_options: ReadOnly::new(0xFFFFFF00),
+            tap_dap0: ReadOnly::new(0xFFC5C5C5),
+            tap_dap1: ReadOnly::new(0xFFC5C5C5),
+            image_valid: ReadOnly::new(0x00000000),
+            ccfg_prot_31_0: ReadWrite::new(0xFFFFFFFF),
+            ccfg_prot_63_32: ReadWrite::new(0xFFFFFFFF),
+            ccfg_prot_95_64: ReadWrite::new(0xFFFFFFFF),
+            ccfg_prot_127_96: ReadWrite::new(0xFFFFFFFF)
+        }
+    }
 }
 
 register_bitfields![

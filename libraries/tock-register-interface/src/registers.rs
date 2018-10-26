@@ -109,7 +109,7 @@ pub trait TryFromValue<V> {
 
 /// Read/Write registers.
 pub struct ReadWrite<T: IntLike, R: RegisterLongName = ()> {
-    value: T,
+    pub value: T,
     associated_register: PhantomData<R>,
 }
 

@@ -33,6 +33,8 @@ pub mod io;
 mod i2c_tests;
 #[allow(dead_code)]
 mod uart_echo;
+#[allow(dead_code)]
+mod ccfg_test;
 
 // How should the kernel respond when a process faults.
 const FAULT_RESPONSE: kernel::procs::FaultResponse = kernel::procs::FaultResponse::Panic;
@@ -395,6 +397,8 @@ pub unsafe fn reset_handler() {
     }
 
     let ipc = &kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
+
+    ccfg_test::test();
 
     debug!("Launching Processes");
 
