@@ -62,7 +62,7 @@ pub struct RegisterInitializer {
 }
 
 impl Registers {
-    pub const fn new( init: RegisterInitializer ) -> Registers {
+    pub const fn new(init: RegisterInitializer) -> Registers {
         Registers {
             ext_lf_clk: init.ext_lf_clk,
             mode_conf1: init.mode_conf1,
@@ -85,7 +85,7 @@ impl Registers {
             ccfg_prot_31_0: ReadWrite::new(0xFFFFFFFF),
             ccfg_prot_63_32: ReadWrite::new(0xFFFFFFFF),
             ccfg_prot_95_64: ReadWrite::new(0xFFFFFFFF),
-            ccfg_prot_127_96: ReadWrite::new(0xFFFFFFFF)
+            ccfg_prot_127_96: ReadWrite::new(0xFFFFFFFF),
         }
     }
 }

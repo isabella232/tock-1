@@ -418,8 +418,8 @@ impl<R: RegisterLongName> Field<u64, R> {
 // location in the register.
 #[derive(Copy, Clone)]
 pub struct FieldValue<T: IntLike, R: RegisterLongName> {
-    pub mask: T,
-    pub value: T,
+    mask: T,
+    value: T,
     associated_register: PhantomData<R>,
 }
 
