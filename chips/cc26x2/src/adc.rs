@@ -3,6 +3,7 @@ use adi::AuxAdi4Registers;
 use aux;
 use cortexm4::nvic;
 use enum_primitive::cast::FromPrimitive;
+use fcfg1;
 use kernel::common::cells::OptionalCell;
 use kernel::common::StaticRef;
 use peripheral_interrupts;
@@ -128,6 +129,17 @@ impl Adc {
         aux::anaif::REG
             .adc_ctl
             .write(aux::anaif::AdcCtl::CMD::Enable);
+    }
+
+    fn get_gain(&self) -> u16 {
+        self.voltage_setting.map_or(1, |source| match source {
+            Source::Fixed4P5V => fcfg1::REG.adc_abs_gain.read(fcfg1::AdcGain::VALUE) as u16,
+            Source::NominalVdds => fcfg1::REG.adc_rel_gain.read(fcfg1::AdcGain::VALUE) as u16,
+        })
+    }
+
+    fn get_offset(&self) -> u8 {
+        fcfg1::REG.adc_abs_gain.read(fcfg1::AdcGain::VALUE) as u8
     }
 
     pub fn has_data(&self) -> bool {
