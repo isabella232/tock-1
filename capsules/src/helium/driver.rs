@@ -3,10 +3,9 @@ use enum_primitive::cast::FromPrimitive;
 use helium::{device, framer::FecType};
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
-// static mut PAYLOAD: [u8; 256] = [0; 256];
 
 // Syscall number
-pub const DRIVER_NUM: usize = 0xCC_13_12;
+pub const DRIVER_NUM: usize = 0xCC1352;
 
 #[derive(Debug, Clone, Copy)]
 pub enum PowerMode {
@@ -99,6 +98,7 @@ impl Helium<'a> {
     /// pick an app with a pending transmission and return its `AppId`.
     fn get_next_tx_if_idle(&self) -> Option<AppId> {
         if self.current_app.is_some() {
+            debug!("Current app is some");
             return None;
         }
         let mut pending_app = None;
@@ -121,6 +121,7 @@ impl Helium<'a> {
     /// a pending transmission.
     #[inline]
     fn perform_tx_async(&self, appid: AppId) {
+        debug!("Perform TX async...");
         let result = self.perform_tx_sync(appid);
         if result != ReturnCode::SUCCESS {
             let _ = self.app.enter(appid, |app, _| {
@@ -136,6 +137,7 @@ impl Helium<'a> {
     /// idle and the app has a pending transmission.
     #[inline]
     fn perform_tx_sync(&self, appid: AppId) -> ReturnCode {
+        debug!("Perform TX sync...");
         self.do_with_app(appid, |app| {
             let _device_id = match app.pending_tx.take() {
                 Some(pending_tx) => pending_tx,
@@ -145,17 +147,26 @@ impl Helium<'a> {
             };
 
             let result = self.kernel_tx.take().map_or(ReturnCode::ENOMEM, |kbuf| {
-                // Frame header implementation for Helium prep here. Currently unknown so removing
-                // 802154 stuff
                 let seq: u8 = 0;
                 let fec_type = None;
-                let frame = match self.device.prepare_data_frame(kbuf, seq, fec_type) {
+                let mut frame = match self.device.prepare_data_frame(kbuf, seq, fec_type) {
                     Ok(frame) => frame,
                     Err(kbuf) => {
                         self.kernel_tx.replace(kbuf);
                         return ReturnCode::FAIL;
                     }
                 };
+
+                let result = app
+                    .app_write
+                    .take()
+                    .as_ref()
+                    .map(|payload| frame.append_payload(payload.as_ref()))
+                    .unwrap_or(ReturnCode::EINVAL);
+                if result != ReturnCode::SUCCESS {
+                    return result;
+                }
+
                 // Finally, transmit the frame
                 let (result, mbuf) = self.device.transmit(frame);
                 if let Some(buf) = mbuf {
@@ -213,21 +224,18 @@ impl Driver for Helium<'a> {
         allow_num: usize,
         slice: Option<AppSlice<Shared, u8>>,
     ) -> ReturnCode {
-        if let Some(allow) = HeliumAllow::from_usize(allow_num) {
-            match allow {
-                HeliumAllow::Config | HeliumAllow::Write | HeliumAllow::Read => {
-                    self.do_with_app(appid, |app| {
-                        match allow {
-                            HeliumAllow::Config => app.app_read = slice,
-                            HeliumAllow::Write => app.app_write = slice,
-                            HeliumAllow::Read => app.app_cfg = slice,
-                        }
-                        ReturnCode::SUCCESS
-                    })
+        debug!("Allow called: {:?}", allow_num);
+        match allow_num {
+            0 | 1 | 2 => self.do_with_app(appid, |app| {
+                match allow_num {
+                    0 => app.app_read = slice,
+                    1 => app.app_write = slice,
+                    2 => app.app_cfg = slice,
+                    _ => {}
                 }
-            }
-        } else {
-            ReturnCode::ENOSUPPORT
+                ReturnCode::SUCCESS
+            }),
+            _ => ReturnCode::ENOSUPPORT,
         }
     }
 
@@ -271,11 +279,15 @@ impl Driver for Helium<'a> {
     /// = `7`: Set device endpoint address.
     ///
     fn command(&self, command_num: usize, addr: usize, _r3: usize, appid: AppId) -> ReturnCode {
+        debug!("Command called: {:?}", command_num);
         if let Some(command) = HeliumCommand::from_usize(command_num) {
             match command {
                 // Handle callback for CMDSTA after write to CMDR
                 HeliumCommand::DriverCheck => ReturnCode::SUCCESS,
-                HeliumCommand::Initialize => self.device.initialize(),
+                HeliumCommand::Initialize => {
+                    debug!("Initialize device...");
+                    self.device.initialize()
+                }
                 HeliumCommand::GetRadioStatus => {
                     if self.device.is_on() {
                         ReturnCode::SUCCESS
@@ -314,12 +326,11 @@ impl Driver for Helium<'a> {
                             return ReturnCode::EINVAL;
                         }
                         app.pending_tx = next_tx;
-
                         self.do_next_tx_sync(appid)
                     })
                 }
-                HeliumCommand::SetAddress => self.do_with_cfg(appid, 8, |cfg| {
-                    let mut addr_long = [0u8; 16];
+                HeliumCommand::SetAddress => self.do_with_cfg(appid, 10, |cfg| {
+                    let mut addr_long = [0u8; 10];
                     addr_long.copy_from_slice(cfg);
                     self.device.set_address_long(addr_long);
                     ReturnCode::SUCCESS
@@ -334,6 +345,7 @@ impl Driver for Helium<'a> {
 
 impl device::TxClient for Helium<'a> {
     fn transmit_event(&self, buf: &'static mut [u8], result: ReturnCode) {
+        debug!("Device transmit event called...");
         self.kernel_tx.replace(buf);
         self.current_app.take().map(|appid| {
             let _ = self.app.enter(appid, |app, _| {
@@ -348,6 +360,7 @@ impl device::TxClient for Helium<'a> {
 
 impl device::RxClient for Helium<'a> {
     fn receive_event<'b>(&self, buf: &'b [u8], data_offset: usize, data_len: usize) {
+        debug!("Device receive event called...");
         self.app.each(|app| {
             app.app_read.take().as_mut().map(|rbuf| {
                 let rbuf = rbuf.as_mut();
@@ -364,9 +377,9 @@ impl device::RxClient for Helium<'a> {
 enum_from_primitive! {
 #[derive(Debug, Clone, Copy)]
 pub enum HeliumAllow {
-    Config = 0,
+    Read = 0,
     Write = 1,
-    Read = 2,
+    Config = 2,
 }
 }
 

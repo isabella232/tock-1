@@ -27,7 +27,6 @@ use kernel::hil::entropy::Entropy32;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::rng::Rng;
 use kernel::Chip;
-
 #[macro_use]
 pub mod io;
 
@@ -384,7 +383,7 @@ pub unsafe fn reset_handler() {
 
     adc::ADC.configure(adc::SOURCE::NominalVdds, adc::SAMPLE_CYCLE::_170_us);
 
-    debug!("Loading processes");
+    // debug!("Loading processes");
 
     kernel::procs::load_processes(
         board_kernel,

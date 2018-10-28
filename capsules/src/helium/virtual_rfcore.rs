@@ -53,6 +53,7 @@ pub enum RadioState {
     StartUp,
     TxDone,
     TxPending,
+    TxDelay,
 }
 
 pub struct VirtualRadio<'a, R: rfcore::Radio> {
@@ -80,19 +81,36 @@ impl<R: rfcore::Radio> VirtualRadio<'a, R> {
         }
     }
 
+    /*
+    pub fn encode_packet(&self) {
+        // TODO Maybe do the final encoding here because there are two stages, FEC encoding and
+        // cauterizing so not really sure what to do where, probably cauterize before and FEC here
+        let mut (result, rbuf): (Option<&'static mut [u8]>, ReturnCode) = (ReturnCode::SUCCESS, None);
+        if let RadioState::TxPending = self.state.get() {
+            // If a tx is pending, encode and send
+        }
+    }
+    */
+
     pub fn transmit_packet(&self) {
         self.tx_payload.take().map_or((), |buf| {
+            //debug!("BUF: {:?}", buf);
             let (result, rbuf) = self.radio.transmit(buf, self.tx_payload_len.get());
             match result {
                 ReturnCode::SUCCESS => (),
                 _ => {
-                    self.send_client_result(rbuf.unwrap(), result);
+                    debug!("VR: radio transmit failure...");
+                    if rbuf.is_some() {
+                        self.send_client_result(rbuf.unwrap(), result);
+                    }
                 }
             };
         });
     }
 
     pub fn send_client_result(&self, buf: &'static mut [u8], result: ReturnCode) {
+        debug!("VR: Send client result...");
+        self.radio_state.set(RadioState::Awake);
         self.tx_client.map(move |c| {
             c.transmit_event(buf, result);
         });
@@ -101,6 +119,7 @@ impl<R: rfcore::Radio> VirtualRadio<'a, R> {
 
 impl<R: rfcore::Radio> RFCore for VirtualRadio<'a, R> {
     fn initialize(&self) -> ReturnCode {
+        debug!("VR: initialize...");
         self.radio_state.set(RadioState::StartUp);
         self.radio.initialize();
         ReturnCode::SUCCESS
@@ -162,6 +181,7 @@ impl<R: rfcore::Radio> RFCore for VirtualRadio<'a, R> {
         frame: &'static mut [u8],
         frame_len: usize,
     ) -> (ReturnCode, Option<&'static mut [u8]>) {
+        debug!("VR: transmit...");
         if self.tx_payload.is_some() {
             return (ReturnCode::EBUSY, Some(frame));
         } else if frame_len > 240 {
@@ -173,6 +193,7 @@ impl<R: rfcore::Radio> RFCore for VirtualRadio<'a, R> {
 
         if self.radio.is_on() {
             self.radio_state.set(RadioState::TxPending);
+            self.transmit_packet();
             return (ReturnCode::SUCCESS, None);
         } else {
             self.radio_state.set(RadioState::StartUp);
@@ -185,11 +206,27 @@ impl<R: rfcore::Radio> RFCore for VirtualRadio<'a, R> {
 
 impl<R: rfcore::Radio> rfcore::TxClient for VirtualRadio<'a, R> {
     fn transmit_event(&self, buf: &'static mut [u8], result: ReturnCode) {
+        debug!("VR: transmit event... State: {:?}", self.radio_state.get());
         match self.radio_state.get() {
             // Transmission Completed
             RadioState::TxDone => self.send_client_result(buf, result),
             // Transmission Pending
-            RadioState::TxPending => self.transmit_packet(),
+            RadioState::TxPending => match result {
+                ReturnCode::SUCCESS => {
+                    self.radio_state.set(RadioState::TxDone);
+                    self.send_client_result(buf, result);
+                }
+                ReturnCode::EBUSY => {
+                    self.tx_payload.replace(buf);
+                    self.transmit_packet();
+                }
+                _ => self.radio_state.set(RadioState::TxDone),
+            },
+            RadioState::TxDelay => {
+                // Something has happened and the last TxPending has failed for some reason so
+                // replace the buffer and try again
+                self.tx_payload.replace(buf);
+            }
             _ => {}
         };
     }
@@ -203,6 +240,7 @@ impl<R: rfcore::Radio> rfcore::RxClient for VirtualRadio<'a, R> {
         crc_valid: bool,
         result: ReturnCode,
     ) {
+        debug!("VR: receive event...");
         // Filter packets by destination because radio is in promiscuous mode
         let addr_match = false;
         // CHECK IF THE RECEIVE PACKET DECAUT AND DECODE IS OK HERE
@@ -219,6 +257,7 @@ impl<R: rfcore::Radio> rfcore::RxClient for VirtualRadio<'a, R> {
 
 impl<R: rfcore::Radio> rfcore::PowerClient for VirtualRadio<'a, R> {
     fn power_mode_changed(&self, on: bool) {
+        debug!("VR: power mode changed event...");
         if on {
             if let RadioState::StartUp = self.radio_state.get() {
                 if self.tx_pending.get() {

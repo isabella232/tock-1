@@ -93,6 +93,7 @@ impl Default for RadioMode {
 }
 
 static mut COMMAND_BUF: [u8; 256] = [0; 256];
+static mut TX_BUF: [u8; 240] = [0; 240];
 
 #[allow(unused)]
 // TODO Implement update config for changing radio modes and tie in the WIP power client to manage
@@ -166,55 +167,56 @@ impl Radio {
             .map(|client| client.power_mode_changed(false));
     }
 
-    unsafe fn replace_and_send_tx_buffer(
-        &self,
-        buf: &'static mut [u8],
-        len: usize,
-    ) -> (ReturnCode, Option<&'static mut [u8]>) {
+    unsafe fn replace_and_send_tx_buffer(&self, buf: &'static mut [u8], len: usize) {
         for i in 0..COMMAND_BUF.len() {
             COMMAND_BUF[i] = 0;
         }
 
-        let res = self
-            .tx_buf
-            .replace(buf)
-            .map_or((ReturnCode::EBUSY, None), |tbuf| {
-                let p_packet = tbuf.as_mut_ptr() as u32;
+        for i in 0..TX_BUF.len() {
+            TX_BUF[i] = 0;
+        }
 
-                let cmd: &mut prop::CommandTx =
-                    &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandTx);
-                cmd.command_no = 0x3801;
-                cmd.status = 0;
-                cmd.p_nextop = 0;
-                cmd.start_time = 0;
-                cmd.start_trigger = 0;
-                cmd.condition = {
-                    let mut cond = RfcCondition(0);
-                    cond.set_rule(0x01);
-                    cond
-                };
-                cmd.packet_conf = {
-                    let mut packet = prop::RfcPacketConf(0);
-                    packet.set_fs_off(false);
-                    packet.set_use_crc(true);
-                    packet.set_var_len(true);
-                    packet
-                };
-                cmd.packet_len = len as u8;
-                // cmd.packet_len = 0x14;
-                cmd.sync_word = 0x930B51DE;
-                cmd.packet_pointer = p_packet;
+        for (i, c) in buf.as_ref()[0..len].iter().enumerate() {
+            TX_BUF[i] = *c;
+        }
 
-                RadioCommand::guard(cmd);
+        self.tx_buf.put(Some(buf));
 
-                self.rfc.send_async(cmd).ok();
+        self.tx_buf.map(|buf| {
+            let p_packet = buf.as_mut_ptr() as u32;
 
-                (ReturnCode::SUCCESS, Some(tbuf))
-            });
-        res
+            let cmd: &mut prop::CommandTx =
+                &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandTx);
+            cmd.command_no = 0x3801;
+            cmd.status = 0;
+            cmd.p_nextop = 0;
+            cmd.start_time = 0;
+            cmd.start_trigger = 0;
+            cmd.condition = {
+                let mut cond = RfcCondition(0);
+                cond.set_rule(0x01);
+                cond
+            };
+            cmd.packet_conf = {
+                let mut packet = prop::RfcPacketConf(0);
+                packet.set_fs_off(false);
+                packet.set_use_crc(true);
+                packet.set_var_len(true);
+                packet
+            };
+            cmd.packet_len = len as u8;
+            // cmd.packet_len = 0x14;
+            cmd.sync_word = 0x930B51DE;
+            cmd.packet_pointer = p_packet;
+
+            RadioCommand::guard(cmd);
+
+            self.rfc.send_async(cmd).ok();
+        });
     }
 
     pub fn run_tests(&self) {
+        debug!("\r\nRunning RFC Tests...\r\n");
         self.rfc.set_mode(rfc::RfcMode::BLE);
 
         osc::OSC.request_switch_to_hf_xosc();
@@ -312,6 +314,7 @@ impl Radio {
 
 impl rfc::RFCoreClient for Radio {
     fn command_done(&self) {
+        debug!("MULTIMODE: Command Done Fired!");
         unsafe { rtc::RTC.sync() };
 
         if self.schedule_powerdown.get() {
@@ -324,11 +327,19 @@ impl rfc::RFCoreClient for Radio {
             // do sleep mode here later
         }
 
+        /*
         self.cfg_client
             .map(|client| client.config_event(ReturnCode::SUCCESS));
+        */
+        self.tx_buf.take().map_or(ReturnCode::ERESERVE, |tbuf| {
+            self.tx_client
+                .map(move |client| client.transmit_event(tbuf, ReturnCode::SUCCESS));
+            ReturnCode::SUCCESS
+        });
     }
 
     fn tx_done(&self) {
+        debug!("MULTIMODE: Tx Done Fired!");
         unsafe { rtc::RTC.sync() };
 
         if self.schedule_powerdown.get() {
@@ -348,6 +359,7 @@ impl rfc::RFCoreClient for Radio {
     }
 
     fn rx_ok(&self) {
+        debug!("MULTIMODE: Rx Done Fired!");
         unsafe { rtc::RTC.sync() };
 
         self.rx_buf.take().map_or(ReturnCode::ERESERVE, |rbuf| {
@@ -386,21 +398,26 @@ impl rfcore::RadioDriver for Radio {
 
     fn transmit(
         &self,
-        tx_buf: &'static mut [u8],
+        buf: &'static mut [u8],
         frame_len: usize,
     ) -> (ReturnCode, Option<&'static mut [u8]>) {
+        debug!("RFC: Send transmit command...");
         if frame_len > 240 {
-            return (ReturnCode::ENOSUPPORT, None);
+            return (ReturnCode::ENOSUPPORT, Some(buf));
         }
 
-        let res = unsafe { self.replace_and_send_tx_buffer(tx_buf, frame_len) };
-
-        res
+        if self.tx_buf.is_none() {
+            unsafe { self.replace_and_send_tx_buffer(buf, frame_len) };
+            (ReturnCode::SUCCESS, None)
+        } else {
+            (ReturnCode::EBUSY, Some(buf))
+        }
     }
 }
 
 impl rfcore::RadioConfig for Radio {
     fn initialize(&self) {
+        debug!("Power up radio...");
         self.power_up();
     }
 
@@ -476,6 +493,7 @@ impl rfcore::RadioConfig for Radio {
 
     fn send_stop_command(&self) -> ReturnCode {
         // Send "Gracefull" stop radio operation direct command
+        debug!("Send stop radio command...");
         let command = DirectCommand::new(0x0402, 0);
         if self.rfc.send_direct(&command).is_ok() {
             return ReturnCode::SUCCESS;
@@ -486,6 +504,7 @@ impl rfcore::RadioConfig for Radio {
 
     fn send_kill_command(&self) -> ReturnCode {
         // Send immidiate command kill all radio operation commands
+        debug!("Send kill radio command");
         let command = DirectCommand::new(0x0401, 0);
         if self.rfc.send_direct(&command).is_ok() {
             return ReturnCode::SUCCESS;
@@ -495,6 +514,7 @@ impl rfcore::RadioConfig for Radio {
     }
 
     fn set_frequency(&self, frequency: u16) -> ReturnCode {
+        debug!("Send set frequency command...");
         let mut cmd_fs = prop::CommandFS {
             command_no: 0x0803,
             status: 0,

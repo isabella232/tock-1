@@ -23,7 +23,7 @@ pub trait Device<'a> {
     /// regardless of state
     fn send_kill_command(&self) -> ReturnCode;
 
-    fn set_address_long(&self, [u8; 16]);
+    fn set_address_long(&self, [u8; 10]);
     /// Returns if the MAC device is currently on.
     fn is_on(&self) -> bool;
 

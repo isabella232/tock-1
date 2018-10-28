@@ -28,12 +28,12 @@ impl Frame {
     }
 
     pub fn append_payload(&mut self, payload: &[u8]) -> ReturnCode {
+        debug!("Appending payload...");
         if payload.len() > self.max_frame_size {
             return ReturnCode::ENOMEM;
         }
         self.buf.copy_from_slice(payload);
         self.info.data_len += payload.len();
-
         ReturnCode::SUCCESS
     }
 }
@@ -44,7 +44,7 @@ pub struct FrameInfo {
 
     fec_type: Option<FecType>,
 
-    address: [u8; 16],
+    address: [u8; 10],
 
     data_len: usize,
 }
@@ -124,7 +124,7 @@ enum RxState {
 pub struct Framer<'a, D: virtual_rfcore::RFCore> {
     radio_device: &'a D,
     seq: Cell<u8>,
-    address: Cell<[u8; 16]>,
+    address: Cell<[u8; 10]>,
     tx_state: MapCell<TxState>,
     tx_client: OptionalCell<&'a device::TxClient>,
     rx_state: MapCell<RxState>,
@@ -136,7 +136,7 @@ impl<D: virtual_rfcore::RFCore> Framer<'a, D> {
         Framer {
             radio_device,
             seq: Cell::new(0),
-            address: Cell::new([0; 16]),
+            address: Cell::new([0; 10]),
             tx_state: MapCell::new(TxState::Idle),
             tx_client: OptionalCell::empty(),
             rx_state: MapCell::new(RxState::Idle),
@@ -170,8 +170,12 @@ impl<D: virtual_rfcore::RFCore> Framer<'a, D> {
             .take()
             .map_or((ReturnCode::FAIL, None), |state| {
                 let (next_state, result) = match state {
-                    TxState::Idle => (TxState::Idle, (ReturnCode::SUCCESS, None)),
+                    TxState::Idle => {
+                        debug!("IDLE...");
+                        (TxState::Idle, (ReturnCode::SUCCESS, None))
+                    }
                     TxState::ReadyToTransmit(info, buf) => {
+                        debug!("READY TO TRANSMIT...");
                         let (rval, buf) = self.radio_device.transmit(buf, info.data_len);
                         match rval {
                             ReturnCode::EBUSY => match buf {
@@ -193,6 +197,7 @@ impl<D: virtual_rfcore::RFCore> Framer<'a, D> {
                         (TxState::Encoding(info), (ReturnCode::SUCCESS, None))
                     }
                 };
+                debug!("Next Tx State: {:?}", next_state);
                 self.tx_state.replace(next_state);
                 result
             })
@@ -201,8 +206,12 @@ impl<D: virtual_rfcore::RFCore> Framer<'a, D> {
     pub fn step_receive_state(&self) {
         self.rx_state.take().map(|state| {
             let (next_state, buf) = match state {
-                RxState::Idle => (RxState::Idle, None),
+                RxState::Idle => {
+                    debug!("Rx State IDLE...");
+                    (RxState::Idle, None)
+                }
                 RxState::ReadyToDecode(info, buf) => {
+                    debug!("Rx State READY TO DECODE...");
                     match info.fec_type {
                         Some(FecType::None) => (RxState::Idle, Some(buf)),
                         Some(FecType::LdpcTc128) => {
@@ -221,12 +230,14 @@ impl<D: virtual_rfcore::RFCore> Framer<'a, D> {
                     }
                 }
                 RxState::ReadyToYield(info, buf) => {
+                    debug!("Rx State READY TO YIELD...");
                     let _frame_len = info.data_len;
                     // Extract data - headers from frame here and return if success
                     (RxState::Idle, Some(buf))
                 }
                 RxState::ReadyToReturn(buf) => (RxState::Idle, Some(buf)),
             };
+            debug!("Next Rx State: {:?}", next_state);
             self.rx_state.replace(next_state);
 
             if let Some(buf) = buf {
@@ -238,6 +249,7 @@ impl<D: virtual_rfcore::RFCore> Framer<'a, D> {
 
 impl<D: virtual_rfcore::RFCore> device::Device<'a> for Framer<'a, D> {
     fn initialize(&self) -> ReturnCode {
+        debug!("Framer initialize...");
         self.radio_device.initialize()
     }
 
@@ -265,7 +277,8 @@ impl<D: virtual_rfcore::RFCore> device::Device<'a> for Framer<'a, D> {
         self.radio_device.get_radio_status()
     }
 
-    fn set_address_long(&self, address: [u8; 16]) {
+    fn set_address_long(&self, address: [u8; 10]) {
+        debug!("address set: {:?}", address);
         self.address.set(address);
     }
 
@@ -275,6 +288,7 @@ impl<D: virtual_rfcore::RFCore> device::Device<'a> for Framer<'a, D> {
         seq: u8,
         fec_type: Option<FecType>,
     ) -> Result<Frame, &'static mut [u8]> {
+        debug!("Preparing data frame...");
         let header = Header {
             frame_type: FrameType::Data,
             id: None,
@@ -290,12 +304,13 @@ impl<D: virtual_rfcore::RFCore> device::Device<'a> for Framer<'a, D> {
                 address: self.address.get(),
                 data_len: 0,
             },
-            max_frame_size: 128, // This needs to be configurable later
+            max_frame_size: 240, // This needs to be configurable later
         };
         Ok(frame)
     }
 
     fn transmit(&self, frame: Frame) -> (ReturnCode, Option<&'static mut [u8]>) {
+        debug!("Frame: transmit...");
         let Frame {
             buf,
             info,
@@ -322,10 +337,11 @@ impl<D: virtual_rfcore::RFCore> device::Device<'a> for Framer<'a, D> {
 }
 
 impl<D: virtual_rfcore::RFCore> rfcore::TxClient for Framer<'a, D> {
-    fn transmit_event(&self, buf: &'static mut [u8], _result: ReturnCode) {
+    fn transmit_event(&self, buf: &'static mut [u8], result: ReturnCode) {
+        debug!("Frame transmit event...");
         self.seq.set(self.seq.get() + 1);
         self.tx_client.map(move |client| {
-            client.transmit_event(buf, _result);
+            client.transmit_event(buf, result);
         });
     }
 }
@@ -338,6 +354,7 @@ impl<D: virtual_rfcore::RFCore> rfcore::RxClient for Framer<'a, D> {
         crc_valid: bool,
         _result: ReturnCode,
     ) {
+        debug!("Frame receive event...");
         if !crc_valid {
             self.radio_device.set_receive_buffer(buf);
             return;
@@ -364,6 +381,7 @@ impl<D: virtual_rfcore::RFCore> rfcore::RxClient for Framer<'a, D> {
 
 impl<D: virtual_rfcore::RFCore> rfcore::ConfigClient for Framer<'a, D> {
     fn config_event(&self, _: ReturnCode) {
+        debug!("Frame config event...");
         let (rval, buf) = self.step_transmit_state();
         if let Some(buf) = buf {
             // Return buf to tx client

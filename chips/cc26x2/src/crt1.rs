@@ -52,7 +52,10 @@ generic_isr!(aon_rtc_nvic, EVENT_PRIORITY::AON_RTC);
 generic_isr!(rfc_cpe0_isr, EVENT_PRIORITY::RF_CORE_CPE0);
 generic_isr!(rfc_cpe1_isr, EVENT_PRIORITY::RF_CORE_CPE1);
 generic_isr!(rfc_hw_isr, EVENT_PRIORITY::RF_CORE_HW);
-generic_isr!(rfc_cmd_ack_isr, EVENT_PRIORITY::RF_CMD_ACK);
+// generic_isr!(rfc_cmd_ack_isr, EVENT_PRIORITY::RF_CMD_ACK);
+use radio::rfc::cmd_ack_isr;
+custom_isr!(rfc_cmd_ack_nvic, EVENT_PRIORITY::RF_CMD_ACK, cmd_ack_isr);
+
 generic_isr!(osc_isr, EVENT_PRIORITY::OSC);
 use uart::{uart0_isr, uart1_isr};
 custom_isr!(uart0_nvic, EVENT_PRIORITY::UART0, uart0_isr);
@@ -61,7 +64,6 @@ custom_isr!(uart1_nvic, EVENT_PRIORITY::UART1, uart1_isr);
 unsafe extern "C" fn unhandled_interrupt() {
     'loop0: loop {}
 }
-
 #[link_section = ".vectors"]
 // used Ensures that the symbol is kept until the final binary
 #[used]
@@ -93,7 +95,7 @@ pub static BASE_VECTORS: [unsafe extern "C" fn(); 54] = [
     generic_isr,         // SSI1 Rx and Tx
     rfc_cpe0_isr,        // RF Core Command & Packet Engine 0
     rfc_hw_isr,          // RF Core Hardware
-    rfc_cmd_ack_isr,     // RF Core Command Acknowledge
+    rfc_cmd_ack_nvic,    // RF Core Command Acknowledge
     generic_isr,         // I2S
     generic_isr,         // AUX software event 1
     generic_isr,         // Watchdog timer
