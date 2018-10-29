@@ -9,7 +9,6 @@
 extern crate kernel;
 #[macro_use]
 extern crate enum_primitive;
-
 pub mod test;
 
 #[macro_use]

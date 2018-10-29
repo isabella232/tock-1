@@ -3,6 +3,7 @@ use helium::{device, virtual_rfcore};
 use kernel::common::cells::{MapCell, OptionalCell};
 use kernel::hil::rfcore;
 use kernel::ReturnCode;
+use msg;
 
 /// A `Frame` wraps a static mutable byte slice and keeps just enough
 /// information about its header contents to expose a restricted interface for

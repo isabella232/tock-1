@@ -139,7 +139,7 @@ impl Helium<'a> {
     fn perform_tx_sync(&self, appid: AppId) -> ReturnCode {
         debug!("Perform TX sync...");
         self.do_with_app(appid, |app| {
-            let _device_id = match app.pending_tx.take() {
+            let (device_id, fec_type) = match app.pending_tx.take() {
                 Some(pending_tx) => pending_tx,
                 None => {
                     return ReturnCode::SUCCESS;
@@ -148,7 +148,6 @@ impl Helium<'a> {
 
             let result = self.kernel_tx.take().map_or(ReturnCode::ENOMEM, |kbuf| {
                 let seq: u8 = 0;
-                let fec_type = None;
                 let mut frame = match self.device.prepare_data_frame(kbuf, seq, fec_type) {
                     Ok(frame) => frame,
                     Err(kbuf) => {
@@ -166,7 +165,7 @@ impl Helium<'a> {
                 if result != ReturnCode::SUCCESS {
                     return result;
                 }
-
+                // debug!("PAYLOAD: {:?}", frame);
                 // Finally, transmit the frame
                 let (result, mbuf) = self.device.transmit(frame);
                 if let Some(buf) = mbuf {

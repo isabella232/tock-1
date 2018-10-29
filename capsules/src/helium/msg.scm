@@ -3,6 +3,16 @@
 (version "0.1.0")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Field types                                                            ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Represents field type which can be used to represent field in frames or params
+;; in radio configuration
+
+(type addr array u8 10)
+(type payload vector u8 200)
+(type tx_pwr range 14   63)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Messages                                                               ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Represents the top-level frame for all message types.
@@ -15,12 +25,25 @@
 
 (type pingpong union
   (fields
-    (field ping u32)
+    (field ping ping)
     (field pong pong)))
+
+(type ping record
+      (fields
+        ;; Identity
+        (field id   u8)
+        ;; Address of team endpoint
+        (field address addr)
+        ;; Sequence of frame
+        (field seq  u8)
+        ;; Payload (can be <= 200 bytes)
+        (field data payload)))
 
 (type pong record
   (fields
     ;; Identity of ponger.
-    (field id    u32)
+    (field id    u8)
+    ;; Address of ponger message.
+    (field address addr)
     ;; Sequence sent in `ping`.
-    (field seq   u32)))
+    (field seq   u8)))
