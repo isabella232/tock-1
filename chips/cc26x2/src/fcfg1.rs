@@ -71,7 +71,7 @@ pub struct Registers {
     _offset8: [u8; 0x14],
     pub adc_abs_gain: ReadOnly<u32, AdcGain::Register>,
     pub adc_rel_gain: ReadOnly<u32, AdcGain::Register>,
-    pub adc_offset_int: ReadOnly<u32, AdcOffset::Register>,
+    pub adc_offset: ReadOnly<u32, AdcOffset::Register>,
     osc_conf: ReadOnly<u32>,
 }
 

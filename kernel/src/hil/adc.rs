@@ -42,7 +42,7 @@ pub trait Adc {
 /// Trait for handling callbacks from simple ADC calls.
 pub trait Client {
     /// Called when a sample is ready.
-    fn sample_ready(&self, sample: u16);
+    fn sample_ready(&self, sample: usize);
 }
 
 // *** Interfaces for high-speed, buffered ADC sampling ***

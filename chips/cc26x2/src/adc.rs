@@ -49,6 +49,7 @@ pub enum Source {
     NominalVdds,
 }
 
+
 const ADC_BITS: usize = 12;
 const CC26X_MAX_CHANNELS: usize = 8;
 
@@ -82,9 +83,11 @@ pub struct Adc {
     pub nominal_voltage: Option<usize>,
     channel: [Channel; CC26X_MAX_CHANNELS],
     single_shot_channel: OptionalCell<usize>,
+    input_scaling: bool
 }
 
 impl Adc {
+
     const fn new(nvic: &'static nvic::Nvic) -> Adc {
         Adc {
             aux_adi4: AUX_ADI4,
@@ -102,6 +105,7 @@ impl Adc {
                 Channel::new(Input::Auxio7),
             ],
             single_shot_channel: OptionalCell::empty(),
+            input_scaling: true
         }
     }
 
@@ -139,7 +143,11 @@ impl Adc {
     }
 
     fn get_offset(&self) -> u8 {
-        fcfg1::REG.adc_abs_gain.read(fcfg1::AdcGain::VALUE) as u8
+        self.voltage_setting.map_or(1, |source| match source {
+            Source::Fixed4P5V => fcfg1::REG.adc_offset.read(fcfg1::AdcOffset::ABS) as u8,
+            Source::NominalVdds => fcfg1::REG.adc_offset.read(fcfg1::AdcOffset::REL) as u8,
+        })
+
     }
 
     pub fn has_data(&self) -> bool {
@@ -149,9 +157,23 @@ impl Adc {
             == 0
     }
 
-    // Returns 12 bit value from FIFO
-    pub fn pop_fifo(&self) -> u16 {
-        aux::anaif::REG.adc_fifo.read(aux::anaif::AdcFifo::DATA) as u16
+    // Returns 32 bit adjusted value
+    pub fn pop_fifo(&self) -> usize {
+        let adc_value =  aux::anaif::REG.adc_fifo.read(aux::anaif::AdcFifo::DATA);
+
+         // Apply gain and offset adjustment
+        (((adc_value as usize + (self.get_offset()) as usize) * (self.get_gain()) as usize) + 16384) / 32768
+    }
+
+    // Returns the adjusted value
+    pub fn convert_mv(&self, sample: usize) -> usize {
+        if let Some(v_ref) = hil::adc::Adc::get_voltage_reference_mv(self) {
+            (((sample * v_ref) + 2047) / 4095)
+        }
+        else{
+            // shouldn't end up here, but if we do, just throw a 0
+            0
+        }
     }
 
     pub fn configure(&self, source: Source, sample_time: SampleCycle) {
@@ -239,6 +261,7 @@ impl Adc {
         let index: usize = (*channel) as usize;
         self.channel[index].client.set(client);
     }
+
 }
 
 use kernel::hil;
@@ -276,7 +299,14 @@ impl hil::adc::Adc for Adc {
     fn get_voltage_reference_mv(&self) -> Option<usize> {
         self.voltage_setting
             .map_or(None, move |setting| match setting {
-                Source::Fixed4P5V => Some(4500),
+                Source::Fixed4P5V => {
+                    if self.input_scaling {
+                        Some(4300)
+                    }
+                    else{
+                        Some(4500)
+                    }
+                }
                 Source::NominalVdds => self.nominal_voltage,
             })
     }

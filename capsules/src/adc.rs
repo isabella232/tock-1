@@ -463,7 +463,7 @@ impl<A: hil::adc::Adc + hil::adc::AdcHighSpeed> hil::adc::Client for Adc<'a, A> 
     /// Collects the sample and provides a callback to the application
     ///
     /// sample - analog sample value
-    fn sample_ready(&self, sample: u16) {
+    fn sample_ready(&self, sample: usize) {
         if self.active.get() && self.mode.get() == AdcMode::SingleSample {
             // single sample complete, clean up state
             self.active.set(false);
