@@ -7,10 +7,20 @@ pub struct CPERam {
     rfc_ram: [VolatileCell<u32>; 329],
 }
 
+#[repr(C)]
+pub struct PatchTab {
+    patch_tab: [VolatileCell<u8>; 150],
+}
+
+#[repr(C)]
+pub struct ParserTab {
+    parser_tab: VolatileCell<u8>,
+}
+
 #[derive(Copy, Clone)]
 pub struct Patches {
-    patch_parser_tab_offset: *const CPERam,
-    patch_tab_offset: *const CPERam,
+    patch_parser_tab_offset: *const ParserTab,
+    patch_tab_offset: *const PatchTab,
     irq_patch_offset: *const CPERam,
     patch_vec_offset: *const CPERam,
 }
@@ -18,8 +28,8 @@ pub struct Patches {
 impl Patches {
     pub const fn new() -> Patches {
         Patches {
-            patch_parser_tab_offset: 0x2100_0390 as *const CPERam,
-            patch_tab_offset: 0x2100_0398 as *const CPERam,
+            patch_parser_tab_offset: 0x2100_0390 as *const ParserTab,
+            patch_tab_offset: 0x2100_0398 as *const PatchTab,
             irq_patch_offset: 0x2100_0434 as *const CPERam,
             patch_vec_offset: 0x2100_4024 as *const CPERam,
         }
@@ -32,10 +42,10 @@ impl Patches {
 
     fn configure_prop_patch(&self) {
         let p_patch_tab = unsafe { &*self.patch_tab_offset };
-        let patch_tab = p_patch_tab.rfc_ram;
+        let patch_tab = p_patch_tab.patch_tab;
 
         let p_parser_patch_tab = unsafe { &*self.patch_parser_tab_offset };
-        let parser_patch_tab = p_parser_patch_tab.rfc_ram;
+        let parser_patch_tab = p_parser_patch_tab.parser_tab;
 
         let p_irq_patch = unsafe { &*self.irq_patch_offset };
         let irq_patch = p_irq_patch.rfc_ram;
@@ -54,7 +64,7 @@ impl Patches {
         patch_tab[70].set(11);
         patch_tab[71].set(12);
         patch_tab[69].set(13);
-        parser_patch_tab[0].set(14);
+        parser_patch_tab.set(14);
         patch_tab[60].set(15);
         irq_patch[21].set(0x21004381);
     }

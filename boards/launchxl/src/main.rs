@@ -84,10 +84,10 @@ impl kernel::Platform for Platform {
     }
 }
 
-static mut HELIUM_BUF: [u8; 128] = [0x00; 128];
+static mut HELIUM_BUF: [u8; 200] = [0x0; 200];
 
-mod pin_mapping_cc1312r;
-use pin_mapping_cc1312r::PIN_FN;
+mod pin_mapping_cc1352p;
+use pin_mapping_cc1352p::PIN_FN;
 
 unsafe fn configure_pins() {
     cc26x2::gpio::PORT[PIN_FN::UART0_RX as usize].enable_uart0_rx();

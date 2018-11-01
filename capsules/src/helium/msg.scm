@@ -9,8 +9,7 @@
 ;; in radio configuration
 
 (type addr array u8 10)
-(type payload vector u8 200)
-(type tx_pwr range 14   63)
+(type payload vector u8 180)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Messages                                                               ;;
@@ -31,11 +30,13 @@
 (type ping record
       (fields
         ;; Identity
-        (field id   u8)
+        (field id   u16)
         ;; Address of team endpoint
         (field address addr)
         ;; Sequence of frame
         (field seq  u8)
+        ;; Length of payload
+        (field len  u32)
         ;; Payload (can be <= 200 bytes)
         (field data payload)))
 
@@ -46,4 +47,6 @@
     ;; Address of ponger message.
     (field address addr)
     ;; Sequence sent in `ping`.
-    (field seq   u8)))
+    (field seq   u8)
+    ;; Length of payload
+    (field len   u32)))

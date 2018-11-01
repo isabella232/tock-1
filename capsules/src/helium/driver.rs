@@ -1,6 +1,6 @@
 use core::cmp::min;
 use enum_primitive::cast::FromPrimitive;
-use helium::{device, framer::FecType};
+use helium::{device, framer::CauterizeType};
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
 
@@ -22,9 +22,9 @@ pub struct App {
     app_cfg: Option<AppSlice<Shared, u8>>,
     app_write: Option<AppSlice<Shared, u8>>,
     app_read: Option<AppSlice<Shared, u8>>,
-    pending_tx: Option<(u16, Option<FecType>)>, // Change u32 to keyid and fec mode later on during implementation
-    tx_interval_ms: u32,                        // 400 ms is maximum per FCC
-                                                // random_nonce: u32, // Randomness to sending interval to reduce collissions
+    pending_tx: Option<(u16, Option<CauterizeType>)>, // Change u32 to keyid and fec mode later on during implementation
+    tx_interval_ms: u32,                              // 400 ms is maximum per FCC
+                                                      // random_nonce: u32, // Randomness to sending interval to reduce collissions
 }
 
 impl Default for App {
@@ -98,7 +98,6 @@ impl Helium<'a> {
     /// pick an app with a pending transmission and return its `AppId`.
     fn get_next_tx_if_idle(&self) -> Option<AppId> {
         if self.current_app.is_some() {
-            debug!("Current app is some");
             return None;
         }
         let mut pending_app = None;
@@ -121,7 +120,6 @@ impl Helium<'a> {
     /// a pending transmission.
     #[inline]
     fn perform_tx_async(&self, appid: AppId) {
-        debug!("Perform TX async...");
         let result = self.perform_tx_sync(appid);
         if result != ReturnCode::SUCCESS {
             let _ = self.app.enter(appid, |app, _| {
@@ -137,9 +135,8 @@ impl Helium<'a> {
     /// idle and the app has a pending transmission.
     #[inline]
     fn perform_tx_sync(&self, appid: AppId) -> ReturnCode {
-        debug!("Perform TX sync...");
         self.do_with_app(appid, |app| {
-            let (device_id, fec_type) = match app.pending_tx.take() {
+            let (device_id, caut_type) = match app.pending_tx.take() {
                 Some(pending_tx) => pending_tx,
                 None => {
                     return ReturnCode::SUCCESS;
@@ -148,7 +145,10 @@ impl Helium<'a> {
 
             let result = self.kernel_tx.take().map_or(ReturnCode::ENOMEM, |kbuf| {
                 let seq: u8 = 0;
-                let mut frame = match self.device.prepare_data_frame(kbuf, seq, fec_type) {
+                let mut frame = match self
+                    .device
+                    .prepare_data_frame(kbuf, seq, device_id, caut_type)
+                {
                     Ok(frame) => frame,
                     Err(kbuf) => {
                         self.kernel_tx.replace(kbuf);
@@ -160,7 +160,7 @@ impl Helium<'a> {
                     .app_write
                     .take()
                     .as_ref()
-                    .map(|payload| frame.append_payload(payload.as_ref()))
+                    .map(|payload| frame.cauterize_payload(payload.as_ref()))
                     .unwrap_or(ReturnCode::EINVAL);
                 if result != ReturnCode::SUCCESS {
                     return result;
@@ -308,18 +308,18 @@ impl Driver for Helium<'a> {
                             if cfg.len() != 11 {
                                 return None;
                             }
-                            let fec = match FecType::from_slice(cfg.as_ref()[0]) {
+                            let caut = match CauterizeType::from_slice(cfg.as_ref()[0]) {
                                 // The first entry `[0]` should be the encoding type
-                                Some(fec) => fec,
+                                Some(caut) => caut,
                                 None => {
                                     return None;
                                 }
                             };
 
-                            if fec == FecType::None {
+                            if caut == CauterizeType::None {
                                 return Some((address, None));
                             }
-                            Some((address, Some(fec)))
+                            Some((address, Some(caut)))
                         });
                         if next_tx.is_none() {
                             return ReturnCode::EINVAL;

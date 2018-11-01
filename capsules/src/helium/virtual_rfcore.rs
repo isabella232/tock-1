@@ -1,4 +1,5 @@
 use core::cell::Cell;
+use helium::framer::FrameInfo;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::rfcore;
 use kernel::ReturnCode;
@@ -42,7 +43,7 @@ pub trait RFCore {
     fn transmit(
         &self,
         full_mac_frame: &'static mut [u8],
-        frame_len: usize,
+        frame_info: FrameInfo,
     ) -> (ReturnCode, Option<&'static mut [u8]>);
 }
 
@@ -81,20 +82,8 @@ impl<R: rfcore::Radio> VirtualRadio<'a, R> {
         }
     }
 
-    /*
-    pub fn encode_packet(&self) {
-        // TODO Maybe do the final encoding here because there are two stages, FEC encoding and
-        // cauterizing so not really sure what to do where, probably cauterize before and FEC here
-        let mut (result, rbuf): (Option<&'static mut [u8]>, ReturnCode) = (ReturnCode::SUCCESS, None);
-        if let RadioState::TxPending = self.state.get() {
-            // If a tx is pending, encode and send
-        }
-    }
-    */
-
     pub fn transmit_packet(&self) {
         self.tx_payload.take().map_or((), |buf| {
-            //debug!("BUF: {:?}", buf);
             let (result, rbuf) = self.radio.transmit(buf, self.tx_payload_len.get());
             match result {
                 ReturnCode::SUCCESS => (),
@@ -179,17 +168,16 @@ impl<R: rfcore::Radio> RFCore for VirtualRadio<'a, R> {
     fn transmit(
         &self,
         frame: &'static mut [u8],
-        frame_len: usize,
+        frame_info: FrameInfo,
     ) -> (ReturnCode, Option<&'static mut [u8]>) {
-        debug!("VR: transmit...");
         if self.tx_payload.is_some() {
             return (ReturnCode::EBUSY, Some(frame));
-        } else if frame_len > 240 {
+        } else if frame_info.header.data_len > 240 {
             return (ReturnCode::ESIZE, Some(frame));
         }
 
         self.tx_payload.replace(frame);
-        self.tx_payload_len.set(frame_len);
+        self.tx_payload_len.set(frame_info.header.data_len);
 
         if self.radio.is_on() {
             self.radio_state.set(RadioState::TxPending);
@@ -206,7 +194,7 @@ impl<R: rfcore::Radio> RFCore for VirtualRadio<'a, R> {
 
 impl<R: rfcore::Radio> rfcore::TxClient for VirtualRadio<'a, R> {
     fn transmit_event(&self, buf: &'static mut [u8], result: ReturnCode) {
-        debug!("VR: transmit event... State: {:?}", self.radio_state.get());
+        debug!("VR: transmit event...");
         match self.radio_state.get() {
             // Transmission Completed
             RadioState::TxDone => self.send_client_result(buf, result),

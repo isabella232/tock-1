@@ -144,10 +144,10 @@ impl CommandTxLongRangeTest {
                 let mut packet = prop::RfcPacketConf(0);
                 packet.set_fs_off(false);
                 packet.set_use_crc(true);
-                packet.set_var_len(true);
+                packet.set_var_len(false);
                 packet
             },
-            packet_len: 0x14,
+            packet_len: 0x1E,
             sync_word: 0x00000000,
             packet_pointer: p_packet,
         };

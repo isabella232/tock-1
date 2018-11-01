@@ -1,3 +1,4 @@
+use cauterize::{Cauterize, Encoder, Vector};
 use core::cell::Cell;
 use helium::{device, virtual_rfcore};
 use kernel::common::cells::{MapCell, OptionalCell};
@@ -11,16 +12,16 @@ use msg;
 /// where the payload should be placed in the buffer.
 #[derive(Eq, PartialEq, Debug)]
 pub struct Frame {
-    buf: &'static mut [u8],
     info: FrameInfo,
-    max_frame_size: usize,
+    buf: &'static mut [u8],
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub struct Header {
-    frame_type: FrameType,
-    id: Option<u32>,
-    seq: u8,
+    pub id: u16,
+    pub address: [u8; 10],
+    pub seq: u8,
+    pub data_len: usize,
 }
 
 impl Frame {
@@ -30,72 +31,77 @@ impl Frame {
 
     pub fn append_payload(&mut self, payload: &[u8]) -> ReturnCode {
         debug!("Appending payload...");
-        if payload.len() > self.max_frame_size {
+        if payload.len() > 200 {
             return ReturnCode::ENOMEM;
         }
         self.buf.copy_from_slice(payload);
-        self.info.data_len += payload.len();
+        self.info.header.data_len += payload.len();
+        ReturnCode::SUCCESS
+    }
+
+    pub fn cauterize_payload(&mut self, payload: &[u8]) -> ReturnCode {
+        if payload.len() > 180 {
+            return ReturnCode::ENOMEM;
+        } else {
+            self.info.header.data_len = payload.len();
+        }
+
+        let mut pkt = msg::Payload::new();
+
+        for elem in payload.iter() {
+            pkt.push(*elem);
+        }
+
+        let ping = msg::Ping {
+            id: self.info.header.id,
+            address: msg::Addr(self.info.header.address),
+            seq: self.info.header.seq,
+            len: self.info.header.data_len as u32,
+            data: pkt,
+        };
+
+        let pingpong = msg::Pingpong::Ping(ping);
+
+        let mut ectx = Encoder::new(&mut self.buf);
+
+        pingpong
+            .encode(&mut ectx)
+            .map_err(|e| debug!("Cauterize Error: {:?}", e))
+            .ok();
+
+        self.info.header.data_len = ectx.consume();
+        debug!("Data len: {:?}", self.info.header.data_len);
+
+        if self.info.header.data_len > 200 {
+            return ReturnCode::ENOMEM;
+        }
+
         ReturnCode::SUCCESS
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub struct FrameInfo {
-    header: Header,
+    pub header: Header,
 
-    fec_type: Option<FecType>,
-
-    address: [u8; 10],
-
-    data_len: usize,
+    caut_type: Option<CauterizeType>,
 }
 
-pub const FEC_TYPE_MASK: u8 = 0b111;
+pub const CAUT_TYPE_MASK: u8 = 0b111;
 #[repr(u8)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum FecType {
+pub enum CauterizeType {
     None = 0b00,
-    LdpcTc128 = 0b001,
-    LdpcTc256 = 0b010,
-    LdpcTc512 = 0b011,
+    Standard = 0b001,
+    Custom = 0b010,
 }
 
-impl FecType {
-    pub fn from_slice(ft: u8) -> Option<FecType> {
-        match ft & FEC_TYPE_MASK {
-            0b00 => Some(FecType::None),
-            0b01 => Some(FecType::LdpcTc128),
-            0b10 => Some(FecType::LdpcTc256),
-            0b11 => Some(FecType::LdpcTc512),
-            _ => None,
-        }
-    }
-}
-
-pub const FRAME_TYPE_MASK: u16 = 0b111;
-#[repr(u16)]
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum FrameType {
-    // Reserved = 0b100,
-    Beacon = 0b000,
-    Data = 0b001,
-    Acknowledgement = 0b010,
-    MACCommand = 0b011,
-    Multipurpose = 0b101,
-    Fragment = 0b110,
-    Extended = 0b111,
-}
-
-impl FrameType {
-    pub fn from_slice(ft: u16) -> Option<FrameType> {
-        match ft & FRAME_TYPE_MASK {
-            0b000 => Some(FrameType::Beacon),
-            0b001 => Some(FrameType::Data),
-            0b010 => Some(FrameType::Acknowledgement),
-            0b011 => Some(FrameType::MACCommand),
-            0b101 => Some(FrameType::Multipurpose),
-            0b110 => Some(FrameType::Fragment),
-            0b111 => Some(FrameType::Extended),
+impl CauterizeType {
+    pub fn from_slice(ct: u8) -> Option<CauterizeType> {
+        match ct & CAUT_TYPE_MASK {
+            0b00 => Some(CauterizeType::None),
+            0b01 => Some(CauterizeType::Standard),
+            0b10 => Some(CauterizeType::Custom),
             _ => None,
         }
     }
@@ -146,8 +152,10 @@ impl<D: virtual_rfcore::RFCore> Framer<'a, D> {
     }
 
     fn outgoing_frame(&self, buf: &'static mut [u8], frame_info: FrameInfo) -> TxState {
-        match frame_info.fec_type {
-            Some(_) => TxState::ReadyToEncode(frame_info, buf),
+        match frame_info.caut_type {
+            Some(CauterizeType::None) => TxState::ReadyToTransmit(frame_info, buf),
+            Some(CauterizeType::Custom) => TxState::ReadyToEncode(frame_info, buf),
+            Some(CauterizeType::Standard) => TxState::ReadyToTransmit(frame_info, buf),
             None => TxState::ReadyToTransmit(frame_info, buf),
         }
     }
@@ -177,7 +185,7 @@ impl<D: virtual_rfcore::RFCore> Framer<'a, D> {
                     }
                     TxState::ReadyToTransmit(info, buf) => {
                         debug!("READY TO TRANSMIT...");
-                        let (rval, buf) = self.radio_device.transmit(buf, info.data_len);
+                        let (rval, buf) = self.radio_device.transmit(buf, info);
                         match rval {
                             ReturnCode::EBUSY => match buf {
                                 None => (TxState::Idle, (ReturnCode::FAIL, None)),
@@ -190,7 +198,6 @@ impl<D: virtual_rfcore::RFCore> Framer<'a, D> {
                         }
                     }
                     TxState::ReadyToEncode(info, buf) => {
-                        // TODO MAC ldpc encode here
                         (TxState::Encoding(info), (ReturnCode::SUCCESS, Some(buf)))
                     }
                     TxState::Encoding(info) => {
@@ -213,17 +220,13 @@ impl<D: virtual_rfcore::RFCore> Framer<'a, D> {
                 }
                 RxState::ReadyToDecode(info, buf) => {
                     debug!("Rx State READY TO DECODE...");
-                    match info.fec_type {
-                        Some(FecType::None) => (RxState::Idle, Some(buf)),
-                        Some(FecType::LdpcTc128) => {
+                    match info.caut_type {
+                        Some(CauterizeType::None) => (RxState::Idle, Some(buf)),
+                        Some(CauterizeType::Standard) => {
                             // Do decode for LDPC TC128 here then return success for fail
                             (RxState::Idle, Some(buf))
                         }
-                        Some(FecType::LdpcTc256) => {
-                            // Same as above
-                            (RxState::Idle, Some(buf))
-                        }
-                        Some(FecType::LdpcTc512) => {
+                        Some(CauterizeType::Custom) => {
                             // Same as above
                             (RxState::Idle, Some(buf))
                         }
@@ -232,7 +235,7 @@ impl<D: virtual_rfcore::RFCore> Framer<'a, D> {
                 }
                 RxState::ReadyToYield(info, buf) => {
                     debug!("Rx State READY TO YIELD...");
-                    let _frame_len = info.data_len;
+                    let _frame_len = info.header.data_len;
                     // Extract data - headers from frame here and return if success
                     (RxState::Idle, Some(buf))
                 }
@@ -287,36 +290,32 @@ impl<D: virtual_rfcore::RFCore> device::Device<'a> for Framer<'a, D> {
         &self,
         buf: &'static mut [u8],
         seq: u8,
-        fec_type: Option<FecType>,
+        id: u16,
+        caut_type: Option<CauterizeType>,
     ) -> Result<Frame, &'static mut [u8]> {
         debug!("Preparing data frame...");
+
         let header = Header {
-            frame_type: FrameType::Data,
-            id: None,
+            id: id,
+            address: self.address.get(),
             seq: seq, //Some(self.seq.get()),
+            data_len: buf.len(),
         };
 
         // encode header here and return some result
         let frame = Frame {
-            buf: buf,
             info: FrameInfo {
                 header: header,
-                fec_type: fec_type,
-                address: self.address.get(),
-                data_len: 0,
+                caut_type: caut_type,
             },
-            max_frame_size: 240, // This needs to be configurable later
+            buf: buf,
         };
         Ok(frame)
     }
 
     fn transmit(&self, frame: Frame) -> (ReturnCode, Option<&'static mut [u8]>) {
         debug!("Frame: transmit...");
-        let Frame {
-            buf,
-            info,
-            max_frame_size: _,
-        } = frame;
+        let Frame { info, buf } = frame;
         let state = match self.tx_state.take() {
             None => {
                 return (ReturnCode::FAIL, Some(buf));

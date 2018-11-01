@@ -21,11 +21,16 @@ impl Patches {
 
     pub fn apply_patch(&self) {
         let p_mce_patch = unsafe { &*self.mce_patch };
-        let mut i = 0;
-        for reg in p_mce_patch.mce_ram.iter() {
+        // let mut i = 0;
+        for (r, v) in PATCH_LONGRANGE[0..228].iter().enumerate() {
+            p_mce_patch.mce_ram[r].set(*v);
+        }
+        /*
+        for reg in p_mce_patch.mce_ram.iter().enumerate() {
             reg.set(PATCH_LONGRANGE[i]);
             i += 1;
         }
+        */
     }
 }
 
