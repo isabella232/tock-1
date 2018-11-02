@@ -13,6 +13,7 @@ use rtc;
 
 const TEST_PAYLOAD: [u32; 30] = [0; 30];
 
+/*
 static mut LR_RFPARAMS: [u32; 28] = [
     // override_use_patch_simplelink_long_range.xml
     0x00000847, // PHY: Use MCE RAM patch, RFE RAM patch MCE_RFE_OVERRIDE(1,0,0,1,0,0),
@@ -48,6 +49,7 @@ static mut LR_RFPARAMS: [u32; 28] = [
     0x82A86C2B, // txHighPA=0x20AA1B
     0xFFFFFFFF,
 ];
+*/
 
 static mut GFSK_RFPARAMS: [u32; 26] = [
     // override_use_patch_prop_genfsk.xml
