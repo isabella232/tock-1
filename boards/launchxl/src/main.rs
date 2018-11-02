@@ -405,13 +405,12 @@ pub unsafe fn reset_handler() {
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
 
-    // let rfc = &cc26x2::radio::MULTIMODE_RADIO;
-    // rfc.run_tests();
+    let rfc = &cc26x2::radio::MULTIMODE_RADIO;
+    rfc.run_tests();
 
     // set nominal voltage
     cc26x2::adc::ADC.nominal_voltage = Some(3300);
     cc26x2::adc::ADC.configure(adc::Source::Fixed4P5V, adc::SampleCycle::_10p9_ms);
-
 
     // Setup ADC
     let adc_channels = static_init!(

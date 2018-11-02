@@ -33,8 +33,13 @@ impl Frame {
         if payload.len() > 200 {
             return ReturnCode::ENOMEM;
         }
-        self.buf.copy_from_slice(payload);
-        self.info.header.data_len += payload.len();
+
+        for (i, c) in payload.as_ref()[0..payload.len()].iter().enumerate() {
+            self.buf[i] = *c;
+        }
+
+        // self.buf.copy_from_slice(payload);
+        self.info.header.data_len = payload.len();
         ReturnCode::SUCCESS
     }
 
