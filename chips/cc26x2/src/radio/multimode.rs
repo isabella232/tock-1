@@ -13,7 +13,6 @@ use rtc;
 
 const TEST_PAYLOAD: [u32; 30] = [0; 30];
 
-/*
 static mut LR_RFPARAMS: [u32; 28] = [
     // override_use_patch_simplelink_long_range.xml
     0x00000847, // PHY: Use MCE RAM patch, RFE RAM patch MCE_RFE_OVERRIDE(1,0,0,1,0,0),
@@ -44,12 +43,12 @@ static mut LR_RFPARAMS: [u32; 28] = [
     // override_phy_rx_frontend_simplelink_long_range.xml
     0x000288A3, // Rx: Set RSSI offset to adjust reported RSSI by -2 dB (default: 0)
     // override_phy_rx_aaf_bw_0xd.xml
-    0x7ddf0002,    // Rx: Set anti-aliasing filter bandwidth to 0xD (in ADI0, set IFAMPCTL3[7:4]=0xD) ADI_HALFREG_OVERRIDE(0,61,0xF,0xD),
-    0xFCFC08C3,    // DC/DC regulator: In Tx, use DCDCCTL5[3:0]=0xC (DITHER_EN=1 and IPEAK=4). In Rx, use DCDCCTL5[3:0]=0xC (DITHER_EN=1 and IPEAK=4).
+    0x7ddf0002, // Rx: Set anti-aliasing filter bandwidth to 0xD (in ADI0, set IFAMPCTL3[7:4]=0xD) ADI_HALFREG_OVERRIDE(0,61,0xF,0xD),
+    0xFCFC08C3, // DC/DC regulator: In Tx, use DCDCCTL5[3:0]=0xC (DITHER_EN=1 and IPEAK=4). In Rx, use DCDCCTL5[3:0]=0xC (DITHER_EN=1 and IPEAK=4).
     0x82A86C2B, // txHighPA=0x20AA1B
     0xFFFFFFFF,
 ];
-*/
+
 static mut GFSK_RFPARAMS: [u32; 26] = [
     // override_use_patch_prop_genfsk.xml
     0x00000847, // PHY: Use MCE RAM patch, RFE RAM patch MCE_RFE_OVERRIDE(1,0,0,1,0,0),
@@ -252,7 +251,7 @@ impl Radio {
             cmd.packet_pointer = p_packet;
 
             RadioCommand::guard(cmd);
-
+            debug!("BUF: {:?}", buf);
             self.rfc
                 .send_sync(cmd)
                 .and_then(|_| self.rfc.wait(cmd))
@@ -317,8 +316,8 @@ impl Radio {
                 packet
             };
             cmd.packet_len = 0x1E;
-            cmd.sync_word = 0x930B51DE;
-            // cmd.sync_word = 0x00000000;
+            // cmd.sync_word = 0x930B51DE;
+            cmd.sync_word = 0x00000000;
             cmd.packet_pointer = p_packet;
 
             RadioCommand::guard(cmd);

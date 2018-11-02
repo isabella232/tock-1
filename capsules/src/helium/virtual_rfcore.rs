@@ -98,7 +98,6 @@ impl<R: rfcore::Radio> VirtualRadio<'a, R> {
     }
 
     pub fn send_client_result(&self, buf: &'static mut [u8], result: ReturnCode) {
-        debug!("VR: Send client result...");
         self.radio_state.set(RadioState::Awake);
         self.tx_client.map(move |c| {
             c.transmit_event(buf, result);
@@ -108,7 +107,6 @@ impl<R: rfcore::Radio> VirtualRadio<'a, R> {
 
 impl<R: rfcore::Radio> RFCore for VirtualRadio<'a, R> {
     fn initialize(&self) -> ReturnCode {
-        debug!("VR: initialize...");
         self.radio_state.set(RadioState::StartUp);
         self.radio.initialize();
         ReturnCode::SUCCESS
@@ -194,7 +192,6 @@ impl<R: rfcore::Radio> RFCore for VirtualRadio<'a, R> {
 
 impl<R: rfcore::Radio> rfcore::TxClient for VirtualRadio<'a, R> {
     fn transmit_event(&self, buf: &'static mut [u8], result: ReturnCode) {
-        debug!("VR: transmit event...");
         match self.radio_state.get() {
             // Transmission Completed
             RadioState::TxDone => self.send_client_result(buf, result),
@@ -228,7 +225,6 @@ impl<R: rfcore::Radio> rfcore::RxClient for VirtualRadio<'a, R> {
         crc_valid: bool,
         result: ReturnCode,
     ) {
-        debug!("VR: receive event...");
         // Filter packets by destination because radio is in promiscuous mode
         let addr_match = false;
         // CHECK IF THE RECEIVE PACKET DECAUT AND DECODE IS OK HERE
@@ -245,7 +241,6 @@ impl<R: rfcore::Radio> rfcore::RxClient for VirtualRadio<'a, R> {
 
 impl<R: rfcore::Radio> rfcore::PowerClient for VirtualRadio<'a, R> {
     fn power_mode_changed(&self, on: bool) {
-        debug!("VR: power mode changed event...");
         if on {
             if let RadioState::StartUp = self.radio_state.get() {
                 if self.tx_pending.get() {

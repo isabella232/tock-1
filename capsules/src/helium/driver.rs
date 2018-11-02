@@ -165,7 +165,6 @@ impl Helium<'a> {
                 if result != ReturnCode::SUCCESS {
                     return result;
                 }
-                // debug!("PAYLOAD: {:?}", frame);
                 // Finally, transmit the frame
                 let (result, mbuf) = self.device.transmit(frame);
                 if let Some(buf) = mbuf {
@@ -344,7 +343,6 @@ impl Driver for Helium<'a> {
 
 impl device::TxClient for Helium<'a> {
     fn transmit_event(&self, buf: &'static mut [u8], result: ReturnCode) {
-        debug!("Device transmit event called...");
         self.kernel_tx.replace(buf);
         self.current_app.take().map(|appid| {
             let _ = self.app.enter(appid, |app, _| {
@@ -359,7 +357,6 @@ impl device::TxClient for Helium<'a> {
 
 impl device::RxClient for Helium<'a> {
     fn receive_event<'b>(&self, buf: &'b [u8], data_offset: usize, data_len: usize) {
-        debug!("Device receive event called...");
         self.app.each(|app| {
             app.app_read.take().as_mut().map(|rbuf| {
                 let rbuf = rbuf.as_mut();

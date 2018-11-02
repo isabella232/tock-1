@@ -40,7 +40,7 @@ pub struct RfcDBellRegisters {
     // RFC Command Status register
     cmdsta: ReadOnly<u32>,
     // Interrupt Flags From RF HW Modules
-    _rfhw_ifg: ReadWrite<u32>,
+    rfhw_ifg: ReadWrite<u32>,
     // Interrupt Flags For RF HW Modules
     _rfhw_ien: ReadWrite<u32>,
     // Interrupt Flags For CPE Generated Interrupts
@@ -273,6 +273,7 @@ impl RFCore {
         let dbell_regs = self.dbell_regs;
 
         // Clear ack flag
+        dbell_regs.rfhw_ifg.set(0);
         dbell_regs.rfack_ifg.set(0);
         self.ack_status.set(0x00);
         // Enable interrupts and clear flags
@@ -341,6 +342,7 @@ impl RFCore {
     // Call commands to setup RFCore with optional register overrides and power output
     pub fn setup(&self, reg_overrides: u32, tx_power: u16) {
         debug!("Setup Radio");
+
         let mut setup_cmd = prop::CommandRadioDivSetup {
             command_no: 0x3807,
             status: 0,
