@@ -69,7 +69,8 @@ static mut GFSK_RFPARAMS: [u32; 26] = [
     0x02980243, // Synth: Decrease synth programming time-out by 90 us from default (0x0298 RAT ticks = 166 us) Synth: Set loop bandwidth after lock to 20 kHz
     0x0A480583, // Synth: Set loop bandwidth after lock to 20 kHz
     0x7AB80603, // Synth: Set loop bandwidth after lock to 20 kHz
-    0x00000623, 0x0cf80002, //
+    0x00000623,
+    0x002F6028, //
     // override_phy_tx_pa_ramp_genfsk.xml
     0x50880002, // Tx: Configure PA ramp time, PACTL2.RC=0x3 (in ADI0, set PACTL2[3]=1) ADI_HALFREG_OVERRIDE(0,16,0x8,0x8),
     0x51110002, // Tx: Configure PA ramp time, PACTL2.RC=0x3 (in ADI0, set PACTL2[4]=1) ADI_HALFREG_OVERRIDE(0,17,0x1,0x1),
@@ -81,10 +82,6 @@ static mut GFSK_RFPARAMS: [u32; 26] = [
     0x7ddf0002, // Rx: Set anti-aliasing filter bandwidth to 0xD (in ADI0, set IFAMPCTL3[7:4]=0xD) ADI_HALFREG_OVERRIDE(0,61,0xF,0xD),
     0xFCFC08C3, // TX power override DC/DC regulator: In Tx with 14 dBm PA setting, use DCDCCTL5[3:0]=0xF (DITHER_EN=1 and IPEAK=7). In Rx, use DCDCCTL5[3:0]=0xC (DITHER_EN=1 and IPEAK=4).
     0x82A86C2B,
-    /*
-    0xFFFC08C3, // TX power override DC/DC regulator: In Tx with 14 dBm PA setting, use DCDCCTL5[3:0]=0xF (DITHER_EN=1 and IPEAK=7). In Rx, use DCDCCTL5[3:0]=0xC (DITHER_EN=1 and IPEAK=4).
-    0x0cf80002, // Tx: Set PA trim to max to maximize its output power (in ADI0, set PACTL0=0xF8) ADI_REG_OVERRIDE(0,12,0xF8),
-    */
     0xFFFFFFFF, // Stop word
 ];
 
@@ -243,7 +240,7 @@ impl Radio {
                 let mut packet = prop::RfcPacketConf(0);
                 packet.set_fs_off(false);
                 packet.set_use_crc(true);
-                packet.set_var_len(false);
+                packet.set_var_len(true);
                 packet
             };
             cmd.packet_len = len as u8;
@@ -313,12 +310,12 @@ impl Radio {
                 let mut packet = prop::RfcPacketConf(0);
                 packet.set_fs_off(false);
                 packet.set_use_crc(true);
-                packet.set_var_len(false);
+                packet.set_var_len(true);
                 packet
             };
             cmd.packet_len = 0x1E;
-            // cmd.sync_word = 0x930B51DE;
-            cmd.sync_word = 0x00000000;
+            cmd.sync_word = 0x930B51DE;
+            // cmd.sync_word = 0x00000000;
             cmd.packet_pointer = p_packet;
 
             RadioCommand::guard(cmd);
