@@ -38,7 +38,6 @@ impl Frame {
             self.buf[i] = *c;
         }
 
-        // self.buf.copy_from_slice(payload);
         self.info.header.data_len = payload.len();
         ReturnCode::SUCCESS
     }

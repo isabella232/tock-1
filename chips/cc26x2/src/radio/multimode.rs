@@ -247,7 +247,6 @@ impl Radio {
                 packet
             };
             cmd.packet_len = len as u8;
-            // cmd.packet_len = 0x14;
             // cmd.sync_word = 0x00000000;
             cmd.sync_word = 0x930B51DE;
             cmd.packet_pointer = p_packet;
@@ -280,7 +279,7 @@ impl Radio {
 
         unsafe {
             let reg_overrides: u32 = GFSK_RFPARAMS.as_mut_ptr() as u32;
-            self.rfc.setup(reg_overrides, 0xFFFF); // 0x9F3F);
+            self.rfc.setup(reg_overrides, 0xFFFF);
         }
 
         self.test_radio_fs();
@@ -375,11 +374,6 @@ impl rfc::RFCoreClient for Radio {
             self.schedule_powerdown.set(false);
             // do sleep mode here later
         }
-
-        /*
-        self.cfg_client
-            .map(|client| client.config_event(ReturnCode::SUCCESS));
-        */
 
         self.tx_buf.take().map_or(ReturnCode::ERESERVE, |tbuf| {
             self.tx_client
