@@ -172,8 +172,8 @@ pub unsafe fn reset_handler() {
 
     while !prcm::Power::is_enabled(prcm::PowerDomain::Serial) {}
 
-    // osc::OSC.request_switch_to_hf_xosc();
-    // osc::OSC.switch_to_hf_xosc();
+    osc::OSC.request_switch_to_hf_xosc();
+    osc::OSC.switch_to_hf_xosc();
 
     let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&PROCESSES));
 
@@ -405,8 +405,8 @@ pub unsafe fn reset_handler() {
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
 
-    let rfc = &cc26x2::radio::MULTIMODE_RADIO;
-    rfc.run_tests();
+    // let rfc = &cc26x2::radio::MULTIMODE_RADIO;
+    // rfc.run_tests();
 
     // set nominal voltage
     cc26x2::adc::ADC.nominal_voltage = Some(3300);
