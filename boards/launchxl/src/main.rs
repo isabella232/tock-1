@@ -20,16 +20,22 @@ use cc26x2::adc;
 use cc26x2::aon;
 use cc26x2::osc;
 use cc26x2::prcm;
+use cc26x2::pwm;
 use cc26x2::radio;
 use kernel::capabilities;
 use kernel::hil;
 use kernel::hil::entropy::Entropy32;
+use kernel::hil::gpio::InterruptMode;
+use kernel::hil::gpio::Pin;
+use kernel::hil::gpio::PinCtl;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::rng::Rng;
 use kernel::Chip;
 #[macro_use]
 pub mod io;
 
+#[allow(dead_code)]
+mod ccfg_test;
 #[allow(dead_code)]
 mod i2c_tests;
 #[allow(dead_code)]
@@ -62,6 +68,7 @@ pub struct Platform {
     >,
     rng: &'static capsules::rng::RngDriver<'static>,
     i2c_master: &'static capsules::i2c_master::I2CMasterDriver<cc26x2::i2c::I2CMaster<'static>>,
+    adc: &'static capsules::adc::Adc<'static, cc26x2::adc::Adc>,
     helium: &'static capsules::helium::driver::Helium<'static>,
 }
 
@@ -78,6 +85,7 @@ impl kernel::Platform for Platform {
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules::i2c_master::DRIVER_NUM => f(Some(self.i2c_master)),
+            capsules::adc::DRIVER_NUM => f(Some(self.adc)),
             capsules::helium::driver::DRIVER_NUM => f(Some(self.helium)),
             _ => f(None),
         }
@@ -86,32 +94,57 @@ impl kernel::Platform for Platform {
 
 static mut HELIUM_BUF: [u8; 200] = [0x0; 200];
 
-mod pin_mapping_cc1352p;
-use pin_mapping_cc1352p::PIN_FN;
+mod cc1312r;
+mod cc1352p;
 
-unsafe fn configure_pins() {
-    cc26x2::gpio::PORT[PIN_FN::UART0_RX as usize].enable_uart0_rx();
-    cc26x2::gpio::PORT[PIN_FN::UART0_TX as usize].enable_uart0_tx();
+pub struct Pinmap {
+    uart0_rx: usize,
+    uart0_tx: usize,
+    i2c0_scl: usize,
+    i2c0_sda: usize,
+    red_led: usize,
+    green_led: usize,
+    button1: usize,
+    button2: usize,
+    gpio0: usize,
+    a0: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+    a4: usize,
+    a5: usize,
+    a6: usize,
+    a7: usize,
+    pwm0: usize,
+    pwm1: usize,
+}
 
-    cc26x2::gpio::PORT[PIN_FN::I2C0_SCL as usize].enable_i2c_scl();
-    cc26x2::gpio::PORT[PIN_FN::I2C0_SDA as usize].enable_i2c_sda();
+unsafe fn configure_pins(pin: &Pinmap) {
+    cc26x2::gpio::PORT[pin.uart0_rx].enable_uart0_rx();
+    cc26x2::gpio::PORT[pin.uart0_tx].enable_uart0_tx();
 
-    cc26x2::gpio::PORT[PIN_FN::RED_LED as usize].enable_gpio();
-    cc26x2::gpio::PORT[PIN_FN::GREEN_LED as usize].enable_gpio();
+    cc26x2::gpio::PORT[pin.i2c0_scl].enable_i2c_scl();
+    cc26x2::gpio::PORT[pin.i2c0_sda].enable_i2c_sda();
 
-    cc26x2::gpio::PORT[PIN_FN::BUTTON_1 as usize].enable_gpio();
-    cc26x2::gpio::PORT[PIN_FN::BUTTON_2 as usize].enable_gpio();
+    cc26x2::gpio::PORT[pin.red_led].enable_gpio();
+    cc26x2::gpio::PORT[pin.green_led].enable_gpio();
 
-    cc26x2::gpio::PORT[PIN_FN::GPIO0 as usize].enable_gpio();
+    cc26x2::gpio::PORT[pin.button1].enable_gpio();
+    cc26x2::gpio::PORT[pin.button2].enable_gpio();
 
-    cc26x2::gpio::PORT[23].enable_analog_input();
-    cc26x2::gpio::PORT[24].enable_analog_input();
-    cc26x2::gpio::PORT[25].enable_analog_input();
-    cc26x2::gpio::PORT[26].enable_analog_input();
-    cc26x2::gpio::PORT[27].enable_analog_input();
-    cc26x2::gpio::PORT[28].enable_analog_input();
-    cc26x2::gpio::PORT[29].enable_analog_input();
-    cc26x2::gpio::PORT[30].enable_analog_input();
+    cc26x2::gpio::PORT[pin.gpio0].enable_gpio();
+
+    cc26x2::gpio::PORT[pin.a7].enable_analog_input();
+    cc26x2::gpio::PORT[pin.a6].enable_analog_input();
+    cc26x2::gpio::PORT[pin.a5].enable_analog_input();
+    cc26x2::gpio::PORT[pin.a4].enable_analog_input();
+    cc26x2::gpio::PORT[pin.a3].enable_analog_input();
+    cc26x2::gpio::PORT[pin.a2].enable_analog_input();
+    cc26x2::gpio::PORT[pin.a1].enable_analog_input();
+    cc26x2::gpio::PORT[pin.a0].enable_analog_input();
+
+    cc26x2::gpio::PORT[pin.pwm0].enable_pwm(pwm::Timer::GPT0A);
+    cc26x2::gpio::PORT[pin.pwm1].enable_pwm(pwm::Timer::GPT0B);
 }
 
 #[no_mangle]
@@ -147,7 +180,16 @@ pub unsafe fn reset_handler() {
     // Enable the GPIO clocks
     prcm::Clock::enable_gpio();
 
-    configure_pins();
+    let pinmap: &Pinmap;
+    let chip_id = (cc26x2::rom::HAPI.get_chip_id)();
+
+    if chip_id == cc1352p::CHIP_ID {
+        pinmap = &cc1352p::PINMAP;
+    } else {
+        pinmap = &cc1312r::PINMAP;
+    }
+
+    configure_pins(pinmap);
 
     // LEDs
     let led_pins = static_init!(
@@ -157,11 +199,11 @@ pub unsafe fn reset_handler() {
         ); 2],
         [
             (
-                &cc26x2::gpio::PORT[PIN_FN::RED_LED as usize],
+                &cc26x2::gpio::PORT[pinmap.red_led],
                 capsules::led::ActivationMode::ActiveHigh
             ), // Red
             (
-                &cc26x2::gpio::PORT[PIN_FN::GREEN_LED as usize],
+                &cc26x2::gpio::PORT[pinmap.green_led],
                 capsules::led::ActivationMode::ActiveHigh
             ), // Green
         ]
@@ -176,11 +218,11 @@ pub unsafe fn reset_handler() {
         [(&'static cc26x2::gpio::GPIOPin, capsules::button::GpioMode); 2],
         [
             (
-                &cc26x2::gpio::PORT[PIN_FN::BUTTON_1 as usize],
+                &cc26x2::gpio::PORT[pinmap.button1],
                 capsules::button::GpioMode::LowWhenPressed
             ), // Button 1
             (
-                &cc26x2::gpio::PORT[PIN_FN::BUTTON_2 as usize],
+                &cc26x2::gpio::PORT[pinmap.button2],
                 capsules::button::GpioMode::LowWhenPressed
             ), // Button 2
         ]
@@ -192,8 +234,13 @@ pub unsafe fn reset_handler() {
             board_kernel.create_grant(&memory_allocation_capability)
         )
     );
+
+    let mut count = 0;
     for &(btn, _) in button_pins.iter() {
+        btn.set_input_mode(hil::gpio::InputMode::PullUp);
+        btn.enable_interrupt(count, InterruptMode::FallingEdge);
         btn.set_client(button);
+        count += 1;
     }
 
     // UART
@@ -267,7 +314,7 @@ pub unsafe fn reset_handler() {
         [
             // This is the order they appear on the launchxl headers.
             // Pins 5, 8, 11, 29, 30
-            &cc26x2::gpio::PORT[PIN_FN::GPIO0 as usize],
+            &cc26x2::gpio::PORT[pinmap.gpio0],
         ]
     );
     let gpio = static_init!(
@@ -358,8 +405,57 @@ pub unsafe fn reset_handler() {
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
 
-    let rfc = &cc26x2::radio::MULTIMODE_RADIO;
-    rfc.run_tests();
+    let _rfc = &cc26x2::radio::MULTIMODE_RADIO;
+
+    // set nominal voltage
+    cc26x2::adc::ADC.nominal_voltage = Some(3300);
+    cc26x2::adc::ADC.configure(adc::Source::Fixed4P5V, adc::SampleCycle::_10p9_ms);
+
+    // Setup ADC
+    let adc_channels = static_init!(
+        [&cc26x2::adc::Input; 8],
+        [
+            &cc26x2::adc::Input::Auxio0, // pin 30
+            &cc26x2::adc::Input::Auxio1, // pin 29
+            &cc26x2::adc::Input::Auxio2, // pin 28
+            &cc26x2::adc::Input::Auxio3, // pin 27
+            &cc26x2::adc::Input::Auxio4, // pin 26
+            &cc26x2::adc::Input::Auxio5, // pin 25
+            &cc26x2::adc::Input::Auxio6, // pin 24
+            &cc26x2::adc::Input::Auxio7, // pin 23
+        ]
+    );
+
+    let adc = static_init!(
+        capsules::adc::Adc<'static, cc26x2::adc::Adc>,
+        capsules::adc::Adc::new(
+            &mut cc26x2::adc::ADC,
+            adc_channels,
+            &mut capsules::adc::ADC_BUFFER1,
+            &mut capsules::adc::ADC_BUFFER2,
+            &mut capsules::adc::ADC_BUFFER3
+        )
+    );
+
+    for channel in adc_channels.iter() {
+        cc26x2::adc::ADC.set_client(adc, channel);
+    }
+
+    let pwm_channels = [
+        pwm::Channel::new(pwm::Timer::GPT0A),
+        pwm::Channel::new(pwm::Timer::GPT0B),
+        pwm::Channel::new(pwm::Timer::GPT1A),
+        pwm::Channel::new(pwm::Timer::GPT1B),
+        pwm::Channel::new(pwm::Timer::GPT2A),
+        pwm::Channel::new(pwm::Timer::GPT2B),
+        pwm::Channel::new(pwm::Timer::GPT3A),
+        pwm::Channel::new(pwm::Timer::GPT3B),
+    ];
+
+    // for testing for now, just enable all channels with PWM
+    for pwm_channel in pwm_channels.iter() {
+        pwm_channel.enable(0xFF, 0xFF >> 1)
+    }
 
     let launchxl = Platform {
         console,
@@ -369,6 +465,7 @@ pub unsafe fn reset_handler() {
         alarm,
         rng,
         i2c_master,
+        adc,
         helium: radio_driver,
     };
 
@@ -381,7 +478,7 @@ pub unsafe fn reset_handler() {
 
     let ipc = &kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
 
-    adc::ADC.configure(adc::SOURCE::NominalVdds, adc::SAMPLE_CYCLE::_170_us);
+    adc::ADC.configure(adc::Source::NominalVdds, adc::SampleCycle::_170_us);
 
     // debug!("Loading processes");
 

@@ -1,3 +1,4 @@
+use adc;
 use cortexm4;
 use event_priority::EVENT_PRIORITY;
 use events;
@@ -33,12 +34,14 @@ pub struct Cc26X2 {
     systick: cortexm4::systick::SysTick,
 }
 
+pub const HFREQ: u32 = 48 * 1_000_000;
+
 impl Cc26X2 {
     pub unsafe fn new() -> Cc26X2 {
         Cc26X2 {
             mpu: cortexm4::mpu::MPU::new(),
             // The systick clocks with 48MHz by default
-            systick: cortexm4::systick::SysTick::new_with_calibration(48 * 1000000),
+            systick: cortexm4::systick::SysTick::new_with_calibration(HFREQ),
         }
     }
 }
@@ -69,6 +72,7 @@ impl kernel::Chip for Cc26X2 {
                     EVENT_PRIORITY::RF_CORE_CPE0 => radio::RFC.handle_cpe0_event(),
                     EVENT_PRIORITY::RF_CORE_CPE1 => radio::RFC.handle_cpe1_event(),
                     EVENT_PRIORITY::RF_CORE_HW => panic!("Unhandled RFC interupt event!"),
+                    EVENT_PRIORITY::AUX_ADC => adc::ADC.handle_events(),
                     EVENT_PRIORITY::OSC => prcm::handle_osc_interrupt(),
                     EVENT_PRIORITY::AON_PROG => (),
                     _ => panic!("unhandled event {:?} ", event),

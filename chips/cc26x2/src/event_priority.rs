@@ -21,5 +21,6 @@ pub enum EVENT_PRIORITY {
     RF_CORE_CPE0 = 10,
     RF_CORE_CPE1 = 11,
     RF_CORE_HW = 12,
+    AUX_ADC = 13,
 }
 }
