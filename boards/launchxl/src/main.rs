@@ -230,6 +230,9 @@ pub unsafe fn reset_handler() {
     );
     kernel::debug::set_debug_writer_wrapper(debug_wrapper);
 
+
+    debug!("OK");
+
     cc26x2::i2c::I2C0.initialize();
 
     let i2c_master = static_init!(
