@@ -61,7 +61,7 @@ pub static mut READ_BUF0: [u8; 64] = [0; 64];
 pub static mut WRITE_BUF1: [u8; 64] = [0; 64];
 pub static mut READ_BUF1: [u8; 64] = [0; 64];
 
-pub struct Uart<'a, U: hil::uart::UART> {
+pub struct Uart<'a, U: 'static + hil::uart::UART> {
     hw: &'a U,
     apps: Grant<App>,
     tx_in_progress: OptionalCell<AppId>,
@@ -71,22 +71,21 @@ pub struct Uart<'a, U: hil::uart::UART> {
 }
 
 
-pub struct Console<'a, U: hil::uart::UART> {
-    uarts: &'a [&'a mut Uart<'a,U>],
+pub struct Console<'a, U: 'static + hil::uart::UART> {
+    uarts: &'a mut [&'a Uart<'a, U>],
 }
 
-impl<'a, U: hil::uart::UART> Console<'a, U>{
-    pub fn new(uarts: &'a [&'a mut Uart<'a,U>]) -> Console <'a, U>{
+impl <'a, U: 'static + hil::uart::UART> Console<'a, U>{
+    pub fn new(uarts: &'a mut [&'a Uart<'a, U>]) -> Console <'a, U>{
         Console {
             uarts
         }
     }
 }
 
-
-impl<U: hil::uart::UART> Uart<'a, U> {
+impl<U: 'static + hil::uart::UART> Uart<'a, U> {
     pub fn new(
-        uart: &'a U,
+        uart: &'static U,
         tx_buffer: &'static mut [u8],
         rx_buffer: &'static mut [u8],
         grant: Grant<App>,
@@ -198,7 +197,7 @@ impl<U: hil::uart::UART> Uart<'a, U> {
 }
 
 
-impl<U: hil::uart::UART> Driver for Console<'a, U> {
+impl<'a, U: hil::uart::UART> Driver for Console<'a, U> {
 
     /// Setup shared buffers.
     ///

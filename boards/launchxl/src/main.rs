@@ -96,8 +96,6 @@ unsafe fn configure_pins() {
     cc26x2::gpio::PORT[PIN_FN::GPIO0 as usize].enable_gpio();
 }
 
-static  console_uarts = [ Uart<UartDevice>::new(&mut capsules::console::WRITE_BUF0, &mut capsules::console::READ_BUF0) ];
-
 #[no_mangle]
 pub unsafe fn reset_handler() {
     cc26x2::init();
@@ -191,16 +189,27 @@ pub unsafe fn reset_handler() {
 
     cc26x2::uart::UART0.initialize();
 
-    let console = static_init!(
-        capsules::console::Console<UartDevice>,
-        capsules::console::Console::new(
-            &console_uarts,
+    let uart0 = static_init!(
+        capsules::console::Uart<'static, UartDevice>,
+        capsules::console::Uart::new(
+            console_uart,
+            &mut capsules::console::WRITE_BUF0,
+            &mut capsules::console::READ_BUF0,
             board_kernel.create_grant(&memory_allocation_capability)
         )
     );
 
-    hil::uart::UART::set_client(&cc26x2::uart::UART0, uart0);
+    let console_uarts = static_init!(
+        [&'static capsules::console::Uart<'static, UartDevice>; 1],
+        [uart0]
+    );
 
+    let console = static_init!(
+        capsules::console::Console<UartDevice>,
+        capsules::console::Console::new(
+            console_uarts
+        )
+    );
 
     // Create virtual device for kernel debug.
     let debugger_uart = static_init!(UartDevice, UartDevice::new(uart_mux, false));
