@@ -189,7 +189,15 @@ pub unsafe fn reset_handler() {
 
     cc26x2::uart::UART0.initialize();
 
-    let uart0 = static_init!(
+    cc26x2::uart::UART0.configure(hil::uart::UARTParameters {
+        baud_rate: 115200,
+        stop_bits: hil::uart::StopBits::One,
+        parity: hil::uart::Parity::None,
+        hw_flow_control: false,
+    });
+
+
+    let driver_uart0 = static_init!(
         capsules::console::Uart<'static, UartDevice>,
         capsules::console::Uart::new(
             console_uart,
@@ -201,7 +209,7 @@ pub unsafe fn reset_handler() {
 
     let console_uarts = static_init!(
         [&'static capsules::console::Uart<'static, UartDevice>; 1],
-        [uart0]
+        [driver_uart0]
     );
 
     let console = static_init!(
@@ -210,6 +218,8 @@ pub unsafe fn reset_handler() {
             console_uarts
         )
     );
+
+    hil::uart::UART::set_client(console_uart, driver_uart0);
 
     // Create virtual device for kernel debug.
     let debugger_uart = static_init!(UartDevice, UartDevice::new(uart_mux, false));

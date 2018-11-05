@@ -212,8 +212,8 @@ impl<'a, U: hil::uart::UART> Driver for Console<'a, U> {
         slice: Option<AppSlice<Shared, u8>>,
     ) -> ReturnCode {
 
-        let allow_num = (arg2>>16) as u16;
-        let uart_num = (arg2 as u16) as usize;
+        let allow_num = arg2 as u16;
+        let uart_num = (arg2 >>16) as usize;
 
         match allow_num {
             1 => self.uarts[uart_num]
@@ -244,8 +244,8 @@ impl<'a, U: hil::uart::UART> Driver for Console<'a, U> {
         app_id: AppId,
     ) -> ReturnCode {
 
-        let subscribe_num = (arg1>>16) as u16;
-        let uart_num = (arg1 as u16) as usize;
+        let subscribe_num = arg1 as u16;
+        let uart_num = (arg1 >>16) as usize;
 
         match subscribe_num {
             1 /* putstr/write_done */ => {
