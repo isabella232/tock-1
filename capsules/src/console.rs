@@ -36,7 +36,7 @@
 
 use core::cmp;
 use kernel::common::cells::{OptionalCell, TakeCell};
-use kernel::hil::uart::{self, Client, UART};
+use kernel::hil;
 use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
 
 /// Syscall driver number.
@@ -55,45 +55,50 @@ pub struct App {
     read_len: usize,
 }
 
-pub static mut WRITE_BUF: [u8; 64] = [0; 64];
-pub static mut READ_BUF: [u8; 64] = [0; 64];
+pub static mut WRITE_BUF0: [u8; 64] = [0; 64];
+pub static mut READ_BUF0: [u8; 64] = [0; 64];
 
-pub struct Console<'a, U: UART> {
-    uart: &'a U,
+pub static mut WRITE_BUF1: [u8; 64] = [0; 64];
+pub static mut READ_BUF1: [u8; 64] = [0; 64];
+
+pub struct Uart<'a, U: hil::uart::UART> {
+    hw: &'a U,
     apps: Grant<App>,
     tx_in_progress: OptionalCell<AppId>,
     tx_buffer: TakeCell<'static, [u8]>,
     rx_in_progress: OptionalCell<AppId>,
     rx_buffer: TakeCell<'static, [u8]>,
-    baud_rate: u32,
 }
 
-impl<U: UART> Console<'a, U> {
+
+pub struct Console<'a, U: hil::uart::UART> {
+    uarts: &'a [&'a mut Uart<'a,U>],
+}
+
+impl<'a, U: hil::uart::UART> Console<'a, U>{
+    pub fn new(uarts: &'a [&'a mut Uart<'a,U>]) -> Console <'a, U>{
+        Console {
+            uarts
+        }
+    }
+}
+
+
+impl<U: hil::uart::UART> Uart<'a, U> {
     pub fn new(
         uart: &'a U,
-        baud_rate: u32,
         tx_buffer: &'static mut [u8],
         rx_buffer: &'static mut [u8],
         grant: Grant<App>,
-    ) -> Console<'a, U> {
-        Console {
-            uart: uart,
+    ) -> Uart<'a, U> {
+        Uart {
+            hw: uart,
             apps: grant,
             tx_in_progress: OptionalCell::empty(),
             tx_buffer: TakeCell::new(tx_buffer),
             rx_in_progress: OptionalCell::empty(),
             rx_buffer: TakeCell::new(rx_buffer),
-            baud_rate: baud_rate,
         }
-    }
-
-    pub fn initialize(&self) {
-        self.uart.configure(uart::UARTParameters {
-            baud_rate: self.baud_rate,
-            stop_bits: uart::StopBits::One,
-            parity: uart::Parity::None,
-            hw_flow_control: false,
-        });
     }
 
     /// Internal helper function for setting up a new send transaction
@@ -151,7 +156,7 @@ impl<U: UART> Console<'a, U> {
                     app.write_remaining = 0;
                 }
 
-                self.uart.transmit(buffer, transaction_len);
+                self.hw.transmit(buffer, transaction_len);
             });
         } else {
             app.pending_write = true;
@@ -179,7 +184,7 @@ impl<U: UART> Console<'a, U> {
                     app.read_len = read_len;
                     self.rx_buffer.take().map(|buffer| {
                         self.rx_in_progress.set(app_id);
-                        self.uart.receive(buffer, app.read_len);
+                        self.hw.receive(buffer, app.read_len);
                     });
                     ReturnCode::SUCCESS
                 }
@@ -192,7 +197,9 @@ impl<U: UART> Console<'a, U> {
     }
 }
 
-impl<U: UART> Driver for Console<'a, U> {
+
+impl<U: hil::uart::UART> Driver for Console<'a, U> {
+
     /// Setup shared buffers.
     ///
     /// ### `allow_num`
@@ -202,17 +209,21 @@ impl<U: UART> Driver for Console<'a, U> {
     fn allow(
         &self,
         appid: AppId,
-        allow_num: usize,
+        arg2: usize,
         slice: Option<AppSlice<Shared, u8>>,
     ) -> ReturnCode {
+
+        let allow_num = (arg2>>16) as u16;
+        let uart_num = (arg2 as u16) as usize;
+
         match allow_num {
-            1 => self
+            1 => self.uarts[uart_num]
                 .apps
                 .enter(appid, |app, _| {
                     app.write_buffer = slice;
                     ReturnCode::SUCCESS
                 }).unwrap_or_else(|err| err.into()),
-            2 => self
+            2 => self.uarts[uart_num]
                 .apps
                 .enter(appid, |app, _| {
                     app.read_buffer = slice;
@@ -229,19 +240,26 @@ impl<U: UART> Driver for Console<'a, U> {
     /// - `1`: Write buffer completed callback
     fn subscribe(
         &self,
-        subscribe_num: usize,
+        arg1: usize,
         callback: Option<Callback>,
         app_id: AppId,
     ) -> ReturnCode {
+
+        let subscribe_num = (arg1>>16) as u16;
+        let uart_num = (arg1 as u16) as usize;
+
         match subscribe_num {
             1 /* putstr/write_done */ => {
-                self.apps.enter(app_id, |app, _| {
+                self.uarts[uart_num]
+                .apps
+                .enter(app_id, |app, _| {
                     app.write_callback = callback;
                     ReturnCode::SUCCESS
                 }).unwrap_or_else(|err| err.into())
             },
             2 /* getnstr done */ => {
-                self.apps.enter(app_id, |app, _| {
+                self.uarts[uart_num]
+                .apps.enter(app_id, |app, _| {
                     app.read_callback = callback;
                     ReturnCode::SUCCESS
                 }).unwrap_or_else(|err| err.into())
@@ -261,23 +279,24 @@ impl<U: UART> Driver for Console<'a, U> {
     ///        passed in `arg1`
     /// - `3`: Cancel any in progress receives and return (via callback)
     ///        what has been received so far.
-    fn command(&self, cmd_num: usize, arg1: usize, _: usize, appid: AppId) -> ReturnCode {
+    fn command(&self, cmd_num: usize, arg1: usize, uart_num: usize, appid: AppId) -> ReturnCode {
         match cmd_num {
             0 /* check if present */ => ReturnCode::SUCCESS,
             1 /* putstr */ => {
                 let len = arg1;
-                self.apps.enter(appid, |app, _| {
-                    self.send_new(appid, app, len)
+                self.uarts[uart_num]
+                .apps.enter(appid, |app, _| {
+                    self.uarts[uart_num].send_new(appid, app, len)
                 }).unwrap_or_else(|err| err.into())
             },
             2 /* getnstr */ => {
                 let len = arg1;
-                self.apps.enter(appid, |app, _| {
-                    self.receive_new(appid, app, len)
+                self.uarts[uart_num].apps.enter(appid, |app, _| {
+                    self.uarts[uart_num].receive_new(appid, app, len)
                 }).unwrap_or_else(|err| err.into())
             },
             3 /* abort rx */ => {
-                self.uart.abort_receive();
+                self.uarts[uart_num].hw.abort_receive();
                 ReturnCode::SUCCESS
             }
             _ => ReturnCode::ENOSUPPORT
@@ -285,8 +304,8 @@ impl<U: UART> Driver for Console<'a, U> {
     }
 }
 
-impl<U: UART> Client for Console<'a, U> {
-    fn transmit_complete(&self, buffer: &'static mut [u8], _error: uart::Error) {
+impl<U: hil::uart::UART> hil::uart::Client for Uart<'a, U> {
+    fn transmit_complete(&self, buffer: &'static mut [u8], _error: hil::uart::Error) {
         // Either print more from the AppSlice or send a callback to the
         // application.
         self.tx_buffer.replace(buffer);
@@ -349,7 +368,7 @@ impl<U: UART> Client for Console<'a, U> {
         }
     }
 
-    fn receive_complete(&self, buffer: &'static mut [u8], rx_len: usize, error: uart::Error) {
+    fn receive_complete(&self, buffer: &'static mut [u8], rx_len: usize, error: hil::uart::Error) {
         self.rx_in_progress
             .take()
             .map(|appid| {
@@ -360,13 +379,13 @@ impl<U: UART> Client for Console<'a, U> {
                             // bytes
                             let rx_buffer = buffer.iter().take(rx_len);
                             match error {
-                                uart::Error::CommandComplete | uart::Error::Aborted => {
+                                hil::uart::Error::CommandComplete | hil::uart::Error::Aborted => {
                                     // Receive some bytes, signal error type and return bytes to process buffer
                                     if let Some(mut app_buffer) = app.read_buffer.take() {
                                         for (a, b) in app_buffer.iter_mut().zip(rx_buffer) {
                                             *a = *b;
                                         }
-                                        let rettype = if error == uart::Error::CommandComplete {
+                                        let rettype = if error == hil::uart::Error::CommandComplete {
                                             ReturnCode::SUCCESS
                                         } else {
                                             ReturnCode::ECANCEL
