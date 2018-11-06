@@ -13,7 +13,6 @@ use rtc;
 
 const TEST_PAYLOAD: [u32; 30] = [0; 30];
 
-/*
 static mut LR_RFPARAMS: [u32; 28] = [
     // override_use_patch_simplelink_long_range.xml
     0x00000847, // PHY: Use MCE RAM patch, RFE RAM patch MCE_RFE_OVERRIDE(1,0,0,1,0,0),
@@ -49,7 +48,6 @@ static mut LR_RFPARAMS: [u32; 28] = [
     0x82A86C2B, // txHighPA=0x20AA1B
     0xFFFFFFFF,
 ];
-*/
 
 static mut GFSK_RFPARAMS: [u32; 26] = [
     // override_use_patch_prop_genfsk.xml
@@ -69,8 +67,7 @@ static mut GFSK_RFPARAMS: [u32; 26] = [
     0x02980243, // Synth: Decrease synth programming time-out by 90 us from default (0x0298 RAT ticks = 166 us) Synth: Set loop bandwidth after lock to 20 kHz
     0x0A480583, // Synth: Set loop bandwidth after lock to 20 kHz
     0x7AB80603, // Synth: Set loop bandwidth after lock to 20 kHz
-    0x00000623,
-    0x002F6028, //
+    0x00000623, 0x002F6028, //
     // override_phy_tx_pa_ramp_genfsk.xml
     0x50880002, // Tx: Configure PA ramp time, PACTL2.RC=0x3 (in ADI0, set PACTL2[3]=1) ADI_HALFREG_OVERRIDE(0,16,0x8,0x8),
     0x51110002, // Tx: Configure PA ramp time, PACTL2.RC=0x3 (in ADI0, set PACTL2[4]=1) ADI_HALFREG_OVERRIDE(0,17,0x1,0x1),
@@ -81,8 +78,7 @@ static mut GFSK_RFPARAMS: [u32; 26] = [
     // override_phy_rx_aaf_bw_0xd.xml
     0x7ddf0002, // Rx: Set anti-aliasing filter bandwidth to 0xD (in ADI0, set IFAMPCTL3[7:4]=0xD) ADI_HALFREG_OVERRIDE(0,61,0xF,0xD),
     0xFCFC08C3, // TX power override DC/DC regulator: In Tx with 14 dBm PA setting, use DCDCCTL5[3:0]=0xF (DITHER_EN=1 and IPEAK=7). In Rx, use DCDCCTL5[3:0]=0xC (DITHER_EN=1 and IPEAK=4).
-    0x82A86C2B,
-    0xFFFFFFFF, // Stop word
+    0x82A86C2B, 0xFFFFFFFF, // Stop word
 ];
 
 #[allow(unused)]
@@ -142,7 +138,6 @@ pub struct Radio {
     mode: OptionalCell<RadioMode>,
     tx_client: OptionalCell<&'static rfcore::TxClient>,
     rx_client: OptionalCell<&'static rfcore::RxClient>,
-    cfg_client: OptionalCell<&'static rfcore::ConfigClient>,
     power_client: OptionalCell<&'static rfcore::PowerClient>,
     update_config: Cell<bool>,
     schedule_powerdown: Cell<bool>,
@@ -158,7 +153,6 @@ impl Radio {
             mode: OptionalCell::empty(),
             tx_client: OptionalCell::empty(),
             rx_client: OptionalCell::empty(),
-            cfg_client: OptionalCell::empty(),
             power_client: OptionalCell::empty(),
             update_config: Cell::new(false),
             schedule_powerdown: Cell::new(false),
@@ -175,25 +169,28 @@ impl Radio {
         // best for the client to just pass an int for the mode and do it all here? not sure yet.
 
         // self.mode.set(m);
-
+        debug!("Radio Power Up");
         self.rfc.set_mode(rfc::RfcMode::BLE);
 
         osc::OSC.request_switch_to_hf_xosc();
 
         self.rfc.enable();
 
+        cpe::CPE_PATCH.apply_patch();
+        mce::MCE_PATCH.apply_patch();
+        rfe::RFE_PATCH.apply_patch();
+
         self.rfc.start_rat();
 
         osc::OSC.switch_to_hf_xosc();
 
         // Need to match on patches here but for now, just default to genfsk patches
-        mce::MCE_PATCH.apply_patch();
-        rfe::RFE_PATCH.apply_patch();
-
         unsafe {
             let reg_overrides: u32 = GFSK_RFPARAMS.as_mut_ptr() as u32;
-            self.rfc.setup(reg_overrides, 0x9F3F);
+            self.rfc.setup(reg_overrides, 0xFFFF);
         }
+
+        self.test_radio_fs();
 
         self.power_client
             .map(|client| client.power_mode_changed(true));
@@ -262,14 +259,12 @@ impl Radio {
         self.rfc.set_mode(rfc::RfcMode::BLE);
 
         osc::OSC.request_switch_to_hf_xosc();
-
         self.rfc.enable();
 
         cpe::CPE_PATCH.apply_patch();
-        // mce_lr::LONGRANGE_PATCH.apply_patch();
+        //mce_lr::LONGRANGE_PATCH.apply_patch();
         mce::MCE_PATCH.apply_patch();
         rfe::RFE_PATCH.apply_patch();
-
         self.rfc.start_rat();
 
         osc::OSC.switch_to_hf_xosc();
@@ -294,6 +289,12 @@ impl Radio {
         let p_packet = packet.as_mut_ptr() as u32;
 
         unsafe {
+            for i in 0..COMMAND_BUF.len() {
+                COMMAND_BUF[i] = 0;
+            }
+        }
+
+        unsafe {
             let cmd: &mut prop::CommandTx =
                 &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandTx);
             cmd.command_no = 0x3801;
@@ -313,7 +314,7 @@ impl Radio {
                 packet.set_var_len(true);
                 packet
             };
-            cmd.packet_len = 0x1E;
+            cmd.packet_len = 0x14;
             cmd.sync_word = 0x930B51DE;
             // cmd.sync_word = 0x00000000;
             cmd.packet_pointer = p_packet;
@@ -425,10 +426,6 @@ impl rfcore::RadioDriver for Radio {
 
     fn set_receive_buffer(&self, _rx_buf: &'static mut [u8]) {
         // maybe make a rx buf only when needed?
-    }
-
-    fn set_config_client(&self, config_client: &'static rfcore::ConfigClient) {
-        self.cfg_client.set(config_client);
     }
 
     fn set_power_client(&self, power_client: &'static rfcore::PowerClient) {

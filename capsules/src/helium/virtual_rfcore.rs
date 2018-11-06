@@ -10,8 +10,6 @@ pub trait RFCore {
     fn initialize(&self) -> ReturnCode;
     /// Check if radio is on and ready to accept any command
     fn is_on(&self) -> bool;
-    /// Sets the notified client for configuration changes
-    fn set_config_client(&self, client: &'static rfcore::ConfigClient);
     /// Sets the notified client for transmission completions
     fn set_transmit_client(&self, client: &'static rfcore::TxClient);
     /// Sets the notified client for frame receptions
@@ -107,6 +105,7 @@ impl<R: rfcore::Radio> VirtualRadio<'a, R> {
 
 impl<R: rfcore::Radio> RFCore for VirtualRadio<'a, R> {
     fn initialize(&self) -> ReturnCode {
+        debug!("vr init");
         self.radio_state.set(RadioState::StartUp);
         self.radio.initialize();
         ReturnCode::SUCCESS
@@ -114,10 +113,6 @@ impl<R: rfcore::Radio> RFCore for VirtualRadio<'a, R> {
 
     fn is_on(&self) -> bool {
         self.radio.is_on()
-    }
-
-    fn set_config_client(&self, client: &'static rfcore::ConfigClient) {
-        self.radio.set_config_client(client)
     }
 
     fn set_transmit_client(&self, client: &'static rfcore::TxClient) {
