@@ -46,13 +46,10 @@ static mut APP_MEMORY: [u8; 0xA000] = [0; 0xA000];
 #[link_section = ".stack_buffer"]
 pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 
-pub static mut MOCK_CLIENT0: capsules::console::MockClient<'static, UartDevice> = capsules::console::MockClient::new(0);
-pub static mut MOCK_CLIENT1: capsules::console::MockClient<'static, UartDevice> = capsules::console::MockClient::new(1);
-
 pub struct Platform {
     gpio: &'static capsules::gpio::GPIO<'static, cc26x2::gpio::GPIOPin>,
     led: &'static capsules::led::LED<'static, cc26x2::gpio::GPIOPin>,
-    console: &'static capsules::console::Console<'static, UartDevice<'static>>,
+    console: &'static capsules::console::Console<UartDevice<'static>>,
     button: &'static capsules::button::Button<'static, cc26x2::gpio::GPIOPin>,
     alarm: &'static capsules::alarm::AlarmDriver<
         'static,
@@ -101,6 +98,11 @@ unsafe fn configure_pins() {
 
     cc26x2::gpio::PORT[PIN_FN::GPIO0 as usize].enable_gpio();
 }
+
+
+static mut DRIVER_UART0: capsules::console::Uart<UartDevice> = capsules::console::Uart::new(0);
+static mut DRIVER_UART1: capsules::console::Uart<UartDevice> = capsules::console::Uart::new(1);
+
 
 #[no_mangle]
 pub unsafe fn reset_handler() {
@@ -189,7 +191,6 @@ pub unsafe fn reset_handler() {
     );
     hil::uart::UART::set_client(&cc26x2::uart::UART0, uart0_mux);
 
-
     // Create virtual device for kernel debug.
     let debugger_uart = static_init!(UartDevice, UartDevice::new(uart0_mux, false));
     debugger_uart.setup();
@@ -209,9 +210,13 @@ pub unsafe fn reset_handler() {
     );
     kernel::debug::set_debug_writer_wrapper(debug_wrapper);
 
+    debug!("HELLO");
+
+    while true {}
     // Create a UartDevice for the console.
     let uart0_device = static_init!(UartDevice, UartDevice::new(uart0_mux, true));
     uart0_device.setup();
+    kernel::hil::uart::UART::set_client(uart0_device, &DRIVER_UART0);
 
     cc26x2::uart::UART0.initialize();
 
@@ -223,17 +228,6 @@ pub unsafe fn reset_handler() {
         hw_flow_control: false,
     });
 
-    let driver_uart0 = static_init!(
-        capsules::console::Uart<UartDevice>,
-        capsules::console::Uart::new(
-            uart0_device,
-            &mut capsules::console::WRITE_BUF0,
-            &mut capsules::console::READ_BUF0,
-            board_kernel.create_grant(&memory_allocation_capability)
-        )
-    );
-
-    kernel::hil::uart::UART::set_client(&cc26x2::uart::UART0, driver_uart0);
 
     // Create a UART channel for the additional UART
     let uart1_mux = static_init!(
@@ -249,6 +243,7 @@ pub unsafe fn reset_handler() {
     // Create a UartDevice for the second UART
     let uart1_device = static_init!(UartDevice, UartDevice::new(uart1_mux, true));
     uart1_device.setup();
+    kernel::hil::uart::UART::set_client(uart0_device, &DRIVER_UART1);
 
     cc26x2::uart::UART1.initialize();
 
@@ -260,31 +255,22 @@ pub unsafe fn reset_handler() {
         hw_flow_control: false,
     });
 
-    let driver_uart1 = static_init!(
-        capsules::console::Uart<UartDevice>,
-        capsules::console::Uart::new(
-            uart1_device,
-            &mut capsules::console::WRITE_BUF1,
-            &mut capsules::console::READ_BUF1,
-        )
-    );
-
     let console_uarts = static_init!(
         [&'static mut capsules::console::Uart<UartDevice>; 2],
-        [driver_uart0, driver_uart1]
+        [&mut DRIVER_UART0, &mut DRIVER_UART1]
     );
 
     let console = static_init!(
         capsules::console::Console<UartDevice>,
         capsules::console::Console::new(
             console_uarts,
-            board_kernel.create_grant(&memory_allocation_capability)
-            ),
-        board_kernel.create_grant(&memory_allocation_capability)
+            [board_kernel.create_grant(&memory_allocation_capability), board_kernel.create_grant(&memory_allocation_capability)]
+        )
     );
 
     console.initialize();
-
+    DRIVER_UART0.initialize(uart0_device, &mut capsules::console::WRITE_BUF0, &mut capsules::console::READ_BUF0, console);
+    DRIVER_UART1.initialize(uart1_device, &mut capsules::console::WRITE_BUF1, &mut capsules::console::READ_BUF1, console);
 
     cc26x2::i2c::I2C0.initialize();
 

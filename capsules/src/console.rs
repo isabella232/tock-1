@@ -51,6 +51,7 @@ pub struct App {
     write_len: usize,
     write_remaining: usize, // How many bytes didn't fit in the buffer and still need to be printed.
     pending_write: bool,
+
     read_uart: usize,
     read_callback: Option<Callback>,
     read_buffer: Option<AppSlice<Shared, u8>>,
@@ -63,16 +64,16 @@ pub static mut READ_BUF0: [u8; 64] = [0; 64];
 pub static mut WRITE_BUF1: [u8; 64] = [0; 64];
 pub static mut READ_BUF1: [u8; 64] = [0; 64];
 
-pub struct Console<'a, U: 'static + hil::uart::UART> {
-    uarts: &'a mut [&'a mut Uart<'a, U>],
-    apps: Grant<App>,
+pub struct Console<U: 'static + hil::uart::UART> {
+    uarts: &'static mut [&'static mut Uart<U>],
+    apps: [Grant<App>; 2],
 }
 
-impl<'a, U: 'static + hil::uart::UART> Console<'a, U> {
+impl<U: 'static + hil::uart::UART> Console<U> {
     pub fn new(
-        uarts: &'a mut [&'static mut Uart<'a, U>],
-        apps: Grant<[App;2]>
-        ) -> Console<'a, U> {
+        uarts: &'static mut [&'static mut Uart<U>],
+        apps: [Grant<App>; 2]
+        ) -> Console<U> {
         Console { uarts, apps }
     }
 
@@ -83,8 +84,9 @@ impl<'a, U: 'static + hil::uart::UART> Console<'a, U> {
     }
 }
 
-pub struct Uart<'a, U: 'static + hil::uart::UART> {
-    hw: &'a U,
+pub struct Uart<U: 'static + hil::uart::UART> {
+    parent: Option<&'static Console<U>>,
+    hw: Option<&'static U>,
     index: usize,
     tx_in_progress: OptionalCell<AppId>,
     tx_buffer: TakeCell<'static, [u8]>,
@@ -92,16 +94,27 @@ pub struct Uart<'a, U: 'static + hil::uart::UART> {
     rx_buffer: TakeCell<'static, [u8]>,
 }
 
-impl<U: 'static + hil::uart::UART> Uart<'a, U> {
-    pub fn new(
-        uart: &'static U,
-        tx_buffer: &'static mut [u8],
-        rx_buffer: &'static mut [u8],
-    ) -> Uart<'a, U> {
+impl<U: 'static + hil::uart::UART> Uart<U> {
+    pub const fn new(
+        index: usize,
+
+    ) -> Uart<U> {
         Uart {
-            hw: uart,
-            index: 0,
+            parent: None,
+            hw: None,
+            index: index,
+            tx_in_progress: OptionalCell::empty(),
+            tx_buffer: TakeCell::empty(),
+            rx_in_progress: OptionalCell::empty(),
+            rx_buffer: TakeCell::empty(),
         }
+    }
+
+    pub fn initialize(&mut self, uart: &'static U, tx_buffer: &'static mut [u8],rx_buffer: &'static mut [u8], parent: &'static Console<U>){
+        self.hw = Some(uart);
+        self.tx_buffer = TakeCell::new(tx_buffer);
+        self.rx_buffer = TakeCell::new(rx_buffer);
+        self.parent = Some(parent)
     }
 
     /// Internal helper function for setting up a new send transaction
@@ -158,7 +171,9 @@ impl<U: 'static + hil::uart::UART> Uart<'a, U> {
                 } else {
                     app.write_remaining = 0;
                 }
-                self.hw.transmit(buffer, transaction_len);
+                if let Some(hw) = self.hw {
+                    hw.transmit(buffer, transaction_len);
+                }
             });
         } else {
             app.pending_write = true;
@@ -186,7 +201,9 @@ impl<U: 'static + hil::uart::UART> Uart<'a, U> {
                     app.read_len = read_len;
                     self.rx_buffer.take().map(|buffer| {
                         self.rx_in_progress.set(app_id);
-                        self.hw.receive(buffer, app.read_len);
+                        if let Some(hw) = self.hw {
+                            hw.receive(buffer, app.read_len);
+                        }
                     });
                     ReturnCode::SUCCESS
                 }
@@ -199,7 +216,7 @@ impl<U: 'static + hil::uart::UART> Uart<'a, U> {
     }
 }
 
-impl<'a, U: 'static + hil::uart::UART + hil::uart::Client> Driver for Console<'a, U> {
+impl<U: 'static + hil::uart::UART + hil::uart::Client> Driver for Console<U> {
     /// Setup shared buffers.
     ///
     /// ### `allow_num`
@@ -285,8 +302,13 @@ impl<'a, U: 'static + hil::uart::UART + hil::uart::Client> Driver for Console<'a
                 }).unwrap_or_else(|err| err.into())
             },
             3 /* abort rx */ => {
-                self.uarts[self.apps[uart_num].write_uart].hw.abort_receive();
-                ReturnCode::SUCCESS
+                self.apps[uart_num]
+                .enter(appid, |app, _| {
+                    if let Some(hw) = self.uarts[app.write_uart].hw {
+                        hw.abort_receive();
+                    }
+                    ReturnCode::SUCCESS
+                }).unwrap_or_else(|err| err.into())
             }
             _ => ReturnCode::ENOSUPPORT
         }
@@ -294,7 +316,7 @@ impl<'a, U: 'static + hil::uart::UART + hil::uart::Client> Driver for Console<'a
 }
 
 
-impl<U: hil::uart::UART> hil::uart::Client for Uart<'a, U> {
+impl<U: hil::uart::UART> hil::uart::Client for Uart<U> {
     fn transmit_complete(&self, buffer: &'static mut [u8], _error: hil::uart::Error) {
         // Either print more from the AppSlice or send a callback to the
         // application.
@@ -364,38 +386,38 @@ impl<U: hil::uart::UART> hil::uart::Client for Uart<'a, U> {
         self.rx_in_progress
             .take()
             .map(|appid| {
-                self.apps
-                    .enter(appid, |app, _| {
-                        app.read_callback.map(|mut cb| {
-                            // An iterator over the returned buffer yielding only the first `rx_len`
-                            // bytes
-                            let rx_buffer = buffer.iter().take(rx_len);
-                            match error {
-                                hil::uart::Error::CommandComplete | hil::uart::Error::Aborted => {
-                                    // Receive some bytes, signal error type and return bytes to process buffer
-                                    if let Some(mut app_buffer) = app.read_buffer.take() {
-                                        for (a, b) in app_buffer.iter_mut().zip(rx_buffer) {
-                                            *a = *b;
-                                        }
-                                        let rettype = if error == hil::uart::Error::CommandComplete
-                                        {
-                                            ReturnCode::SUCCESS
-                                        } else {
-                                            ReturnCode::ECANCEL
-                                        };
-                                        cb.schedule(From::from(rettype), rx_len, self.index);
-                                    } else {
-                                        // Oops, no app buffer
-                                        cb.schedule(From::from(ReturnCode::EINVAL), self.index, 0);
-                                    }
-                                }
-                                _ => {
-                                    // Some UART error occurred
-                                    cb.schedule(From::from(ReturnCode::FAIL), self.index, 0);
-                                }
-                            }
-                        });
-                    }).unwrap_or_default();
+            //     self.apps
+            //         .enter(appid, |app, _| {
+            //             app.read_callback.map(|mut cb| {
+            //                 // An iterator over the returned buffer yielding only the first `rx_len`
+            //                 // bytes
+            //                 let rx_buffer = buffer.iter().take(rx_len);
+            //                 match error {
+            //                     hil::uart::Error::CommandComplete | hil::uart::Error::Aborted => {
+            //                         // Receive some bytes, signal error type and return bytes to process buffer
+            //                         if let Some(mut app_buffer) = app.read_buffer.take() {
+            //                             for (a, b) in app_buffer.iter_mut().zip(rx_buffer) {
+            //                                 *a = *b;
+            //                             }
+            //                             let rettype = if error == hil::uart::Error::CommandComplete
+            //                             {
+            //                                 ReturnCode::SUCCESS
+            //                             } else {
+            //                                 ReturnCode::ECANCEL
+            //                             };
+            //                             cb.schedule(From::from(rettype), rx_len, self.index);
+            //                         } else {
+            //                             // Oops, no app buffer
+            //                             cb.schedule(From::from(ReturnCode::EINVAL), self.index, 0);
+            //                         }
+            //                     }
+            //                     _ => {
+            //                         // Some UART error occurred
+            //                         cb.schedule(From::from(ReturnCode::FAIL), self.index, 0);
+            //                     }
+            //                 }
+            //             });
+            //         }).unwrap_or_default();
             }).unwrap_or_default();
 
         // Whatever happens, we want to make sure to replace the rx_buffer for future transactions
