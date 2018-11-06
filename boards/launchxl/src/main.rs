@@ -189,13 +189,13 @@ pub unsafe fn reset_handler() {
 
     cc26x2::uart::UART0.initialize();
 
+    // the debug uart should be initialized by hand
     cc26x2::uart::UART0.configure(hil::uart::UARTParameters {
         baud_rate: 115200,
         stop_bits: hil::uart::StopBits::One,
         parity: hil::uart::Parity::None,
         hw_flow_control: false,
     });
-
 
     let driver_uart0 = static_init!(
         capsules::console::Uart<'static, UartDevice>,
@@ -206,20 +206,59 @@ pub unsafe fn reset_handler() {
             board_kernel.create_grant(&memory_allocation_capability)
         )
     );
+    hil::uart::UART::set_client(console_uart, driver_uart0);
+
+
+     // Create a UART channel for the additional UART
+    let uart_mux1 = static_init!(
+        UartMux<'static>,
+        UartMux::new(
+            &cc26x2::uart::UART1,
+            &mut capsules::virtual_uart::RX_BUF1,
+            115200
+        )
+    );
+    hil::uart::UART::set_client(&cc26x2::uart::UART1, uart_mux1);
+
+
+    // Create a UartDevice for the second UART (driver will have exclusive use)
+    let additional_uart = static_init!(UartDevice, UartDevice::new(uart_mux1, true));
+    console_uart.setup();
+
+    cc26x2::uart::UART1.initialize();
+
+    // the debug uart should be initialized by hand
+    cc26x2::uart::UART1.configure(hil::uart::UARTParameters {
+        baud_rate: 115200,
+        stop_bits: hil::uart::StopBits::One,
+        parity: hil::uart::Parity::None,
+        hw_flow_control: false,
+    });
+
+    let driver_uart1 = static_init!(
+        capsules::console::Uart<'static, UartDevice>,
+        capsules::console::Uart::new(
+            additional_uart,
+            &mut capsules::console::WRITE_BUF1,
+            &mut capsules::console::READ_BUF1,
+            board_kernel.create_grant(&memory_allocation_capability)
+        )
+    );
+
 
     let console_uarts = static_init!(
-        [&'static capsules::console::Uart<'static, UartDevice>; 1],
-        [driver_uart0]
+        [&'static capsules::console::Uart<'static, UartDevice>; 2],
+        [driver_uart0, driver_uart1]
     );
 
     let console = static_init!(
-        capsules::console::Console<UartDevice>,
+        capsules::console::Console<'static, UartDevice>,
         capsules::console::Console::new(
             console_uarts
         )
     );
 
-    hil::uart::UART::set_client(console_uart, driver_uart0);
+
 
     // Create virtual device for kernel debug.
     let debugger_uart = static_init!(UartDevice, UartDevice::new(uart_mux, false));

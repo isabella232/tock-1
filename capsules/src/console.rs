@@ -61,26 +61,34 @@ pub static mut READ_BUF0: [u8; 64] = [0; 64];
 pub static mut WRITE_BUF1: [u8; 64] = [0; 64];
 pub static mut READ_BUF1: [u8; 64] = [0; 64];
 
+
+
+pub struct Console<'a, U: 'static + hil::uart::UART> {
+    uarts: &'a mut [&'a mut Uart<'a, U>],
+}
+
+impl <'a, U: 'static + hil::uart::UART> Console<'a, U>{
+    pub fn new(uarts: &'a mut [&'a mut Uart<'a, U>]) -> Console <'a, U>{
+        Console {
+            uarts
+        }
+    }
+
+    pub fn initialize(&mut self){
+        for (i, uart) in self.uarts.iter_mut().enumerate(){
+            uart.index = i;
+        }
+    }
+}
+
 pub struct Uart<'a, U: 'static + hil::uart::UART> {
     hw: &'a U,
+    index: usize,
     apps: Grant<App>,
     tx_in_progress: OptionalCell<AppId>,
     tx_buffer: TakeCell<'static, [u8]>,
     rx_in_progress: OptionalCell<AppId>,
     rx_buffer: TakeCell<'static, [u8]>,
-}
-
-
-pub struct Console<'a, U: 'static + hil::uart::UART> {
-    uarts: &'a mut [&'a Uart<'a, U>],
-}
-
-impl <'a, U: 'static + hil::uart::UART> Console<'a, U>{
-    pub fn new(uarts: &'a mut [&'a Uart<'a, U>]) -> Console <'a, U>{
-        Console {
-            uarts
-        }
-    }
 }
 
 impl<U: 'static + hil::uart::UART> Uart<'a, U> {
@@ -92,6 +100,7 @@ impl<U: 'static + hil::uart::UART> Uart<'a, U> {
     ) -> Uart<'a, U> {
         Uart {
             hw: uart,
+            index: 0,
             apps: grant,
             tx_in_progress: OptionalCell::empty(),
             tx_buffer: TakeCell::new(tx_buffer),
@@ -317,7 +326,7 @@ impl<U: hil::uart::UART> hil::uart::Client for Uart<'a, U> {
                             let written = app.write_len;
                             app.write_len = 0;
                             app.write_callback.map(|mut cb| {
-                                cb.schedule(written, 0, 0);
+                                cb.schedule(written, self.index, 0);
                             });
                         }
                     }
@@ -328,7 +337,7 @@ impl<U: hil::uart::UART> hil::uart::Client for Uart<'a, U> {
                         app.pending_write = false;
                         let r0 = isize::from(return_code) as usize;
                         app.write_callback.map(|mut cb| {
-                            cb.schedule(r0, 0, 0);
+                            cb.schedule(r0, self.index, 0);
                         });
                     }
                 }
@@ -351,7 +360,7 @@ impl<U: hil::uart::UART> hil::uart::Client for Uart<'a, U> {
                                 app.pending_write = false;
                                 let r0 = isize::from(return_code) as usize;
                                 app.write_callback.map(|mut cb| {
-                                    cb.schedule(r0, 0, 0);
+                                    cb.schedule(r0, self.index, 0);
                                 });
                                 false
                             }
@@ -389,15 +398,15 @@ impl<U: hil::uart::UART> hil::uart::Client for Uart<'a, U> {
                                         } else {
                                             ReturnCode::ECANCEL
                                         };
-                                        cb.schedule(From::from(rettype), rx_len, 0);
+                                        cb.schedule(From::from(rettype), rx_len, self.index);
                                     } else {
                                         // Oops, no app buffer
-                                        cb.schedule(From::from(ReturnCode::EINVAL), 0, 0);
+                                        cb.schedule(From::from(ReturnCode::EINVAL), self.index, 0);
                                     }
                                 }
                                 _ => {
                                     // Some UART error occurred
-                                    cb.schedule(From::from(ReturnCode::FAIL), 0, 0);
+                                    cb.schedule(From::from(ReturnCode::FAIL), self.index, 0);
                                 }
                             }
                         });
