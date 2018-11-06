@@ -209,8 +209,7 @@ impl<'a, U: hil::uart::UART> Driver for Console<'a, U> {
     /// - `2`: Writeable buffer for read buffer
     fn allow(&self, appid: AppId, arg2: usize, slice: Option<AppSlice<Shared, u8>>) -> ReturnCode {
         let allow_num = arg2 as u16;
-        let uart_num = (arg2 >> 16) as usize;
-
+        let uart_num =  (arg2 >> 16) as usize;
         match allow_num {
             1 => self.uarts[uart_num]
                 .apps
@@ -235,7 +234,7 @@ impl<'a, U: hil::uart::UART> Driver for Console<'a, U> {
     /// - `1`: Write buffer completed callback
     fn subscribe(&self, arg1: usize, callback: Option<Callback>, app_id: AppId) -> ReturnCode {
         let subscribe_num = arg1 as u16;
-        let uart_num = (arg1 >> 16) as usize;
+        let uart_num =  (arg1 >> 16) as usize;
 
         match subscribe_num {
             1 /* putstr/write_done */ => {
@@ -269,6 +268,7 @@ impl<'a, U: hil::uart::UART> Driver for Console<'a, U> {
     /// - `3`: Cancel any in progress receives and return (via callback)
     ///        what has been received so far.
     fn command(&self, cmd_num: usize, arg1: usize, uart_num: usize, appid: AppId) -> ReturnCode {
+
         match cmd_num {
             0 /* check if present */ => ReturnCode::SUCCESS,
             1 /* putstr */ => {

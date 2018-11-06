@@ -84,6 +84,9 @@ unsafe fn configure_pins() {
     cc26x2::gpio::PORT[PIN_FN::UART0_RX as usize].enable_uart0_rx();
     cc26x2::gpio::PORT[PIN_FN::UART0_TX as usize].enable_uart0_tx();
 
+    cc26x2::gpio::PORT[PIN_FN::UART1_RX as usize].enable_uart1_rx();
+    cc26x2::gpio::PORT[PIN_FN::UART1_TX as usize].enable_uart1_tx();
+
     cc26x2::gpio::PORT[PIN_FN::I2C0_SCL as usize].enable_i2c_scl();
     cc26x2::gpio::PORT[PIN_FN::I2C0_SDA as usize].enable_i2c_sda();
 
@@ -183,14 +186,19 @@ pub unsafe fn reset_handler() {
     );
     hil::uart::UART::set_client(&cc26x2::uart::UART0, uart0_mux);
 
+
+    // Create virtual device for kernel debug.
+    let debugger_uart = static_init!(UartDevice, UartDevice::new(uart0_mux, false));
+    debugger_uart.setup();
     let debugger = static_init!(
         kernel::debug::DebugWriter,
         kernel::debug::DebugWriter::new(
-            &cc26x2::uart::UART0,
+            debugger_uart,
             &mut kernel::debug::OUTPUT_BUF,
             &mut kernel::debug::INTERNAL_BUF,
         )
     );
+    hil::uart::UART::set_client(debugger_uart, debugger);
 
     let debug_wrapper = static_init!(
         kernel::debug::DebugWriterWrapper,
@@ -199,8 +207,8 @@ pub unsafe fn reset_handler() {
     kernel::debug::set_debug_writer_wrapper(debug_wrapper);
 
     // Create a UartDevice for the console.
-    let console_uart = static_init!(UartDevice, UartDevice::new(uart0_mux, true));
-    console_uart.setup();
+    let uart0_device = static_init!(UartDevice, UartDevice::new(uart0_mux, true));
+    uart0_device.setup();
 
     cc26x2::uart::UART0.initialize();
 
@@ -215,13 +223,13 @@ pub unsafe fn reset_handler() {
     let driver_uart0 = static_init!(
         capsules::console::Uart<UartDevice>,
         capsules::console::Uart::new(
-            console_uart,
+            uart0_device,
             &mut capsules::console::WRITE_BUF0,
             &mut capsules::console::READ_BUF0,
             board_kernel.create_grant(&memory_allocation_capability)
         )
     );
-    hil::uart::UART::set_client(&cc26x2::uart::UART1, uart0_mux);
+    hil::uart::UART::set_client(&cc26x2::uart::UART0, uart0_mux);
 
     // Create a UART channel for the additional UART
     let uart1_mux = static_init!(
@@ -235,8 +243,8 @@ pub unsafe fn reset_handler() {
     hil::uart::UART::set_client(&cc26x2::uart::UART1, uart1_mux);
 
     // Create a UartDevice for the second UART
-    let additional_uart = static_init!(UartDevice, UartDevice::new(uart1_mux, true));
-    additional_uart.setup();
+    let uart1_device = static_init!(UartDevice, UartDevice::new(uart1_mux, true));
+    uart1_device.setup();
 
     cc26x2::uart::UART1.initialize();
 
@@ -251,7 +259,7 @@ pub unsafe fn reset_handler() {
     let driver_uart1 = static_init!(
         capsules::console::Uart<UartDevice>,
         capsules::console::Uart::new(
-            additional_uart,
+            uart1_device,
             &mut capsules::console::WRITE_BUF1,
             &mut capsules::console::READ_BUF1,
             board_kernel.create_grant(&memory_allocation_capability)
@@ -270,7 +278,6 @@ pub unsafe fn reset_handler() {
 
     console.initialize();
 
-    debug!("OK");
 
     cc26x2::i2c::I2C0.initialize();
 
@@ -351,6 +358,8 @@ pub unsafe fn reset_handler() {
         rng,
         i2c_master,
     };
+
+    debug!("Launching processes");
 
     let chip = static_init!(cc26x2::chip::Cc26X2, cc26x2::chip::Cc26X2::new());
 
