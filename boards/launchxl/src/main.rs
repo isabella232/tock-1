@@ -46,6 +46,9 @@ static mut APP_MEMORY: [u8; 0xA000] = [0; 0xA000];
 #[link_section = ".stack_buffer"]
 pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 
+pub static mut MOCK_CLIENT0: capsules::console::MockClient<'static, UartDevice> = capsules::console::MockClient::new(0);
+pub static mut MOCK_CLIENT1: capsules::console::MockClient<'static, UartDevice> = capsules::console::MockClient::new(1);
+
 pub struct Platform {
     gpio: &'static capsules::gpio::GPIO<'static, cc26x2::gpio::GPIOPin>,
     led: &'static capsules::led::LED<'static, cc26x2::gpio::GPIOPin>,
@@ -229,7 +232,8 @@ pub unsafe fn reset_handler() {
             board_kernel.create_grant(&memory_allocation_capability)
         )
     );
-    hil::uart::UART::set_client(&cc26x2::uart::UART0, uart0_mux);
+
+    kernel::hil::uart::UART::set_client(&cc26x2::uart::UART0, driver_uart0);
 
     // Create a UART channel for the additional UART
     let uart1_mux = static_init!(
@@ -262,7 +266,6 @@ pub unsafe fn reset_handler() {
             uart1_device,
             &mut capsules::console::WRITE_BUF1,
             &mut capsules::console::READ_BUF1,
-            board_kernel.create_grant(&memory_allocation_capability)
         )
     );
 
@@ -273,7 +276,11 @@ pub unsafe fn reset_handler() {
 
     let console = static_init!(
         capsules::console::Console<UartDevice>,
-        capsules::console::Console::new(console_uarts)
+        capsules::console::Console::new(
+            console_uarts,
+            board_kernel.create_grant(&memory_allocation_capability)
+            ),
+        board_kernel.create_grant(&memory_allocation_capability)
     );
 
     console.initialize();

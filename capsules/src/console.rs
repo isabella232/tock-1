@@ -38,18 +38,20 @@ use core::cmp;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil;
 use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
+use kernel::hil::uart::Client;
 
 /// Syscall driver number.
 pub const DRIVER_NUM: usize = 0x00000001;
 
 #[derive(Default)]
 pub struct App {
+    write_uart: usize,
     write_callback: Option<Callback>,
     write_buffer: Option<AppSlice<Shared, u8>>,
     write_len: usize,
     write_remaining: usize, // How many bytes didn't fit in the buffer and still need to be printed.
     pending_write: bool,
-
+    read_uart: usize,
     read_callback: Option<Callback>,
     read_buffer: Option<AppSlice<Shared, u8>>,
     read_len: usize,
@@ -63,11 +65,15 @@ pub static mut READ_BUF1: [u8; 64] = [0; 64];
 
 pub struct Console<'a, U: 'static + hil::uart::UART> {
     uarts: &'a mut [&'a mut Uart<'a, U>],
+    apps: Grant<App>,
 }
 
 impl<'a, U: 'static + hil::uart::UART> Console<'a, U> {
-    pub fn new(uarts: &'a mut [&'static mut Uart<'a, U>]) -> Console<'a, U> {
-        Console { uarts }
+    pub fn new(
+        uarts: &'a mut [&'static mut Uart<'a, U>],
+        apps: Grant<[App;2]>
+        ) -> Console<'a, U> {
+        Console { uarts, apps }
     }
 
     pub fn initialize(&mut self) {
@@ -80,7 +86,6 @@ impl<'a, U: 'static + hil::uart::UART> Console<'a, U> {
 pub struct Uart<'a, U: 'static + hil::uart::UART> {
     hw: &'a U,
     index: usize,
-    apps: Grant<App>,
     tx_in_progress: OptionalCell<AppId>,
     tx_buffer: TakeCell<'static, [u8]>,
     rx_in_progress: OptionalCell<AppId>,
@@ -92,16 +97,10 @@ impl<U: 'static + hil::uart::UART> Uart<'a, U> {
         uart: &'static U,
         tx_buffer: &'static mut [u8],
         rx_buffer: &'static mut [u8],
-        grant: Grant<App>,
     ) -> Uart<'a, U> {
         Uart {
             hw: uart,
             index: 0,
-            apps: grant,
-            tx_in_progress: OptionalCell::empty(),
-            tx_buffer: TakeCell::new(tx_buffer),
-            rx_in_progress: OptionalCell::empty(),
-            rx_buffer: TakeCell::new(rx_buffer),
         }
     }
 
@@ -200,7 +199,7 @@ impl<U: 'static + hil::uart::UART> Uart<'a, U> {
     }
 }
 
-impl<'a, U: hil::uart::UART> Driver for Console<'a, U> {
+impl<'a, U: 'static + hil::uart::UART + hil::uart::Client> Driver for Console<'a, U> {
     /// Setup shared buffers.
     ///
     /// ### `allow_num`
@@ -210,16 +209,14 @@ impl<'a, U: hil::uart::UART> Driver for Console<'a, U> {
     fn allow(&self, appid: AppId, arg2: usize, slice: Option<AppSlice<Shared, u8>>) -> ReturnCode {
         let allow_num = arg2 as u16;
         let uart_num =  (arg2 >> 16) as usize;
-
+        debug!("allow uart_num {}", uart_num);
         match allow_num {
-            1 => self.uarts[uart_num]
-                .apps
+            1 => self.apps[uart_num]
                 .enter(appid, |app, _| {
                     app.write_buffer = slice;
                     ReturnCode::SUCCESS
                 }).unwrap_or_else(|err| err.into()),
-            2 => self.uarts[uart_num]
-                .apps
+            2 => self.apps[uart_num]
                 .enter(appid, |app, _| {
                     app.read_buffer = slice;
                     ReturnCode::SUCCESS
@@ -236,19 +233,19 @@ impl<'a, U: hil::uart::UART> Driver for Console<'a, U> {
     fn subscribe(&self, arg1: usize, callback: Option<Callback>, app_id: AppId) -> ReturnCode {
         let subscribe_num = arg1 as u16;
         let uart_num =  (arg1 >> 16) as usize;
+        debug!("subscribe uart_num {}", uart_num);
 
         match subscribe_num {
             1 /* putstr/write_done */ => {
-                self.uarts[uart_num]
-                .apps
+                self.apps[uart_num]
                 .enter(app_id, |app, _| {
                     app.write_callback = callback;
                     ReturnCode::SUCCESS
                 }).unwrap_or_else(|err| err.into())
             },
             2 /* getnstr done */ => {
-                self.uarts[uart_num]
-                .apps.enter(app_id, |app, _| {
+                self.apps[uart_num]
+                .enter(app_id, |app, _| {
                     app.read_callback = callback;
                     ReturnCode::SUCCESS
                 }).unwrap_or_else(|err| err.into())
@@ -271,24 +268,24 @@ impl<'a, U: hil::uart::UART> Driver for Console<'a, U> {
     fn command(&self, arg0: usize, arg1: usize, _: usize, appid: AppId) -> ReturnCode {
         let cmd_num = arg0 as u16;
         let uart_num =  (arg0 >> 16) as usize;
-
+        debug!("cmd uart_num {}", uart_num);
         match cmd_num {
             0 /* check if present */ => ReturnCode::SUCCESS,
             1 /* putstr */ => {
                 let len = arg1;
-                self.uarts[uart_num]
-                .apps.enter(appid, |app, _| {
+                self.apps[uart_num]
+                .enter(appid, |app, _| {
                     self.uarts[uart_num].send_new(appid, app, len)
                 }).unwrap_or_else(|err| err.into())
             },
             2 /* getnstr */ => {
                 let len = arg1;
-                self.uarts[uart_num].apps.enter(appid, |app, _| {
+                self.apps[uart_num].enter(appid, |app, _| {
                     self.uarts[uart_num].receive_new(appid, app, len)
                 }).unwrap_or_else(|err| err.into())
             },
             3 /* abort rx */ => {
-                self.uarts[uart_num].hw.abort_receive();
+                self.uarts[self.apps[uart_num].write_uart].hw.abort_receive();
                 ReturnCode::SUCCESS
             }
             _ => ReturnCode::ENOSUPPORT
@@ -296,67 +293,70 @@ impl<'a, U: hil::uart::UART> Driver for Console<'a, U> {
     }
 }
 
+
 impl<U: hil::uart::UART> hil::uart::Client for Uart<'a, U> {
     fn transmit_complete(&self, buffer: &'static mut [u8], _error: hil::uart::Error) {
         // Either print more from the AppSlice or send a callback to the
         // application.
+
         self.tx_buffer.replace(buffer);
         self.tx_in_progress.take().map(|appid| {
-            self.apps.enter(appid, |app, _| {
-                match self.send_continue(appid, app) {
-                    Ok(more_to_send) => {
-                        if !more_to_send {
-                            // Go ahead and signal the application
-                            let written = app.write_len;
-                            app.write_len = 0;
-                            app.write_callback.map(|mut cb| {
-                                cb.schedule(written, self.index, 0);
-                            });
-                        }
-                    }
-                    Err(return_code) => {
-                        // XXX This shouldn't ever happen?
-                        app.write_len = 0;
-                        app.write_remaining = 0;
-                        app.pending_write = false;
-                        let r0 = isize::from(return_code) as usize;
-                        app.write_callback.map(|mut cb| {
-                            cb.schedule(r0, self.index, 0);
-                        });
-                    }
-                }
-            })
+            // self.apps.enter(appid, |app, _| {
+            //     match self.send_continue(appid, app) {
+            //         Ok(more_to_send) => {
+            //             if !more_to_send {
+            //                 // Go ahead and signal the application
+            //                 let written = app.write_len;
+            //                 app.write_len = 0;
+            //                 debug!("callback {}", self.index);
+            //                 app.write_callback.map(|mut cb| {
+            //                     cb.schedule(written, self.index, 0);
+            //                 });
+            //             }
+            //         }
+            //         Err(return_code) => {
+            //             // XXX This shouldn't ever happen?
+            //             app.write_len = 0;
+            //             app.write_remaining = 0;
+            //             app.pending_write = false;
+            //             let r0 = isize::from(return_code) as usize;
+            //             app.write_callback.map(|mut cb| {
+            //                 cb.schedule(r0, self.index, 0);
+            //             });
+            //         }
+            //     }
+            // })
         });
 
         // If we are not printing more from the current AppSlice,
         // see if any other applications have pending messages.
         if self.tx_in_progress.is_none() {
-            for cntr in self.apps.iter() {
-                let started_tx = cntr.enter(|app, _| {
-                    if app.pending_write {
-                        app.pending_write = false;
-                        match self.send_continue(app.appid(), app) {
-                            Ok(more_to_send) => more_to_send,
-                            Err(return_code) => {
-                                // XXX This shouldn't ever happen?
-                                app.write_len = 0;
-                                app.write_remaining = 0;
-                                app.pending_write = false;
-                                let r0 = isize::from(return_code) as usize;
-                                app.write_callback.map(|mut cb| {
-                                    cb.schedule(r0, self.index, 0);
-                                });
-                                false
-                            }
-                        }
-                    } else {
-                        false
-                    }
-                });
-                if started_tx {
-                    break;
-                }
-            }
+            // for cntr in self.apps.iter() {
+            //     let started_tx = cntr.enter(|app, _| {
+            //         if app.pending_write {
+            //             app.pending_write = false;
+            //             match self.send_continue(app.appid(), app) {
+            //                 Ok(more_to_send) => more_to_send,
+            //                 Err(return_code) => {
+            //                     // XXX This shouldn't ever happen?
+            //                     app.write_len = 0;
+            //                     app.write_remaining = 0;
+            //                     app.pending_write = false;
+            //                     let r0 = isize::from(return_code) as usize;
+            //                     app.write_callback.map(|mut cb| {
+            //                         cb.schedule(r0, self.index, 0);
+            //                     });
+            //                     false
+            //                 }
+            //             }
+            //         } else {
+            //             false
+            //         }
+            //     });
+            //     if started_tx {
+            //         break;
+            //     }
+            // }
         }
     }
 
