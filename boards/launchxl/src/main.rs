@@ -444,11 +444,11 @@ pub unsafe fn reset_handler() {
         let adc_channels = static_init!(
             [&cc26x2::adc::Input; 5],
             [
-                &cc26x2::adc::Input::Auxio0, // pin 23
-                &cc26x2::adc::Input::Auxio1, // pin 24
-                &cc26x2::adc::Input::Auxio2, // pin 25
-                &cc26x2::adc::Input::Auxio3, // pin 26
-                &cc26x2::adc::Input::Auxio4, // pin 27
+                &cc26x2::adc::Input::Auxio7, // pin 23
+                &cc26x2::adc::Input::Auxio6, // pin 24
+                &cc26x2::adc::Input::Auxio5, // pin 25
+                &cc26x2::adc::Input::Auxio4, // pin 26
+                &cc26x2::adc::Input::Auxio3, // pin 27
             ]
         );
         adc = static_init!(
@@ -468,14 +468,14 @@ pub unsafe fn reset_handler() {
         let adc_channels = static_init!(
             [&cc26x2::adc::Input; 8],
             [
-                &cc26x2::adc::Input::Auxio0, // pin 23
-                &cc26x2::adc::Input::Auxio1, // pin 24
-                &cc26x2::adc::Input::Auxio2, // pin 25
-                &cc26x2::adc::Input::Auxio3, // pin 26
-                &cc26x2::adc::Input::Auxio4, // pin 27
-                &cc26x2::adc::Input::Auxio5, // pin 28
-                &cc26x2::adc::Input::Auxio6, // pin 29
-                &cc26x2::adc::Input::Auxio7, // pin 30
+                &cc26x2::adc::Input::Auxio7, // pin 23
+                &cc26x2::adc::Input::Auxio6, // pin 24
+                &cc26x2::adc::Input::Auxio5, // pin 25
+                &cc26x2::adc::Input::Auxio4, // pin 26
+                &cc26x2::adc::Input::Auxio3, // pin 27
+                &cc26x2::adc::Input::Auxio2, // pin 28
+                &cc26x2::adc::Input::Auxio1, // pin 29
+                &cc26x2::adc::Input::Auxio0, // pin 30
             ]
         );
         adc = static_init!(
