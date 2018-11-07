@@ -99,7 +99,7 @@ impl<'a> kernel::Platform for Platform<'a> {
 
 static mut HELIUM_BUF: [u8; 200] = [0x00; 200];
 
-//mod cc1312r;
+mod cc1312r;
 mod cc1352p;
 
 pub struct Pinmap {
@@ -112,19 +112,19 @@ pub struct Pinmap {
     button1: usize,
     button2: usize,
     gpio0: usize,
-    //a0: usize,
-    //a1: usize,
-    //a2: usize,
+    a0: usize,
+    a1: usize,
+    a2: usize,
     a3: usize,
     a4: usize,
-    a5: usize,
-    a6: usize,
-    a7: usize,
+    a5: Option<usize>,
+    a6: Option<usize>,
+    a7: Option<usize>,
     pwm0: usize,
     pwm1: usize,
-    rf_2_4: usize,
-    rf_subg: usize,
-    rf_high_pa: usize,
+    rf_2_4: Option<usize>,
+    rf_subg: Option<usize>,
+    rf_high_pa: Option<usize>,
 }
 
 unsafe fn configure_pins(pin: &Pinmap) {
@@ -142,21 +142,34 @@ unsafe fn configure_pins(pin: &Pinmap) {
 
     cc26x2::gpio::PORT[pin.gpio0].enable_gpio();
 
-    cc26x2::gpio::PORT[pin.a7].enable_analog_input();
-    cc26x2::gpio::PORT[pin.a6].enable_analog_input();
-    cc26x2::gpio::PORT[pin.a5].enable_analog_input();
-    cc26x2::gpio::PORT[pin.a4].enable_analog_input();
+    cc26x2::gpio::PORT[pin.a0].enable_analog_input();
+    cc26x2::gpio::PORT[pin.a1].enable_analog_input();
+    cc26x2::gpio::PORT[pin.a2].enable_analog_input();
     cc26x2::gpio::PORT[pin.a3].enable_analog_input();
-    //cc26x2::gpio::PORT[pin.a2].enable_analog_input();
-    //cc26x2::gpio::PORT[pin.a1].enable_analog_input();
-    //cc26x2::gpio::PORT[pin.a0].enable_analog_input();
+    cc26x2::gpio::PORT[pin.a4].enable_analog_input();
+
+    if let Some(a5) = pin.a5 {
+        cc26x2::gpio::PORT[a5].enable_analog_input();
+    }
+    if let Some(a6) = pin.a6 {
+        cc26x2::gpio::PORT[a6].enable_analog_input();
+    }
+    if let Some(a7) = pin.a7 {
+        cc26x2::gpio::PORT[a7].enable_analog_input();
+    }
 
     cc26x2::gpio::PORT[pin.pwm0].enable_pwm(pwm::Timer::GPT0A);
     cc26x2::gpio::PORT[pin.pwm1].enable_pwm(pwm::Timer::GPT0B);
 
-    cc26x2::gpio::PORT[pin.rf_2_4].enable_24ghz_output();
-    cc26x2::gpio::PORT[pin.rf_high_pa].enable_pa_output();
-    cc26x2::gpio::PORT[pin.rf_subg].enable_subg_output();
+    if let Some(rf_2_4) = pin.rf_2_4 {
+        cc26x2::gpio::PORT[rf_2_4].enable_analog_input();
+    }
+    if let Some(rf_high_pa) = pin.rf_high_pa {
+        cc26x2::gpio::PORT[rf_high_pa].enable_analog_input();
+    }
+    if let Some(rf_subg) = pin.rf_subg {
+        cc26x2::gpio::PORT[rf_subg].enable_analog_input();
+    }
 }
 
 #[no_mangle]
@@ -198,8 +211,7 @@ pub unsafe fn reset_handler() {
     if chip_id == cc1352p::CHIP_ID {
         pinmap = &cc1352p::PINMAP;
     } else {
-        pinmap = &cc1352p::PINMAP;
-        // pinmap = &cc1312r::PINMAP;
+        pinmap = &cc1312r::PINMAP;
     }
 
     configure_pins(pinmap);
@@ -426,33 +438,59 @@ pub unsafe fn reset_handler() {
     cc26x2::adc::ADC.configure(adc::Source::Fixed4P5V, adc::SampleCycle::_10p9_ms);
 
     // Setup ADC
-    let adc_channels = static_init!(
-        [&cc26x2::adc::Input; 8],
-        [
-            &cc26x2::adc::Input::Auxio0, // pin 30
-            &cc26x2::adc::Input::Auxio1, // pin 29
-            &cc26x2::adc::Input::Auxio2, // pin 28
-            &cc26x2::adc::Input::Auxio3, // pin 27
-            &cc26x2::adc::Input::Auxio4, // pin 26
-            &cc26x2::adc::Input::Auxio5, // pin 25
-            &cc26x2::adc::Input::Auxio6, // pin 24
-            &cc26x2::adc::Input::Auxio7, // pin 23
-        ]
-    );
+    let adc: &'static capsules::adc::Adc<'static, cc26x2::adc::Adc>;
 
-    let adc = static_init!(
-        capsules::adc::Adc<'static, cc26x2::adc::Adc>,
-        capsules::adc::Adc::new(
-            &mut cc26x2::adc::ADC,
-            adc_channels,
-            &mut capsules::adc::ADC_BUFFER1,
-            &mut capsules::adc::ADC_BUFFER2,
-            &mut capsules::adc::ADC_BUFFER3
-        )
-    );
-
-    for channel in adc_channels.iter() {
-        cc26x2::adc::ADC.set_client(adc, channel);
+    if chip_id == cc1352p::CHIP_ID {
+        let adc_channels = static_init!(
+            [&cc26x2::adc::Input; 5],
+            [
+                &cc26x2::adc::Input::Auxio0, // pin 23
+                &cc26x2::adc::Input::Auxio1, // pin 24
+                &cc26x2::adc::Input::Auxio2, // pin 25
+                &cc26x2::adc::Input::Auxio3, // pin 26
+                &cc26x2::adc::Input::Auxio4, // pin 27
+            ]
+        );
+        adc = static_init!(
+            capsules::adc::Adc<'static, cc26x2::adc::Adc>,
+            capsules::adc::Adc::new(
+                &mut cc26x2::adc::ADC,
+                adc_channels,
+                &mut capsules::adc::ADC_BUFFER1,
+                &mut capsules::adc::ADC_BUFFER2,
+                &mut capsules::adc::ADC_BUFFER3
+            )
+        );
+        for channel in adc_channels.iter() {
+            cc26x2::adc::ADC.set_client(adc, channel);
+        }
+    } else {
+        let adc_channels = static_init!(
+            [&cc26x2::adc::Input; 8],
+            [
+                &cc26x2::adc::Input::Auxio0, // pin 23
+                &cc26x2::adc::Input::Auxio1, // pin 24
+                &cc26x2::adc::Input::Auxio2, // pin 25
+                &cc26x2::adc::Input::Auxio3, // pin 26
+                &cc26x2::adc::Input::Auxio4, // pin 27
+                &cc26x2::adc::Input::Auxio5, // pin 28
+                &cc26x2::adc::Input::Auxio6, // pin 29
+                &cc26x2::adc::Input::Auxio7, // pin 30
+            ]
+        );
+        adc = static_init!(
+            capsules::adc::Adc<'static, cc26x2::adc::Adc>,
+            capsules::adc::Adc::new(
+                &mut cc26x2::adc::ADC,
+                adc_channels,
+                &mut capsules::adc::ADC_BUFFER1,
+                &mut capsules::adc::ADC_BUFFER2,
+                &mut capsules::adc::ADC_BUFFER3
+            )
+        );
+        for channel in adc_channels.iter() {
+            cc26x2::adc::ADC.set_client(adc, channel);
+        }
     }
 
     let pwm_channels = [
