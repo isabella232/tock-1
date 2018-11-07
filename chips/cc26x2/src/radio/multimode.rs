@@ -186,7 +186,7 @@ impl Radio {
 
         // Need to match on patches here but for now, just default to genfsk patches
         unsafe {
-            let reg_overrides: u32 = GFSK_RFPARAMS.as_mut_ptr() as u32;
+            let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
             self.rfc.setup(reg_overrides, 0xFFFF);
         }
 
@@ -241,12 +241,11 @@ impl Radio {
                 packet
             };
             cmd.packet_len = len as u8;
-            // cmd.sync_word = 0x00000000;
-            cmd.sync_word = 0x930B51DE;
+            cmd.sync_word = 0x00000000;
+            // cmd.sync_word = 0x930B51DE;
             cmd.packet_pointer = p_packet;
 
             RadioCommand::guard(cmd);
-            debug!("BUF: {:?}", buf);
             self.rfc
                 .send_sync(cmd)
                 .and_then(|_| self.rfc.wait(cmd))
@@ -262,7 +261,7 @@ impl Radio {
         self.rfc.enable();
 
         cpe::CPE_PATCH.apply_patch();
-        //mce_lr::LONGRANGE_PATCH.apply_patch();
+        // mce_lr::LONGRANGE_PATCH.apply_patch();
         mce::MCE_PATCH.apply_patch();
         rfe::RFE_PATCH.apply_patch();
         self.rfc.start_rat();

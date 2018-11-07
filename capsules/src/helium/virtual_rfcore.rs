@@ -105,7 +105,6 @@ impl<R: rfcore::Radio> VirtualRadio<'a, R> {
 
 impl<R: rfcore::Radio> RFCore for VirtualRadio<'a, R> {
     fn initialize(&self) -> ReturnCode {
-        debug!("vr init");
         self.radio_state.set(RadioState::StartUp);
         self.radio.initialize();
         ReturnCode::SUCCESS

@@ -39,6 +39,7 @@ impl Frame {
         }
 
         self.info.header.data_len = payload.len();
+        debug!("Data len: {:?}", self.info.header.data_len);
         ReturnCode::SUCCESS
     }
 
