@@ -86,7 +86,6 @@ impl<R: rfcore::Radio> VirtualRadio<'a, R> {
             match result {
                 ReturnCode::SUCCESS => (),
                 _ => {
-                    debug!("VR: radio transmit failure...");
                     if rbuf.is_some() {
                         self.send_client_result(rbuf.unwrap(), result);
                     }
