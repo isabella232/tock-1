@@ -4,10 +4,10 @@ use kernel::hil::rfcore;
 use kernel::ReturnCode;
 use osc;
 use radio::commands::{prop_commands as prop, DirectCommand, RadioCommand, RfcCondition};
-use radio::patch_cpe_prop as cpe;
-use radio::patch_mce_genfsk as mce;
-use radio::patch_mce_longrange as mce_lr;
-use radio::patch_rfe_genfsk as rfe;
+use radio::patches::{
+    patch_cpe_prop as cpe, patch_mce_genfsk as mce, patch_mce_longrange as mce_lr,
+    patch_rfe_genfsk as rfe,
+};
 use radio::rfc;
 use rtc;
 

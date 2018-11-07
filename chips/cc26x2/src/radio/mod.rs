@@ -1,10 +1,6 @@
 // pub mod ble;
 pub mod multimode;
-pub mod patch_cpe_prop;
-pub mod patch_mce_genfsk;
-pub mod patch_mce_longrange;
-pub mod patch_mce_slr;
-pub mod patch_rfe_genfsk;
+pub mod patches;
 pub mod rfc;
 pub mod test_settings;
 use cortexm4::nvic;
