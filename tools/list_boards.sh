@@ -16,12 +16,13 @@ while getopts "h?1" opt; do
 done
 
 # Find boards based on folders with Makefiles
-boards=""
-for b in $(find boards | egrep 'Makefile$'); do
-    b1=${b#boards/}
-    b2=${b1%/*}
-    boards+="$b2 "
-done
+boards="launchxl/"
+# for b in $(find boards | egrep 'Makefile$'); do
+#     b1=${b#boards/}
+#     b2=${b1%/*}
+#     boards+="$b2 "
+# done
+# echo "${boards}"
 
 if [ $oneline -eq 1 ]; then
     for board in $boards; do
