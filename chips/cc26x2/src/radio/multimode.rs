@@ -175,8 +175,8 @@ impl Radio {
                 packet
             };
             cmd.packet_len = len as u8;
-            cmd.sync_word = 0x00000000;
-            // cmd.sync_word = 0x930B51DE;
+            // cmd.sync_word = 0x00000000;
+            cmd.sync_word = 0x930B51DE;
             cmd.packet_pointer = p_packet;
 
             RadioCommand::guard(cmd);
