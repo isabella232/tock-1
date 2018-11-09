@@ -13,10 +13,6 @@ pub trait PowerClient {
     fn power_mode_changed(&self, changed: bool);
 }
 
-pub trait ConfigClient {
-    fn config_event(&self, result: ReturnCode);
-}
-
 pub trait TxClient {
     fn transmit_event(&self, buf: &'static mut [u8], result: ReturnCode);
 }
@@ -55,7 +51,6 @@ pub trait RadioConfig {
 pub trait RadioDriver {
     fn set_transmit_client(&self, &'static TxClient);
     fn set_receive_client(&self, &'static RxClient, receive_buffer: &'static mut [u8]);
-    fn set_config_client(&self, &'static ConfigClient);
     fn set_power_client(&self, &'static PowerClient);
     fn set_receive_buffer(&self, receive_buffer: &'static mut [u8]);
     fn transmit(
