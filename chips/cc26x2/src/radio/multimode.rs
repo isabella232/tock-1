@@ -120,7 +120,7 @@ impl Radio {
 
         // Need to match on patches here but for now, just default to genfsk patches
         unsafe {
-            let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
+            let reg_overrides: u32 = GFSK_RFPARAMS.as_mut_ptr() as u32;
             self.rfc.setup(reg_overrides, 0xFFFF);
         }
 

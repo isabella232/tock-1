@@ -342,7 +342,7 @@ impl RFCore {
     // Call commands to setup RFCore with optional register overrides and power output
     pub fn setup(&self, reg_overrides: u32, tx_power: u16) {
         debug!("Setup Radio");
-        /*
+
         let mut setup_cmd = prop::CommandRadioDivSetup {
             command_no: 0x3807,
             status: 0,
@@ -397,8 +397,8 @@ impl RFCore {
             int_freq: 0x8000,
             lo_divider: 0x05,
         };
-        */
 
+        /*
         let mut setup_cmd = prop::CommandRadioDivSetup {
             command_no: 0x3807,
             status: 0,
@@ -453,6 +453,7 @@ impl RFCore {
             int_freq: 0x8000,
             lo_divider: 0x05,
         };
+        */
 
         cmd::RadioCommand::guard(&mut setup_cmd);
 
