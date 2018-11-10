@@ -30,15 +30,55 @@ impl Frame {
     }
 
     pub fn append_payload(&mut self, payload: &[u8]) -> ReturnCode {
-        if payload.len() > 200 {
+        let head = "{\"team\":\"";
+        let fill = "\",";
+        let address_len = self.info.header.address.len();
+        let foot = "}\0";
+        let total_len = payload.len() + address_len + head.len() + fill.len() + foot.len();
+
+        debug!("LEN: {:?}", address_len);
+
+        if total_len > 200 {
             return ReturnCode::ENOMEM;
         }
+        let mut idx = 0;
 
-        for (i, c) in payload.as_ref()[0..payload.len()].iter().enumerate() {
+        for i in head.bytes() {
+            self.buf[idx] = i;
+            idx += 1;
+        }
+
+        for i in 0..address_len {
+            self.buf[idx] = self.info.header.address.as_ref()[i];
+            idx += 1;
+        }
+
+        for i in fill.bytes() {
+            self.buf[idx] = i;
+            idx += 1;
+        }
+
+        for i in 0..payload.len() as usize {
+            self.buf[idx] = payload.as_ref()[i];
+            idx += 1;
+        }
+
+        for i in foot.bytes() {
+            self.buf[idx] = i;
+            idx += 1;
+        }
+        /*
+        for (i, c) in self.info.header.address.as_ref()[0..self.info.header.address.len()].iter().enumerate() {
             self.buf[i] = *c;
         }
 
-        self.info.header.data_len = payload.len();
+        for i in address_len..total_len as usize {
+            self.buf[i] = payload.as_ref()[idx];
+            idx += 1;
+        }
+        */
+        self.info.header.data_len = idx;
+        // self.info.header.data_len = total_len;
         debug!("Data len: {:?}", self.info.header.data_len);
         ReturnCode::SUCCESS
     }
