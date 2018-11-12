@@ -31,7 +31,7 @@ impl Frame {
 
     pub fn append_payload(&mut self, payload: &[u8]) -> ReturnCode {
         let head = "{\"team\":\"";
-        let fill = "\",";
+        let fill = "\",\"payload\":";
         let address_len = self.info.header.address.len();
         let foot = "}\0";
         let total_len = payload.len() + address_len + head.len() + fill.len() + foot.len();
