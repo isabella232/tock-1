@@ -60,12 +60,6 @@ ci-travis:
 	@printf "$$(tput bold)* CI: Compilation *$$(tput sgr0)\n"
 	@printf "$$(tput bold)*******************$$(tput sgr0)\n"
 	@CI=true $(MAKE) allboards
-	@printf "$$(tput bold)***********************$$(tput sgr0)\n"
-	@printf "$$(tput bold)* CI: Special Targets *$$(tput sgr0)\n"
-	@printf "$$(tput bold)***********************$$(tput sgr0)\n"
-	@CI=true $(MAKE) -C boards/nordic/nrf52dk lst
-	@CI=true $(MAKE) -C boards/nordic/nrf52dk debug
-	@CI=true $(MAKE) -C boards/nordic/nrf52dk debug-lst
 	@printf "$$(tput bold)*********************$$(tput sgr0)\n"
 	@printf "$$(tput bold)* CI: Documentation *$$(tput sgr0)\n"
 	@printf "$$(tput bold)*********************$$(tput sgr0)\n"

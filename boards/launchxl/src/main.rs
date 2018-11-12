@@ -63,7 +63,7 @@ pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 pub struct Platform<'a> {
     gpio: &'static capsules::gpio::GPIO<'static, cc26x2::gpio::GPIOPin>,
     led: &'static capsules::led::LED<'static, cc26x2::gpio::GPIOPin>,
-    console: &'static capsules::console::Console<'static, UartDevice<'static>>,
+    uart: &'static capsules::uart::UartDriver<'static, UartDevice<'static>>,
     button: &'static capsules::button::Button<'static, cc26x2::gpio::GPIOPin>,
     alarm: &'static capsules::alarm::AlarmDriver<
         'static,
@@ -82,7 +82,7 @@ impl<'a> kernel::Platform for Platform<'a> {
         F: FnOnce(Option<&kernel::Driver>) -> R,
     {
         match driver_num {
-            capsules::console::DRIVER_NUM => f(Some(self.console)),
+            capsules::uart::DRIVER_NUM => f(Some(self.uart)),
             capsules::gpio::DRIVER_NUM => f(Some(self.gpio)),
             capsules::led::DRIVER_NUM => f(Some(self.led)),
             capsules::button::DRIVER_NUM => f(Some(self.button)),
@@ -97,14 +97,16 @@ impl<'a> kernel::Platform for Platform<'a> {
     }
 }
 
-static mut HELIUM_BUF: [u8; 200] = [0x00; 200];
+static mut HELIUM_BUF: [u8; 240] = [0x00; 240];
 
-//mod cc1312r;
+mod cc1312r;
 mod cc1352p;
 
 pub struct Pinmap {
     uart0_rx: usize,
     uart0_tx: usize,
+    uart1_rx: usize,
+    uart1_tx: usize,
     i2c0_scl: usize,
     i2c0_sda: usize,
     red_led: usize,
@@ -112,24 +114,27 @@ pub struct Pinmap {
     button1: usize,
     button2: usize,
     gpio0: usize,
-    //a0: usize,
-    //a1: usize,
-    //a2: usize,
+    a0: usize,
+    a1: usize,
+    a2: usize,
     a3: usize,
     a4: usize,
-    a5: usize,
-    a6: usize,
-    a7: usize,
+    a5: Option<usize>,
+    a6: Option<usize>,
+    a7: Option<usize>,
     pwm0: usize,
     pwm1: usize,
-    rf_2_4: usize,
-    rf_subg: usize,
-    rf_high_pa: usize,
+    rf_2_4: Option<usize>,
+    rf_subg: Option<usize>,
+    rf_high_pa: Option<usize>,
 }
 
 unsafe fn configure_pins(pin: &Pinmap) {
     cc26x2::gpio::PORT[pin.uart0_rx].enable_uart0_rx();
     cc26x2::gpio::PORT[pin.uart0_tx].enable_uart0_tx();
+
+    cc26x2::gpio::PORT[pin.uart1_rx].enable_uart1_rx();
+    cc26x2::gpio::PORT[pin.uart1_tx].enable_uart1_tx();
 
     cc26x2::gpio::PORT[pin.i2c0_scl].enable_i2c_scl();
     cc26x2::gpio::PORT[pin.i2c0_sda].enable_i2c_sda();
@@ -142,22 +147,38 @@ unsafe fn configure_pins(pin: &Pinmap) {
 
     cc26x2::gpio::PORT[pin.gpio0].enable_gpio();
 
-    cc26x2::gpio::PORT[pin.a7].enable_analog_input();
-    cc26x2::gpio::PORT[pin.a6].enable_analog_input();
-    cc26x2::gpio::PORT[pin.a5].enable_analog_input();
-    cc26x2::gpio::PORT[pin.a4].enable_analog_input();
+    cc26x2::gpio::PORT[pin.a0].enable_analog_input();
+    cc26x2::gpio::PORT[pin.a1].enable_analog_input();
+    cc26x2::gpio::PORT[pin.a2].enable_analog_input();
     cc26x2::gpio::PORT[pin.a3].enable_analog_input();
-    //cc26x2::gpio::PORT[pin.a2].enable_analog_input();
-    //cc26x2::gpio::PORT[pin.a1].enable_analog_input();
-    //cc26x2::gpio::PORT[pin.a0].enable_analog_input();
+    cc26x2::gpio::PORT[pin.a4].enable_analog_input();
+
+    if let Some(a5) = pin.a5 {
+        cc26x2::gpio::PORT[a5].enable_analog_input();
+    }
+    if let Some(a6) = pin.a6 {
+        cc26x2::gpio::PORT[a6].enable_analog_input();
+    }
+    if let Some(a7) = pin.a7 {
+        cc26x2::gpio::PORT[a7].enable_analog_input();
+    }
 
     cc26x2::gpio::PORT[pin.pwm0].enable_pwm(pwm::Timer::GPT0A);
     cc26x2::gpio::PORT[pin.pwm1].enable_pwm(pwm::Timer::GPT0B);
 
-    cc26x2::gpio::PORT[pin.rf_2_4].enable_24ghz_output();
-    cc26x2::gpio::PORT[pin.rf_high_pa].enable_pa_output();
-    cc26x2::gpio::PORT[pin.rf_subg].enable_subg_output();
+    if let Some(rf_2_4) = pin.rf_2_4 {
+        cc26x2::gpio::PORT[rf_2_4].enable_analog_input();
+    }
+    if let Some(rf_high_pa) = pin.rf_high_pa {
+        cc26x2::gpio::PORT[rf_high_pa].enable_analog_input();
+    }
+    if let Some(rf_subg) = pin.rf_subg {
+        cc26x2::gpio::PORT[rf_subg].enable_analog_input();
+    }
 }
+
+static mut DRIVER_UART0: capsules::uart::Uart<UartDevice> = capsules::uart::Uart::new(0);
+static mut DRIVER_UART1: capsules::uart::Uart<UartDevice> = capsules::uart::Uart::new(1);
 
 #[no_mangle]
 pub unsafe fn reset_handler() {
@@ -198,8 +219,7 @@ pub unsafe fn reset_handler() {
     if chip_id == cc1352p::CHIP_ID {
         pinmap = &cc1352p::PINMAP;
     } else {
-        pinmap = &cc1352p::PINMAP;
-        // pinmap = &cc1312r::PINMAP;
+        pinmap = &cc1312r::PINMAP;
     }
 
     configure_pins(pinmap);
@@ -258,8 +278,8 @@ pub unsafe fn reset_handler() {
 
     // UART
 
-    // Create a shared UART channel for the console and for kernel debug.
-    let uart_mux = static_init!(
+    // Create a shared UART channel for the uart and for kernel debug.
+    let uart0_mux = static_init!(
         UartMux<'static>,
         UartMux::new(
             &cc26x2::uart::UART0,
@@ -267,29 +287,10 @@ pub unsafe fn reset_handler() {
             115200
         )
     );
-    hil::uart::UART::set_client(&cc26x2::uart::UART0, uart_mux);
-
-    // Create a UartDevice for the console.
-    let console_uart = static_init!(UartDevice, UartDevice::new(uart_mux, true));
-    console_uart.setup();
-
-    cc26x2::uart::UART0.initialize();
-
-    let console = static_init!(
-        capsules::console::Console<UartDevice>,
-        capsules::console::Console::new(
-            console_uart,
-            115200,
-            &mut capsules::console::WRITE_BUF,
-            &mut capsules::console::READ_BUF,
-            board_kernel.create_grant(&memory_allocation_capability)
-        )
-    );
-    kernel::hil::uart::UART::set_client(console_uart, console);
-    console.initialize();
+    hil::uart::UART::set_client(&cc26x2::uart::UART0, uart0_mux);
 
     // Create virtual device for kernel debug.
-    let debugger_uart = static_init!(UartDevice, UartDevice::new(uart_mux, false));
+    let debugger_uart = static_init!(UartDevice, UartDevice::new(uart0_mux, false));
     debugger_uart.setup();
     let debugger = static_init!(
         kernel::debug::DebugWriter,
@@ -306,6 +307,77 @@ pub unsafe fn reset_handler() {
         kernel::debug::DebugWriterWrapper::new(debugger)
     );
     kernel::debug::set_debug_writer_wrapper(debug_wrapper);
+
+    // Create a UartDevice for the uart.
+    let uart0_device = static_init!(UartDevice, UartDevice::new(uart0_mux, true));
+    uart0_device.setup();
+    kernel::hil::uart::UART::set_client(uart0_device, &DRIVER_UART0);
+
+    cc26x2::uart::UART0.initialize();
+
+    // the debug uart should be initialized by hand
+    cc26x2::uart::UART0.configure(hil::uart::UARTParameters {
+        baud_rate: 115200,
+        stop_bits: hil::uart::StopBits::One,
+        parity: hil::uart::Parity::None,
+        hw_flow_control: false,
+    });
+
+    // Create a UART channel for the additional UART
+    let uart1_mux = static_init!(
+        UartMux,
+        UartMux::new(
+            &cc26x2::uart::UART1,
+            &mut capsules::virtual_uart::RX_BUF1,
+            115200
+        )
+    );
+    hil::uart::UART::set_client(&cc26x2::uart::UART1, uart1_mux);
+
+    // Create a UartDevice for the second UART
+    let uart1_device = static_init!(UartDevice, UartDevice::new(uart1_mux, true));
+    uart1_device.setup();
+    kernel::hil::uart::UART::set_client(uart1_device, &DRIVER_UART1);
+
+    cc26x2::uart::UART1.initialize();
+
+    // the debug uart should be initialized by hand
+    cc26x2::uart::UART1.configure(hil::uart::UARTParameters {
+        baud_rate: 115200,
+        stop_bits: hil::uart::StopBits::One,
+        parity: hil::uart::Parity::None,
+        hw_flow_control: false,
+    });
+
+    let uart_uarts = static_init!(
+        [&'static mut capsules::uart::Uart<UartDevice>; 2],
+        [&mut DRIVER_UART0, &mut DRIVER_UART1]
+    );
+
+    let uart = static_init!(
+        capsules::uart::UartDriver<UartDevice>,
+        capsules::uart::UartDriver::new(
+            uart_uarts,
+            [
+                board_kernel.create_grant(&memory_allocation_capability),
+                board_kernel.create_grant(&memory_allocation_capability)
+            ]
+        )
+    );
+
+    uart.initialize();
+    DRIVER_UART0.initialize(
+        uart0_device,
+        &mut capsules::uart::WRITE_BUF0,
+        &mut capsules::uart::READ_BUF0,
+        uart,
+    );
+    DRIVER_UART1.initialize(
+        uart1_device,
+        &mut capsules::uart::WRITE_BUF1,
+        &mut capsules::uart::READ_BUF1,
+        uart,
+    );
 
     cc26x2::i2c::I2C0.initialize();
 
@@ -426,33 +498,59 @@ pub unsafe fn reset_handler() {
     cc26x2::adc::ADC.configure(adc::Source::Fixed4P5V, adc::SampleCycle::_10p9_ms);
 
     // Setup ADC
-    let adc_channels = static_init!(
-        [&cc26x2::adc::Input; 8],
-        [
-            &cc26x2::adc::Input::Auxio0, // pin 30
-            &cc26x2::adc::Input::Auxio1, // pin 29
-            &cc26x2::adc::Input::Auxio2, // pin 28
-            &cc26x2::adc::Input::Auxio3, // pin 27
-            &cc26x2::adc::Input::Auxio4, // pin 26
-            &cc26x2::adc::Input::Auxio5, // pin 25
-            &cc26x2::adc::Input::Auxio6, // pin 24
-            &cc26x2::adc::Input::Auxio7, // pin 23
-        ]
-    );
+    let adc: &'static capsules::adc::Adc<'static, cc26x2::adc::Adc>;
 
-    let adc = static_init!(
-        capsules::adc::Adc<'static, cc26x2::adc::Adc>,
-        capsules::adc::Adc::new(
-            &mut cc26x2::adc::ADC,
-            adc_channels,
-            &mut capsules::adc::ADC_BUFFER1,
-            &mut capsules::adc::ADC_BUFFER2,
-            &mut capsules::adc::ADC_BUFFER3
-        )
-    );
-
-    for channel in adc_channels.iter() {
-        cc26x2::adc::ADC.set_client(adc, channel);
+    if chip_id == cc1352p::CHIP_ID {
+        let adc_channels = static_init!(
+            [&cc26x2::adc::Input; 5],
+            [
+                &cc26x2::adc::Input::Auxio7, // pin 23
+                &cc26x2::adc::Input::Auxio6, // pin 24
+                &cc26x2::adc::Input::Auxio5, // pin 25
+                &cc26x2::adc::Input::Auxio4, // pin 26
+                &cc26x2::adc::Input::Auxio3, // pin 27
+            ]
+        );
+        adc = static_init!(
+            capsules::adc::Adc<'static, cc26x2::adc::Adc>,
+            capsules::adc::Adc::new(
+                &mut cc26x2::adc::ADC,
+                adc_channels,
+                &mut capsules::adc::ADC_BUFFER1,
+                &mut capsules::adc::ADC_BUFFER2,
+                &mut capsules::adc::ADC_BUFFER3
+            )
+        );
+        for channel in adc_channels.iter() {
+            cc26x2::adc::ADC.set_client(adc, channel);
+        }
+    } else {
+        let adc_channels = static_init!(
+            [&cc26x2::adc::Input; 8],
+            [
+                &cc26x2::adc::Input::Auxio7, // pin 23
+                &cc26x2::adc::Input::Auxio6, // pin 24
+                &cc26x2::adc::Input::Auxio5, // pin 25
+                &cc26x2::adc::Input::Auxio4, // pin 26
+                &cc26x2::adc::Input::Auxio3, // pin 27
+                &cc26x2::adc::Input::Auxio2, // pin 28
+                &cc26x2::adc::Input::Auxio1, // pin 29
+                &cc26x2::adc::Input::Auxio0, // pin 30
+            ]
+        );
+        adc = static_init!(
+            capsules::adc::Adc<'static, cc26x2::adc::Adc>,
+            capsules::adc::Adc::new(
+                &mut cc26x2::adc::ADC,
+                adc_channels,
+                &mut capsules::adc::ADC_BUFFER1,
+                &mut capsules::adc::ADC_BUFFER2,
+                &mut capsules::adc::ADC_BUFFER3
+            )
+        );
+        for channel in adc_channels.iter() {
+            cc26x2::adc::ADC.set_client(adc, channel);
+        }
     }
 
     let pwm_channels = [
@@ -474,7 +572,7 @@ pub unsafe fn reset_handler() {
     let pwm = capsules::pwm::Pwm::new(HFREQ as usize, &pwm_channels);
 
     let launchxl = Platform {
-        console,
+        uart,
         gpio,
         led,
         button,

@@ -161,7 +161,6 @@ impl Helium<'a> {
                     .take()
                     .as_ref()
                     .map(|payload| frame.append_payload(payload.as_ref()))
-//                    .map(|payload| frame.cauterize_payload(payload.as_ref()))
                     .unwrap_or(ReturnCode::EINVAL);
                 if result != ReturnCode::SUCCESS {
                     return result;
@@ -302,8 +301,8 @@ impl Driver for Helium<'a> {
                         if app.pending_tx.is_some() {
                             return ReturnCode::EBUSY;
                         }
-                        let address = addr as u16;
-
+                        let device_id = addr as u16;
+                        /*
                         let next_tx = app.app_cfg.as_ref().and_then(|cfg| {
                             if cfg.len() != 11 {
                                 return None;
@@ -321,6 +320,8 @@ impl Driver for Helium<'a> {
                             }
                             Some((address, Some(caut)))
                         });
+                        */
+                        let next_tx = Some((device_id, Some(CauterizeType::None)));
                         if next_tx.is_none() {
                             return ReturnCode::EINVAL;
                         }

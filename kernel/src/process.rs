@@ -231,6 +231,8 @@ pub trait ProcessType {
 
     /// Returns how many times this process has exceeded its timeslice.
     fn debug_timeslice_expiration_count(&self) -> usize;
+
+    fn debug_timeslice_expired(&self);
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -833,6 +835,11 @@ impl<S: UserspaceKernelBoundary, M: MPU> ProcessType for Process<'a, S, M> {
     fn debug_timeslice_expiration_count(&self) -> usize {
         self.debug
             .map_or(0, |debug| debug.timeslice_expiration_count)
+    }
+
+    fn debug_timeslice_expired(&self) {
+        self.debug
+            .map(|debug| debug.timeslice_expiration_count += 1);
     }
 
     unsafe fn fault_fmt(&self, writer: &mut Write) {

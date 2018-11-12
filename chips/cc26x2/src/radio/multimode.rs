@@ -62,7 +62,7 @@ impl Default for RadioMode {
 }
 
 static mut COMMAND_BUF: [u8; 256] = [0; 256];
-static mut TX_BUF: [u8; 240] = [0; 240];
+static mut TX_BUF: [u8; 250] = [0; 250];
 
 #[allow(unused)]
 // TODO Implement update config for changing radio modes and tie in the WIP power client to manage
