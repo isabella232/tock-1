@@ -35,7 +35,7 @@ impl Frame {
         let address_len = self.info.header.address.len();
         let foot = "}\0";
         let total_len = payload.len() + address_len + head.len() + fill.len() + foot.len();
-        debug!("LEN: {:?}", total_len);
+
         if total_len > 240 {
             return ReturnCode::ENOMEM;
         }
