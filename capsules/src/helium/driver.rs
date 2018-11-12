@@ -136,22 +136,19 @@ impl Helium<'a> {
     #[inline]
     fn perform_tx_sync(&self, appid: AppId) -> ReturnCode {
         self.do_with_app(appid, |app| {
-            /*
             let (device_id, caut_type) = match app.pending_tx.take() {
                 Some(pending_tx) => pending_tx,
                 None => {
                     return ReturnCode::SUCCESS;
                 }
             };
-*/
+
             let result = self.kernel_tx.take().map_or(ReturnCode::ENOMEM, |kbuf| {
                 let seq: u8 = 0;
-                let mut frame = match self.device.prepare_data_frame(
-                    kbuf,
-                    seq,
-                    0x0000,
-                    Some(CauterizeType::None),
-                ) {
+                let mut frame = match self
+                    .device
+                    .prepare_data_frame(kbuf, seq, device_id, caut_type)
+                {
                     Ok(frame) => frame,
                     Err(kbuf) => {
                         self.kernel_tx.replace(kbuf);
