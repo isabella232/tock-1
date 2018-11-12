@@ -35,8 +35,8 @@ impl Frame {
         let address_len = self.info.header.address.len();
         let foot = "}\0";
         let total_len = payload.len() + address_len + head.len() + fill.len() + foot.len();
-
-        if total_len > 200 {
+        debug!("LEN: {:?}", total_len);
+        if total_len > 240 {
             return ReturnCode::ENOMEM;
         }
         let mut idx = 0;
@@ -71,7 +71,7 @@ impl Frame {
     }
 
     pub fn cauterize_payload(&mut self, payload: &[u8]) -> ReturnCode {
-        if payload.len() > 180 {
+        if payload.len() > 240 {
             return ReturnCode::ENOMEM;
         } else {
             self.info.header.data_len = payload.len();
@@ -102,7 +102,7 @@ impl Frame {
 
         self.info.header.data_len = ectx.consume();
 
-        if self.info.header.data_len > 200 {
+        if self.info.header.data_len > 240 {
             return ReturnCode::ENOMEM;
         }
 
