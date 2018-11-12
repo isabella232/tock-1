@@ -136,19 +136,22 @@ impl Helium<'a> {
     #[inline]
     fn perform_tx_sync(&self, appid: AppId) -> ReturnCode {
         self.do_with_app(appid, |app| {
+            /*
             let (device_id, caut_type) = match app.pending_tx.take() {
                 Some(pending_tx) => pending_tx,
                 None => {
                     return ReturnCode::SUCCESS;
                 }
             };
-
+*/
             let result = self.kernel_tx.take().map_or(ReturnCode::ENOMEM, |kbuf| {
                 let seq: u8 = 0;
-                let mut frame = match self
-                    .device
-                    .prepare_data_frame(kbuf, seq, device_id, caut_type)
-                {
+                let mut frame = match self.device.prepare_data_frame(
+                    kbuf,
+                    seq,
+                    0x0000,
+                    Some(CauterizeType::None),
+                ) {
                     Ok(frame) => frame,
                     Err(kbuf) => {
                         self.kernel_tx.replace(kbuf);
@@ -161,7 +164,6 @@ impl Helium<'a> {
                     .take()
                     .as_ref()
                     .map(|payload| frame.append_payload(payload.as_ref()))
-//                    .map(|payload| frame.cauterize_payload(payload.as_ref()))
                     .unwrap_or(ReturnCode::EINVAL);
                 if result != ReturnCode::SUCCESS {
                     return result;
@@ -297,8 +299,8 @@ impl Driver for Helium<'a> {
                         if app.pending_tx.is_some() {
                             return ReturnCode::EBUSY;
                         }
-                        let address = addr as u16;
-
+                        let device_id = addr as u16;
+                        /*
                         let next_tx = app.app_cfg.as_ref().and_then(|cfg| {
                             if cfg.len() != 11 {
                                 return None;
@@ -316,6 +318,8 @@ impl Driver for Helium<'a> {
                             }
                             Some((address, Some(caut)))
                         });
+                        */
+                        let next_tx = Some((device_id, Some(CauterizeType::None)));
                         if next_tx.is_none() {
                             return ReturnCode::EINVAL;
                         }

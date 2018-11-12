@@ -97,7 +97,7 @@ impl<'a> kernel::Platform for Platform<'a> {
     }
 }
 
-static mut HELIUM_BUF: [u8; 200] = [0x00; 200];
+static mut HELIUM_BUF: [u8; 240] = [0x00; 240];
 
 mod cc1312r;
 mod cc1352p;
