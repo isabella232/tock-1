@@ -113,7 +113,7 @@ pub struct CommandTxLongRangeTest {
     pub start_time: u32,
     pub start_trigger: u8,
     pub condition: cmd::RfcCondition,
-    pub packet_conf: prop::RfcPacketConf,
+    pub packet_conf: prop::RfcPacketConfTx,
     pub packet_len: u8,
     pub sync_word: u32,
     pub packet_pointer: u32,
@@ -141,7 +141,7 @@ impl CommandTxLongRangeTest {
                 cond
             },
             packet_conf: {
-                let mut packet = prop::RfcPacketConf(0);
+                let mut packet = prop::RfcPacketConfTx(0);
                 packet.set_fs_off(false);
                 packet.set_use_crc(true);
                 packet.set_var_len(false);
@@ -302,7 +302,7 @@ pub struct CommandTxGfskTest {
     pub start_time: u32,
     pub start_trigger: u8,
     pub condition: cmd::RfcCondition,
-    pub packet_conf: prop::RfcPacketConf,
+    pub packet_conf: prop::RfcPacketConfTx,
     pub packet_len: u8,
     pub sync_word: u32,
     pub packet_pointer: u32,
@@ -330,7 +330,7 @@ impl CommandTxGfskTest {
                 cond
             },
             packet_conf: {
-                let mut packet = prop::RfcPacketConf(0);
+                let mut packet = prop::RfcPacketConfTx(0);
                 packet.set_fs_off(false);
                 packet.set_use_crc(true);
                 packet.set_var_len(true);

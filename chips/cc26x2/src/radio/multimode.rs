@@ -167,7 +167,7 @@ impl Radio {
                 cond
             };
             cmd.packet_conf = {
-                let mut packet = prop::RfcPacketConf(0);
+                let mut packet = prop::RfcPacketConfTx(0);
                 packet.set_fs_off(false);
                 packet.set_use_crc(true);
                 packet.set_var_len(true);
@@ -239,7 +239,7 @@ impl Radio {
                 cond
             };
             cmd.packet_conf = {
-                let mut packet = prop::RfcPacketConf(0);
+                let mut packet = prop::RfcPacketConfTx(0);
                 packet.set_fs_off(false);
                 packet.set_use_crc(true);
                 packet.set_var_len(true);

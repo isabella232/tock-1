@@ -346,6 +346,7 @@ impl Driver for Helium<'a> {
 impl device::TxClient for Helium<'a> {
     fn transmit_event(&self, buf: &'static mut [u8], result: ReturnCode) {
         self.kernel_tx.replace(buf);
+        debug!("driver TX event");
         self.current_app.take().map(|appid| {
             let _ = self.app.enter(appid, |app, _| {
                 app.tx_callback
