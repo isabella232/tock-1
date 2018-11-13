@@ -47,10 +47,15 @@ impl Frame {
         }
 
         for i in 0..address_len {
-            self.buf[idx] = self.info.header.address.as_ref()[i];
+            self.buf[idx] = {
+                if self.info.header.address.as_ref()[i] != 0 {
+                    self.info.header.address.as_ref()[i]
+                } else {
+                    break
+                }
+            };
             idx += 1;
         }
-
         for i in fill.bytes() {
             self.buf[idx] = i;
             idx += 1;
