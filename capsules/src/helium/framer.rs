@@ -51,7 +51,7 @@ impl Frame {
                 if self.info.header.address.as_ref()[i] != 0 {
                     self.info.header.address.as_ref()[i]
                 } else {
-                    break
+                    break;
                 }
             };
             idx += 1;
