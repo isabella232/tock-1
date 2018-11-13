@@ -167,13 +167,13 @@ unsafe fn configure_pins(pin: &Pinmap) {
     cc26x2::gpio::PORT[pin.pwm1].enable_pwm(pwm::Timer::GPT0B);
 
     if let Some(rf_2_4) = pin.rf_2_4 {
-        cc26x2::gpio::PORT[rf_2_4].enable_analog_input();
+        cc26x2::gpio::PORT[rf_2_4].enable_24ghz_output();
     }
     if let Some(rf_high_pa) = pin.rf_high_pa {
-        cc26x2::gpio::PORT[rf_high_pa].enable_analog_input();
+        cc26x2::gpio::PORT[rf_high_pa].enable_pa_output();
     }
     if let Some(rf_subg) = pin.rf_subg {
-        cc26x2::gpio::PORT[rf_subg].enable_analog_input();
+        cc26x2::gpio::PORT[rf_subg].enable_subg_output();
     }
 }
 
