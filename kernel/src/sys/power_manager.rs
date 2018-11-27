@@ -1,5 +1,5 @@
-use core::cell::Cell;
 use common::{List, ListLink, ListNode};
+use core::cell::Cell;
 
 /// Manages the details of how resources are enabled and disabled.
 pub trait ResourceManager {
@@ -63,7 +63,8 @@ impl<'a, T: ResourceManager> PowerManager<'a, T> {
     ///
     /// A resource is powered on when we have at least one active request.
     pub fn request_resource(&self, resource_id: u32) {
-        let resource = self.resources
+        let resource = self
+            .resources
             .iter()
             .find(|r| r.id.get() == resource_id)
             .expect("Resource not found.");
@@ -79,7 +80,8 @@ impl<'a, T: ResourceManager> PowerManager<'a, T> {
     ///
     /// A resource is powered off when no one needs it services anymore.
     pub fn release_resource(&self, resource_id: u32) {
-        let resource = self.resources
+        let resource = self
+            .resources
             .iter()
             .find(|r| r.id.get() == resource_id)
             .expect("Resource not found.");

@@ -31,6 +31,7 @@ pub mod ioc;
 pub mod memory_map;
 pub mod osc;
 pub mod peripheral_interrupts;
+pub mod power;
 pub mod prcm;
 pub mod pwm;
 pub mod radio;

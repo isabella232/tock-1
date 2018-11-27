@@ -1,5 +1,5 @@
-use core::cell::Cell;
 use common::{List, ListLink, ListNode};
+use core::cell::Cell;
 
 /// A PowerClient implements ways to get notified when the chip changes its power mode.
 pub trait PowerClient {
