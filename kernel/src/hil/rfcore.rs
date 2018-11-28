@@ -58,6 +58,7 @@ pub trait RadioDriver {
         tx_buf: &'static mut [u8],
         len: usize,
     ) -> (ReturnCode, Option<&'static mut [u8]>);
+    fn receive(&self) -> ReturnCode;
 }
 
 #[derive(PartialEq, Debug, Copy, Clone)]

@@ -184,13 +184,27 @@ pub mod prop_commands {
 
     bitfield! {
         #[derive(Copy, Clone)]
-        pub struct RfcPacketConf(u8);
+        pub struct RfcPacketConfTx(u8);
         impl Debug;
         pub _fs_off, set_fs_off         : 0;
         pub _reserved, _set_reserved    : 2, 1;
         pub _use_crc, set_use_crc       : 3;
         pub _var_len, set_var_len       : 4;
         pub _reserved2, _set_reserved2  : 7, 5;
+    }
+
+    bitfield! {
+        #[derive(Copy, Clone)]
+        pub struct RfcPacketConfRx(u8);
+        impl Debug;
+        pub _fs_off, set_fs_off                 : 0;
+        pub _brepeat_ok, set_brepeat_ok        : 1;
+        pub _brepeat_nok, set_brepeat_nok      : 2;
+        pub _use_crc, set_use_crc               : 3;
+        pub _var_len, set_var_len               : 4;
+        pub _check_address, set_check_address  : 5;
+        pub _end_type, set_end_type            : 6;
+        pub _filter_op, set_filter_op          : 7;
     }
 
     bitfield! {
@@ -273,7 +287,7 @@ pub mod prop_commands {
         pub start_time: u32,
         pub start_trigger: u8,
         pub condition: RfcCondition,
-        pub packet_conf: RfcPacketConf,
+        pub packet_conf: RfcPacketConfTx,
         pub packet_len: u8,
         pub sync_word: u32,
         pub packet_pointer: u32,
@@ -324,6 +338,19 @@ pub mod prop_commands {
         pub start_time: u32,
         pub start_trigger: u8,
         pub condition: RfcCondition,
+        pub packet_conf: RfcPacketConfRx,
+        pub rx_config: u8,
+        pub sync_word: u32,
+        pub max_packet_len: u8,
+        pub address_0: u8,
+        pub address_1: u8,
+        pub end_trigger: u8,
+        pub end_time: u8,
+        pub p_queue: u32,
+        pub p_output: u32,
     }
 
+    unsafe impl RadioCommand for CommandRx {
+        fn guard(&mut self) {}
+    }
 }
