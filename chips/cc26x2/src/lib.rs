@@ -40,4 +40,5 @@ pub mod rtc;
 pub mod setup;
 pub mod trng;
 pub mod uart;
+pub mod udma;
 pub use crt1::init;

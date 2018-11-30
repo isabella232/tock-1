@@ -1,76 +1,61 @@
-pub unsafe extern "C" fn ddi16bit_write(
-    ui32Base: u32,
-    ui32Reg: u32,
-    mut ui32Mask: u32,
-    ui32WrData: u32,
-) {
-    let mut ui32RegAddr: u32;
-    let ui32Data: u32;
-    ui32RegAddr = ui32Base
-        .wrapping_add(ui32Reg << 1i32)
-        .wrapping_add(0x400u32);
-    if ui32Mask & 0xffff0000u32 != 0 {
-        ui32RegAddr = ui32RegAddr.wrapping_add(4u32);
-        ui32Mask = ui32Mask >> 16i32;
+pub fn ddi16bit_write(base: u32, reg: u32, mut mask: u32, wr_data: u32) {
+    let mut reg_addr = base.wrapping_add(reg << 1).wrapping_add(0x400);
+    if mask & 0xffff0000 != 0 {
+        reg_addr = reg_addr.wrapping_add(4);
+        mask = mask >> 16;
     }
-    ui32Data = if ui32WrData != 0 { ui32Mask } else { 0x0u32 };
-    *(ui32RegAddr as (*mut usize)) = (ui32Mask << 16i32 | ui32Data) as (usize);
+    let data: u32;
+    if wr_data != 0 {
+        data = mask;
+    } else {
+        data = 0;
+    }
+    let ptr = reg_addr as *mut usize;
+    unsafe { *ptr = (mask << 16 | data) as usize };
 }
 
-pub unsafe extern "C" fn ddi16bitfield_write(
-    ui32Base: u32,
-    ui32Reg: u32,
-    mut ui32Mask: u32,
-    mut ui32Shift: u32,
-    ui32Data: u16,
-) {
-    let mut ui32RegAddr: u32;
-    let ui32WrData: u32;
-    ui32RegAddr = ui32Base
-        .wrapping_add(ui32Reg << 1u32)
-        .wrapping_add(0x400u32);
-    if ui32Shift >= 16u32 {
-        ui32Shift = ui32Shift.wrapping_sub(16u32);
-        ui32RegAddr = ui32RegAddr.wrapping_add(4u32);
-        ui32Mask = ui32Mask >> 16i32;
+pub fn ddi16bitfield_write(base: u32, reg: u32, mut mask: u32, mut shift: u32, data: u16) {
+    let mut reg_addr = base.wrapping_add(reg << 1).wrapping_add(0x400);
+    if shift >= 16 {
+        shift = shift.wrapping_sub(16);
+        reg_addr = reg_addr.wrapping_add(4);
+        mask = mask >> 16 as i32;
     }
-    ui32WrData = (ui32Data as (i32) << ui32Shift) as (u32);
-    *(ui32RegAddr as (*mut usize)) = (ui32Mask << 16i32 | ui32WrData) as (usize);
+    let wr_data = data << shift;
+
+    let ptr = reg_addr as *mut usize;
+    unsafe { *ptr = (mask << 16 | wr_data as u32) as usize };
 }
 
-pub unsafe extern "C" fn ddi16bit_read(ui32Base: u32, ui32Reg: u32, mut ui32Mask: u32) -> u16 {
-    let mut ui32RegAddr: u32;
-    let mut ui16Data: u16;
-    ui32RegAddr = ui32Base.wrapping_add(ui32Reg).wrapping_add(0x0u32);
-    if ui32Mask & 0xffff0000u32 != 0 {
-        ui32RegAddr = ui32RegAddr.wrapping_add(2u32);
-        ui32Mask = ui32Mask >> 16i32;
+pub fn ddi16bit_read(base: u32, reg: u32, mut mask: u32) -> u16 {
+    let mut reg_addr = base.wrapping_add(reg).wrapping_add(0);
+    if mask & 0xffff0000 != 0 {
+        reg_addr = reg_addr.wrapping_add(2);
+        mask = mask >> 16 as i32;
     }
-    ui16Data = *(ui32RegAddr as (*mut u16));
-    ui16Data = (ui16Data as (u32) & ui32Mask) as (u16);
-    ui16Data
+    let ptr = reg_addr as *mut usize;
+    let mut data: u16;
+    unsafe { data = *ptr as u16 };
+    data = (data as u32 & mask) as u16;
+    data
 }
 
-pub unsafe extern "C" fn ddi16bitfield_read(
-    ui32Base: u32,
-    ui32Reg: u32,
-    mut ui32Mask: u32,
-    mut ui32Shift: u32,
-) -> u16 {
-    let mut ui32RegAddr: u32;
-    let mut ui16Data: u16;
-    ui32RegAddr = ui32Base.wrapping_add(ui32Reg).wrapping_add(0x0u32);
-    if ui32Shift >= 16u32 {
-        ui32Shift = ui32Shift.wrapping_sub(16u32);
-        ui32RegAddr = ui32RegAddr.wrapping_add(2u32);
-        ui32Mask = ui32Mask >> 16i32;
+pub fn ddi16bitfield_read(base: u32, reg: u32, mut mask: u32, mut shift: u32) -> u16 {
+    let mut reg_addr = base.wrapping_add(reg).wrapping_add(0);
+    if shift >= 16 {
+        shift = shift.wrapping_sub(16);
+        reg_addr = reg_addr.wrapping_add(2);
+        mask = mask >> 16;
     }
-    ui16Data = *(ui32RegAddr as (*mut u16));
-    ui16Data = (ui16Data as (u32) & ui32Mask) as (u16);
-    ui16Data = (ui16Data as (i32) >> ui32Shift) as (u16);
-    ui16Data
+    let ptr = reg_addr as *mut usize;
+    let mut data: u16;
+    unsafe { data = *ptr as u16 };
+    data = (data as u32 & mask) as u16;
+    data = data >> shift as u16;
+    data
 }
 
-pub unsafe extern "C" fn ddi32reg_write(ui32Base: u32, ui32Reg: u32, ui32Val: u32) {
-    *(ui32Base.wrapping_add(ui32Reg) as (*mut usize)) = ui32Val as (usize);
+pub fn ddi32reg_write(base: u32, reg: u32, val: u32) {
+    let ptr = base.wrapping_add(reg) as *mut usize;
+    unsafe { *ptr = val as usize };
 }
