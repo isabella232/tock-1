@@ -144,6 +144,4 @@ impl Udma {
         }
         return channel_en;
     }
-
-    pub fn channel_control_set(struct_index: u32, control: u32) {}
 }
