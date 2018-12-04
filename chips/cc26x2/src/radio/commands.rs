@@ -216,6 +216,37 @@ pub mod prop_commands {
         pub _reserved, _set_reserved    : 7;
     }
 
+    /*
+    bitfield! {
+        #[derive(Copy, Clone)]
+        pub struct RxConfiguration(u8);
+        impl Debug;
+        pub _auto_flush_ignored, set_auto_flush_ignored     : 0;
+        pub _auto_flush_crc_error, set_auto_flush_crc_error : 1;
+        pub _reserved, _set_reserved:                       : 2;
+        pub _include_header, set_include_header:            : 3;
+        pub _include_crc, set_include_crc:                  : 4;
+        pub _append_rssi, set_append_rssi:                  : 5;
+        pub _append_timestamp, set_append_timestamp:        : 6;
+        pub _append_status, set_append_status:              : 7;
+    }
+    */
+
+    #[repr(C)]
+    pub struct DataQueue {
+        current_entry: &'static [u8],
+        next_entry: &'static [u8],
+    }
+
+    impl DataQueue {
+        pub fn new(q1: &'static [u8], q2: &'static [u8]) -> DataQueue {
+            DataQueue {
+                current_entry: q1,
+                next_entry: q2,
+            }
+        }
+    }
+
     // Radio Operation Commands
     #[repr(C)]
     #[derive(Copy, Clone)]
@@ -310,6 +341,10 @@ pub mod prop_commands {
         pub frequency: u16,
         pub fract_freq: u16,
         pub synth_conf: RfcSynthConf,
+        pub dummy0: u8,
+        pub dummy1: u8,
+        pub dummy2: u8,
+        pub dummy3: u16,
     }
 
     unsafe impl RadioCommand for CommandFS {
@@ -339,7 +374,7 @@ pub mod prop_commands {
         pub start_trigger: u8,
         pub condition: RfcCondition,
         pub packet_conf: RfcPacketConfRx,
-        pub rx_config: u8,
+        pub rx_config: u8, //RxConfiguration,
         pub sync_word: u32,
         pub max_packet_len: u8,
         pub address_0: u8,

@@ -283,7 +283,9 @@ impl RFCore {
             CPEInterrupts::INTERNAL_ERROR::SET
                 + CPEInterrupts::COMMAND_DONE::SET
                 + CPEInterrupts::TX_DONE::SET
-                + CPEInterrupts::BOOT_DONE::SET,
+                + CPEInterrupts::BOOT_DONE::SET
+                + CPEInterrupts::RX_OK::SET
+                + CPEInterrupts::RX_NOK::SET,
         );
         dbell_regs.rfcpe_ifg.set(0x0000);
 
@@ -528,6 +530,7 @@ impl RFCore {
             }
             timeout += 1;
         }
+        debug!("timeout: {:X?}", self.status.get());
         Err(status as u32)
     }
 
@@ -587,6 +590,7 @@ impl RFCore {
             .is_set(CPEInterrupts::LAST_COMMAND_DONE);
         let tx_done = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::TX_DONE);
         let rx_ok = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_OK);
+        let rx_nok = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_NOK);
         dbell_regs.rfcpe_ifg.set(0);
         if tx_done {
             self.client.get().map(|client| client.tx_done());
@@ -594,7 +598,7 @@ impl RFCore {
         if command_done || last_command_done {
             self.client.get().map(|client| client.command_done());
         }
-        if rx_ok {
+        if rx_ok || rx_nok {
             self.client.get().map(|client| client.rx_ok());
         }
 

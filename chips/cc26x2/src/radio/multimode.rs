@@ -1,10 +1,12 @@
 use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
+use kernel::common::StaticRef;
 use kernel::hil::rfcore;
 use kernel::ReturnCode;
 use osc;
 use radio::commands::{
-    prop_commands as prop, DirectCommand, RadioCommand, RfcCondition, GFSK_RFPARAMS, LR_RFPARAMS,
+    prop_commands as prop, prop_commands::DataQueue, DirectCommand, RadioCommand, RfcCondition,
+    GFSK_RFPARAMS, LR_RFPARAMS,
 };
 use radio::patches::{
     patch_cpe_prop as cpe, patch_mce_genfsk as mce, patch_mce_longrange as mce_lr,
@@ -64,6 +66,10 @@ impl Default for RadioMode {
 static mut COMMAND_BUF: [u8; 256] = [0; 256];
 static mut TX_BUF: [u8; 250] = [0; 250];
 static mut RX_BUF: [u8; 250] = [0; 250];
+static mut RX_QUEUE0: [u8; 250] = [0; 250];
+static mut RX_QUEUE1: [u8; 250] = [0; 250];
+
+const RF_QUEUE: StaticRef<u32> = unsafe { StaticRef::new(DataQueue::new(RX_QUEUE0, RX_QUEUE1) as *const u32) };
 
 #[allow(unused)]
 // TODO Implement update config for changing radio modes and tie in the WIP power client to manage
@@ -200,6 +206,7 @@ impl Radio {
             RX_BUF[i] = *c;
         }
         */
+
         let cmd: &mut prop::CommandRx = &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandRx);
         cmd.command_no = 0x3801;
         cmd.status = 0;
@@ -230,7 +237,7 @@ impl Radio {
         cmd.address_1 = 1;
         cmd.end_trigger = 0;
         cmd.end_time = 0;
-        cmd.p_queue = 0;
+        cmd.p_queue = RX_QUEUE0.as_ptr() as u32;
         cmd.p_output = RX_BUF.as_ptr() as u32;
 
         RadioCommand::guard(cmd);
@@ -263,7 +270,7 @@ impl Radio {
 
         self.test_radio_fs();
 
-        self.test_radio_tx();
+        self.test_radio_rx();
     }
 
     fn test_radio_tx(&self) {
@@ -314,6 +321,57 @@ impl Radio {
         }
     }
 
+    fn test_radio_rx(&self) {
+        unsafe {
+            for i in 0..COMMAND_BUF.len() {
+                COMMAND_BUF[i] = 0;
+            }
+            let dq = DataQueue::new(&mut RX_QUEUE0, &mut RX_QUEUE1);
+            let p_dq = &*dq;
+            // let p_dq = *r_dq as u32;
+
+            let cmd: &mut prop::CommandRx =
+                &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandRx);
+            cmd.command_no = 0x3802;
+            cmd.status = 0;
+            cmd.p_nextop = 0;
+            cmd.start_time = 0;
+            cmd.start_trigger = 0;
+            cmd.condition = {
+                let mut cond = RfcCondition(0);
+                cond.set_rule(0x01);
+                cond
+            };
+            cmd.packet_conf = {
+                let mut packet = prop::RfcPacketConfRx(0);
+                packet.set_fs_off(false);
+                packet.set_brepeat_ok(false);
+                packet.set_brepeat_nok(false);
+                packet.set_use_crc(true);
+                packet.set_var_len(true);
+                packet.set_check_address(false);
+                packet.set_end_type(false);
+                packet.set_filter_op(false);
+                packet
+            };
+            cmd.rx_config = 0b1000100;
+            cmd.sync_word = 0x930B51DE;
+            cmd.max_packet_len = 250;
+            cmd.address_0 = 0xAA;
+            cmd.address_1 = 0xBB;
+            cmd.end_trigger = 0;
+            cmd.end_time = 0;
+            cmd.p_queue = 0;
+            cmd.p_output = RX_BUF.as_ptr() as u32;
+
+            RadioCommand::guard(cmd);
+            self.rfc
+                .send_sync(cmd)
+                .and_then(|_| self.rfc.wait(cmd))
+                .ok();
+        }
+    }
+
     fn test_radio_fs(&self) {
         let mut cmd_fs = prop::CommandFS {
             command_no: 0x0803,
@@ -334,6 +392,10 @@ impl Radio {
                 synth.set_ref_freq(0x00);
                 synth
             },
+            dummy0: 0x00,
+            dummy1: 0x00,
+            dummy2: 0x00,
+            dummy3: 0x0000,
         };
 
         RadioCommand::guard(&mut cmd_fs);
@@ -385,12 +447,15 @@ impl rfc::RFCoreClient for Radio {
     }
 
     fn rx_ok(&self) {
+        debug!("Rx cb fired!");
         unsafe {
             rtc::RTC.sync();
             self.rx_buf.put(Some(&mut RX_BUF));
         };
+        // debug!("RX: {:?}", RX_BUF);
 
         self.rx_buf.take().map_or(ReturnCode::ERESERVE, |rbuf| {
+            debug!("RX: {:?}", rbuf);
             let frame_len = rbuf.len();
             let crc_valid = true;
             self.rx_client.map(move |client| {
@@ -557,6 +622,10 @@ impl rfcore::RadioConfig for Radio {
                 synth.set_ref_freq(0x00);
                 synth
             },
+            dummy0: 0x00,
+            dummy1: 0x00,
+            dummy2: 0x00,
+            dummy3: 0x0000,
         };
 
         RadioCommand::guard(&mut cmd_fs);
