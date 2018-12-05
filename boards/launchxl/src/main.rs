@@ -24,7 +24,6 @@ use kernel::hil::gpio::Pin;
 use kernel::hil::gpio::PinCtl;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::rng::Rng;
-use kernel::Chip;
 
 #[macro_use]
 pub mod io;
@@ -391,8 +390,7 @@ pub unsafe fn reset_handler() {
 
     kernel::procs::load_processes(
         board_kernel,
-        &cortexm4::syscall::SysCall::new(),
-        chip.mpu(),
+        chip,
         &_sapps as *const u8,
         &mut APP_MEMORY,
         &mut PROCESSES,
