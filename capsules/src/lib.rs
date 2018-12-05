@@ -1,6 +1,4 @@
-#![feature(const_fn)]
-#![feature(infer_outlives_requirements, in_band_lifetimes)]
-#![feature(tool_attributes)]
+#![feature(const_fn, in_band_lifetimes)]
 #![forbid(unsafe_code)]
 #![no_std]
 
@@ -27,6 +25,7 @@ pub mod console;
 pub mod crc;
 pub mod dac;
 pub mod debug_process_restart;
+pub mod driver;
 pub mod fm25cl;
 pub mod fxos8700cq;
 pub mod gpio;

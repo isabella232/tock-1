@@ -1,4 +1,4 @@
-#![feature(asm, const_fn, core_intrinsics, try_from, used)]
+#![feature(asm, const_fn, core_intrinsics, try_from)]
 #![no_std]
 #![crate_name = "nrf52"]
 #![crate_type = "rlib"]
@@ -6,6 +6,7 @@
 #[allow(unused_imports)]
 extern crate cortexm4;
 extern crate nrf5x;
+extern crate tock_rt0;
 
 #[allow(unused)]
 #[macro_use(
