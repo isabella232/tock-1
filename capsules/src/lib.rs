@@ -1,6 +1,4 @@
-#![feature(const_fn)]
-#![feature(infer_outlives_requirements, in_band_lifetimes)]
-#![feature(tool_attributes)]
+#![feature(const_fn, in_band_lifetimes)]
 #![forbid(unsafe_code)]
 #![no_std]
 
@@ -27,6 +25,7 @@ pub mod console;
 pub mod crc;
 pub mod dac;
 pub mod debug_process_restart;
+pub mod driver;
 pub mod fm25cl;
 pub mod fxos8700cq;
 pub mod gpio;
@@ -47,6 +46,7 @@ pub mod nonvolatile_storage_driver;
 pub mod nonvolatile_to_pages;
 pub mod nrf51822_serialization;
 pub mod pca9544a;
+pub mod process_console;
 pub mod rf233;
 pub mod rf233_const;
 pub mod rng;

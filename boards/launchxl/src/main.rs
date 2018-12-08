@@ -1,6 +1,6 @@
 #![no_std]
 #![no_main]
-#![feature(lang_items, asm, panic_implementation)]
+#![feature(lang_items, asm)]
 
 extern crate capsules;
 extern crate cc26x2;
@@ -24,7 +24,6 @@ use kernel::hil::gpio::Pin;
 use kernel::hil::gpio::PinCtl;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::rng::Rng;
-use kernel::Chip;
 
 #[macro_use]
 pub mod io;
@@ -43,12 +42,12 @@ pub const HFREQ: u32 = 48 * 1_000_000;
 const FAULT_RESPONSE: kernel::procs::FaultResponse = kernel::procs::FaultResponse::Panic;
 
 // Number of concurrent processes this platform supports.
-const NUM_PROCS: usize = 2;
-static mut PROCESSES: [Option<&'static kernel::procs::ProcessType>; NUM_PROCS] = [None, None];
+const NUM_PROCS: usize = 3;
+static mut PROCESSES: [Option<&'static kernel::procs::ProcessType>; NUM_PROCS] = [None, None, None];
 
 #[link_section = ".app_memory"]
 // Give half of RAM to be dedicated APP memory
-static mut APP_MEMORY: [u8; 0xA000] = [0; 0xA000];
+static mut APP_MEMORY: [u8; 0x10000] = [0; 0x10000];
 
 /// Dummy buffer that causes the linker to reserve enough space for the stack.
 #[no_mangle]
@@ -66,6 +65,7 @@ pub struct Platform {
     >,
     rng: &'static capsules::rng::RngDriver<'static>,
     i2c_master: &'static capsules::i2c_master::I2CMasterDriver<cc26x2::i2c::I2CMaster<'static>>,
+    ipc: kernel::ipc::IPC,
 }
 
 impl kernel::Platform for Platform {
@@ -81,6 +81,7 @@ impl kernel::Platform for Platform {
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules::i2c_master::DRIVER_NUM => f(Some(self.i2c_master)),
+            kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             _ => f(None),
         }
     }
@@ -364,11 +365,12 @@ pub unsafe fn reset_handler() {
         pwm::Signal::new(pwm::Timer::GPT3B),
     ];
 
-    // all PWM channels are enabled, but not necessarily corrected
+    // all PWM channels are enabled
     for pwm_channel in pwm_channels.iter() {
         pwm_channel.enable();
     }
-    pwm_channels[0].configure(0xFFFF, 0xFFFF >> 1);
+
+    let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
 
     let launchxl = Platform {
         console,
@@ -378,6 +380,7 @@ pub unsafe fn reset_handler() {
         alarm,
         rng,
         i2c_master,
+        ipc,
     };
 
     let chip = static_init!(cc26x2::chip::Cc26X2, cc26x2::chip::Cc26X2::new(HFREQ));
@@ -387,12 +390,9 @@ pub unsafe fn reset_handler() {
         static _sapps: u8;
     }
 
-    let ipc = &kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
-
     kernel::procs::load_processes(
         board_kernel,
-        &cortexm4::syscall::SysCall::new(),
-        chip.mpu(),
+        chip,
         &_sapps as *const u8,
         &mut APP_MEMORY,
         &mut PROCESSES,
@@ -400,6 +400,5 @@ pub unsafe fn reset_handler() {
         &process_management_capability,
     );
 
-    board_kernel.kernel_loop(&launchxl, chip, Some(&ipc), &main_loop_capability);
-    loop {}
+    board_kernel.kernel_loop(&launchxl, chip, Some(&launchxl.ipc), &main_loop_capability);
 }
