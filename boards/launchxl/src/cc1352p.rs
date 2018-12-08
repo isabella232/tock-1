@@ -3,7 +3,7 @@ use enum_primitive::cast::FromPrimitive;
 
 pub const CHIP_ID: u32 = 0x2282f000;
 
-enum_from_primitive!{
+enum_from_primitive! {
 pub enum PIN_FN {
     UART0_RX = 12,
     UART0_TX = 13,
