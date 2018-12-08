@@ -371,12 +371,8 @@ impl Clock {
         let regs = PRCM_BASE;
         regs.sec_dma_clk_run
             .modify(SECDMAClockGate::TRNG_CLK_EN::SET);
-        /*
-                regs.sec_dma_clk_sleep
-                    .modify(SECDMAClockGate::TRNG_CLK_EN::SET);
-                regs.sec_dma_clk_deep_sleep
-                    .modify(SECDMAClockGate::TRNG_CLK_EN::SET);
-        */
+        .modify(SECDMAClockGate::TRNG_CLK_EN::SET);
+
         prcm_commit();
     }
 
