@@ -13,6 +13,8 @@ pub struct Cc26X2 {
 }
 
 impl Cc26X2 {
+    // internal HFREQ is 40_000_000 Hz
+    // but if you are using an external HFREQ to derive systick, you will want to input value here (in Hz)
     pub unsafe fn new(hfreq: u32) -> Cc26X2 {
         Cc26X2 {
             mpu: cortexm4::mpu::MPU::new(),
