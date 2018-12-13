@@ -37,11 +37,20 @@ pub mod ddi;
 */
 use aux;
 use gpio;
+use kernel::common::StaticRef;
 use prcm;
 use rtc;
 
 pub fn perform() {
     unsafe { SetupTrimDevice() }
+}
+
+const FCFG_1_REVISION: StaticRef<u32> = unsafe { StaticRef::new(0x5000131C as *const u32) };
+
+pub fn setup_trim_device() {
+    let mut fcfg1_revision: StaticRef<u32> = FCFG_1_REVISION;
+
+    // Enable Standby in Flash
 }
 
 pub unsafe extern "C" fn SetupTrimDevice() {

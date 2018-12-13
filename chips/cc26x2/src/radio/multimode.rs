@@ -1,17 +1,16 @@
 use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
-use kernel::common::StaticRef;
 use kernel::hil::rfcore;
 use kernel::ReturnCode;
 use osc;
 use radio::commands::{
-    prop_commands as prop, prop_commands::DataQueue, DirectCommand, RadioCommand, RfcCondition,
-    GFSK_RFPARAMS, LR_RFPARAMS,
+    prop_commands as prop, DirectCommand, RadioCommand, RfcCondition, GFSK_RFPARAMS, LR_RFPARAMS,
 };
 use radio::patches::{
     patch_cpe_prop as cpe, patch_mce_genfsk as mce, patch_mce_longrange as mce_lr,
     patch_rfe_genfsk as rfe,
 };
+use radio::queue::RFBuffer;
 use radio::rfc;
 use rtc;
 
@@ -65,11 +64,9 @@ impl Default for RadioMode {
 
 static mut COMMAND_BUF: [u8; 256] = [0; 256];
 static mut TX_BUF: [u8; 250] = [0; 250];
-static mut RX_BUF: [u8; 250] = [0; 250];
-static mut RX_QUEUE0: [u8; 250] = [0; 250];
-static mut RX_QUEUE1: [u8; 250] = [0; 250];
-
-const RF_QUEUE: StaticRef<u32> = unsafe { StaticRef::new(DataQueue::new(RX_QUEUE0, RX_QUEUE1) as *const u32) };
+static mut RX_BUF: [u8; 300] = [0; 300];
+static mut RX_QUEUE: [u8; 255] = [0; 255];
+// static mut RX_QUEUE1: [u8; 230] = [0; 230];
 
 #[allow(unused)]
 // TODO Implement update config for changing radio modes and tie in the WIP power client to manage
@@ -237,8 +234,8 @@ impl Radio {
         cmd.address_1 = 1;
         cmd.end_trigger = 0;
         cmd.end_time = 0;
-        cmd.p_queue = RX_QUEUE0.as_ptr() as u32;
-        cmd.p_output = RX_BUF.as_ptr() as u32;
+        cmd.p_queue = RX_BUF.as_ptr() as u32;
+        cmd.p_output = 0;
 
         RadioCommand::guard(cmd);
         self.rfc
@@ -258,6 +255,7 @@ impl Radio {
 
         cpe::CPE_PATCH.apply_patch();
         mce::MCE_PATCH.apply_patch();
+        // mce_lr::LONGRANGE_PATCH.apply_patch();
         rfe::RFE_PATCH.apply_patch();
         self.rfc.start_rat();
 
@@ -326,12 +324,14 @@ impl Radio {
             for i in 0..COMMAND_BUF.len() {
                 COMMAND_BUF[i] = 0;
             }
-            let dq = DataQueue::new(&mut RX_QUEUE0, &mut RX_QUEUE1);
-            let p_dq = &*dq;
-            // let p_dq = *r_dq as u32;
 
             let cmd: &mut prop::CommandRx =
                 &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandRx);
+
+            let mut buffer = RFBuffer::new(&mut RX_QUEUE);
+
+            let p_buffer: *mut RFBuffer<u8> = &mut buffer;
+
             cmd.command_no = 0x3802;
             cmd.status = 0;
             cmd.p_nextop = 0;
@@ -345,8 +345,8 @@ impl Radio {
             cmd.packet_conf = {
                 let mut packet = prop::RfcPacketConfRx(0);
                 packet.set_fs_off(false);
-                packet.set_brepeat_ok(false);
-                packet.set_brepeat_nok(false);
+                packet.set_brepeat_ok(true);
+                packet.set_brepeat_nok(true);
                 packet.set_use_crc(true);
                 packet.set_var_len(true);
                 packet.set_check_address(false);
@@ -354,14 +354,14 @@ impl Radio {
                 packet.set_filter_op(false);
                 packet
             };
-            cmd.rx_config = 0b1000100;
+            cmd.rx_config = 0b10001011;
             cmd.sync_word = 0x930B51DE;
-            cmd.max_packet_len = 250;
+            cmd.max_packet_len = 0x80;
             cmd.address_0 = 0xAA;
             cmd.address_1 = 0xBB;
-            cmd.end_trigger = 0;
+            cmd.end_trigger = 0b00000001;
             cmd.end_time = 0;
-            cmd.p_queue = 0;
+            cmd.p_queue = p_buffer as u32;
             cmd.p_output = RX_BUF.as_ptr() as u32;
 
             RadioCommand::guard(cmd);
@@ -451,8 +451,7 @@ impl rfc::RFCoreClient for Radio {
         unsafe {
             rtc::RTC.sync();
             self.rx_buf.put(Some(&mut RX_BUF));
-        };
-        // debug!("RX: {:?}", RX_BUF);
+        }
 
         self.rx_buf.take().map_or(ReturnCode::ERESERVE, |rbuf| {
             debug!("RX: {:?}", rbuf);

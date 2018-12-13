@@ -233,16 +233,31 @@ pub mod prop_commands {
     */
 
     #[repr(C)]
+    pub struct DataConfig {
+        size: u8,
+        len: u8,
+        irq_len: u8,
+    }
+
+    #[repr(C)]
+    pub struct DataEntry {
+        next_entry: *mut u8,
+        status: u8,
+        config: DataConfig,
+        length: u16,
+    }
+
+    #[repr(C)]
     pub struct DataQueue {
-        current_entry: &'static [u8],
-        next_entry: &'static [u8],
+        pub current_entry: u8, //&'static [u8],
+        pub next_entry: u8,
     }
 
     impl DataQueue {
-        pub fn new(q1: &'static [u8], q2: &'static [u8]) -> DataQueue {
+        pub fn new(a: u8) -> DataQueue {
             DataQueue {
-                current_entry: q1,
-                next_entry: q2,
+                current_entry: a,
+                next_entry: 0,
             }
         }
     }
