@@ -65,8 +65,7 @@ impl Default for RadioMode {
 static mut COMMAND_BUF: [u8; 256] = [0; 256];
 static mut TX_BUF: [u8; 250] = [0; 250];
 static mut RX_BUF: [u8; 300] = [0; 300];
-static mut RX_QUEUE: [u8; 255] = [0; 255];
-// static mut RX_QUEUE1: [u8; 230] = [0; 230];
+static mut RX_DAT: [u8; 16] = [0; 16];
 
 #[allow(unused)]
 // TODO Implement update config for changing radio modes and tie in the WIP power client to manage
@@ -363,8 +362,8 @@ impl Radio {
             cmd.address_1 = 0xBB;
             cmd.end_trigger = 0b00000001;
             cmd.end_time = 0;
-            cmd.p_queue = RX_QUEUE.as_ptr() as u32;
-            cmd.p_output = RX_BUF.as_ptr() as u32;
+            cmd.p_queue = 0; // RX_BUF.as_ptr() as u32;
+            cmd.p_output = RX_DAT.as_ptr() as u32;
 
             RadioCommand::guard(cmd);
             self.rfc
@@ -452,7 +451,7 @@ impl rfc::RFCoreClient for Radio {
         debug!("Rx cb fired!");
         unsafe {
             rtc::RTC.sync();
-            self.rx_buf.put(Some(&mut RX_BUF));
+            self.rx_buf.put(Some(&mut RX_DAT));
         }
 
         self.rx_buf.take().map_or(ReturnCode::ERESERVE, |rbuf| {
