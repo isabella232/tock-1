@@ -328,9 +328,11 @@ impl Radio {
             let cmd: &mut prop::CommandRx =
                 &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandRx);
 
+            /*
             let mut buffer = RFBuffer::new(&mut RX_QUEUE);
 
             let p_buffer: *mut RFBuffer<u8> = &mut buffer;
+            */
 
             cmd.command_no = 0x3802;
             cmd.status = 0;
@@ -361,7 +363,7 @@ impl Radio {
             cmd.address_1 = 0xBB;
             cmd.end_trigger = 0b00000001;
             cmd.end_time = 0;
-            cmd.p_queue = p_buffer as u32;
+            cmd.p_queue = RX_QUEUE.as_ptr() as u32;
             cmd.p_output = RX_BUF.as_ptr() as u32;
 
             RadioCommand::guard(cmd);
