@@ -1,78 +1,33 @@
+use core;
 use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::rfcore;
 use kernel::ReturnCode;
 use osc;
 use radio::commands::{
-    prop_commands as prop, DirectCommand, RadioCommand, RfcCondition, GFSK_RFPARAMS, LR_RFPARAMS,
+    prop_commands as prop, AddDataEntry, DirectCommand, RadioCommand, RfcCondition, GFSK_RFPARAMS,
+    LR_RFPARAMS,
 };
 use radio::patches::{
     patch_cpe_prop as cpe, patch_mce_genfsk as mce, patch_mce_longrange as mce_lr,
     patch_rfe_genfsk as rfe,
 };
-use radio::queue::RFBuffer;
+use radio::queue;
 use radio::rfc;
 use rtc;
 
 const TEST_PAYLOAD: [u32; 30] = [0; 30];
 
-#[allow(unused)]
-#[derive(Copy, Clone)]
-pub enum CpePatch {
-    GenFsk { patch: cpe::Patches },
-}
-
-#[allow(unused)]
-#[derive(Copy, Clone)]
-pub enum RfePatch {
-    #[derive(Copy, Clone)]
-    GenFsk { patch: rfe::Patches },
-}
-
-#[allow(unused)]
-#[derive(Copy, Clone)]
-pub enum McePatch {
-    GenFsk { patch: mce::Patches },
-    LongRange { patch: mce_lr::Patches },
-}
-
-#[allow(unused)]
-#[derive(Copy, Clone)]
-pub struct RadioMode {
-    mode: rfc::RfcMode,
-    cpe_patch: CpePatch,
-    rfe_patch: RfePatch,
-    mce_patch: McePatch,
-}
-
-impl Default for RadioMode {
-    fn default() -> RadioMode {
-        RadioMode {
-            mode: rfc::RfcMode::Unchanged,
-            cpe_patch: CpePatch::GenFsk {
-                patch: cpe::CPE_PATCH,
-            },
-            rfe_patch: RfePatch::GenFsk {
-                patch: rfe::RFE_PATCH,
-            },
-            mce_patch: McePatch::GenFsk {
-                patch: mce::MCE_PATCH,
-            },
-        }
-    }
-}
-
 static mut COMMAND_BUF: [u8; 256] = [0; 256];
 static mut TX_BUF: [u8; 250] = [0; 250];
-static mut RX_BUF: [u8; 300] = [0; 300];
-static mut RX_DAT: [u8; 16] = [0; 16];
+static mut RX_BUF: [u8; 500] = [0; 500];
+static mut RX_DAT: [u8; 300] = [0; 300];
 
 #[allow(unused)]
 // TODO Implement update config for changing radio modes and tie in the WIP power client to manage
 // power state.
 pub struct Radio {
     rfc: &'static rfc::RFCore,
-    mode: OptionalCell<RadioMode>,
     tx_client: OptionalCell<&'static rfcore::TxClient>,
     rx_client: OptionalCell<&'static rfcore::RxClient>,
     power_client: OptionalCell<&'static rfcore::PowerClient>,
@@ -87,7 +42,6 @@ impl Radio {
     pub const fn new(rfc: &'static rfc::RFCore) -> Radio {
         Radio {
             rfc,
-            mode: OptionalCell::empty(),
             tx_client: OptionalCell::empty(),
             rx_client: OptionalCell::empty(),
             power_client: OptionalCell::empty(),
@@ -197,12 +151,6 @@ impl Radio {
             RX_BUF[i] = 0;
         }
 
-        /*
-        for (i, c) in buf.as_ref()[0..len].iter().enumerate() {
-            RX_BUF[i] = *c;
-        }
-        */
-
         let cmd: &mut prop::CommandRx = &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandRx);
         cmd.command_no = 0x3801;
         cmd.status = 0;
@@ -226,15 +174,25 @@ impl Radio {
             packet.set_filter_op(false);
             packet
         };
-        cmd.rx_config = 0;
+        cmd.rx_config = {
+            let mut config = prop::RxConfiguration(0);
+            config.set_auto_flush_ignored(true);
+            config.set_auto_flush_crc_error(true);
+            config.set_include_header(true);
+            config.set_include_crc(true);
+            config.set_append_rssi(true);
+            config.set_append_timestamp(false);
+            config.set_append_status(true);
+            config
+        };
         cmd.sync_word = 0x930B51DE;
         cmd.max_packet_len = 250;
         cmd.address_0 = 0;
         cmd.address_1 = 1;
         cmd.end_trigger = 0;
         cmd.end_time = 0;
-        cmd.p_queue = RX_BUF.as_ptr() as u32;
-        cmd.p_output = 0;
+        cmd.p_queue = RX_BUF.as_mut_ptr();
+        cmd.p_output = RX_DAT.as_mut_ptr();
 
         RadioCommand::guard(cmd);
         self.rfc
@@ -246,7 +204,7 @@ impl Radio {
         ReturnCode::SUCCESS
     }
 
-    pub fn run_tests(&self) {
+    pub fn run_tx_tests(&self) {
         self.rfc.set_mode(rfc::RfcMode::BLE);
 
         osc::OSC.request_switch_to_hf_xosc();
@@ -261,7 +219,31 @@ impl Radio {
         osc::OSC.switch_to_hf_xosc();
 
         unsafe {
-            let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
+            let reg_overrides: u32 = GFSK_RFPARAMS.as_mut_ptr() as u32;
+            self.rfc.setup(reg_overrides, 0xFFFF);
+        }
+
+        self.test_radio_fs();
+
+        self.test_radio_tx();
+    }
+
+    pub fn run_rx_tests(&self) {
+        self.rfc.set_mode(rfc::RfcMode::BLE);
+
+        osc::OSC.request_switch_to_hf_xosc();
+        self.rfc.enable();
+
+        cpe::CPE_PATCH.apply_patch();
+        mce::MCE_PATCH.apply_patch();
+        // mce_lr::LONGRANGE_PATCH.apply_patch();
+        rfe::RFE_PATCH.apply_patch();
+        self.rfc.start_rat();
+
+        osc::OSC.switch_to_hf_xosc();
+
+        unsafe {
+            let reg_overrides: u32 = GFSK_RFPARAMS.as_mut_ptr() as u32;
             self.rfc.setup(reg_overrides, 0xFFFF);
         }
 
@@ -305,8 +287,8 @@ impl Radio {
                 packet.set_var_len(true);
                 packet
             };
-            cmd.packet_len = 0x14;
-            cmd.sync_word = 0x00000000;
+            cmd.packet_len = 0x1E;
+            cmd.sync_word = 0x930B51DE;
             cmd.packet_pointer = p_packet;
 
             RadioCommand::guard(cmd);
@@ -327,11 +309,9 @@ impl Radio {
             let cmd: &mut prop::CommandRx =
                 &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandRx);
 
-            /*
-            let mut buffer = RFBuffer::new(&mut RX_QUEUE);
+            let mut data_queue = queue::DataQueue::new(RX_BUF.as_mut_ptr(), RX_BUF.as_mut_ptr());
 
-            let p_buffer: *mut RFBuffer<u8> = &mut buffer;
-            */
+            data_queue.define_queue(RX_BUF.as_mut_ptr(), 300, 1, 32);
 
             cmd.command_no = 0x3802;
             cmd.status = 0;
@@ -346,8 +326,8 @@ impl Radio {
             cmd.packet_conf = {
                 let mut packet = prop::RfcPacketConfRx(0);
                 packet.set_fs_off(false);
-                packet.set_brepeat_ok(true);
-                packet.set_brepeat_nok(true);
+                packet.set_brepeat_ok(false);
+                packet.set_brepeat_nok(false);
                 packet.set_use_crc(true);
                 packet.set_var_len(true);
                 packet.set_check_address(false);
@@ -355,15 +335,25 @@ impl Radio {
                 packet.set_filter_op(false);
                 packet
             };
-            cmd.rx_config = 0b10001011;
+            cmd.rx_config = {
+                let mut config = prop::RxConfiguration(0);
+                config.set_auto_flush_ignored(true);
+                config.set_auto_flush_crc_error(true);
+                config.set_include_header(true);
+                config.set_include_crc(false);
+                config.set_append_rssi(false);
+                config.set_append_timestamp(false);
+                config.set_append_status(true);
+                config
+            };
             cmd.sync_word = 0x930B51DE;
-            cmd.max_packet_len = 0x80;
+            cmd.max_packet_len = 0x1E;
             cmd.address_0 = 0xAA;
             cmd.address_1 = 0xBB;
-            cmd.end_trigger = 0b00000001;
+            cmd.end_trigger = 0x1;
             cmd.end_time = 0;
-            cmd.p_queue = 0; // RX_BUF.as_ptr() as u32;
-            cmd.p_output = RX_DAT.as_ptr() as u32;
+            cmd.p_queue = RX_BUF.as_mut_ptr();
+            cmd.p_output = RX_DAT.as_mut_ptr();
 
             RadioCommand::guard(cmd);
             self.rfc

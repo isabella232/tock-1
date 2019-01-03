@@ -1,105 +1,92 @@
-pub trait Queue<T> {
-    /// Returns true if there are any items in the queue, false otherwise.
-    fn has_elements(&self) -> bool;
+use core;
 
-    /// Returns true if the queue is full, false otherwise.
-    fn is_full(&self) -> bool;
+pub static mut READENTRY: *mut dataEntryGeneral = 0 as (*mut dataEntryGeneral);
 
-    /// Returns how many elements are in the queue.
-    fn len(&self) -> usize;
-
-    /// Add a new element to the back of the queue.
-    fn enqueue(&mut self, val: T) -> bool;
-
-    /// Remove the element from the front of the queue.
-    fn dequeue(&mut self) -> Option<T>;
-
-    /// Remove all elements from the ring buffer.
-    fn empty(&mut self);
-}
-
+#[derive(Copy, Clone)]
 #[repr(C)]
-pub struct RFBuffer<'a, T: 'a> {
-    head: u8,
-    tail: u8,
-    ring: &'a mut [T],
+pub struct DataQueue {
+    pub p_curr_entry: *mut u8,
+    pub p_last_entry: *mut u8,
 }
 
+impl DataQueue {
+    pub fn new(curr_entry: *mut u8, next_entry: *mut u8) -> DataQueue {
+        DataQueue {
+            p_curr_entry: curr_entry,
+            p_last_entry: next_entry,
+        }
+    }
+
+    pub unsafe fn define_queue(
+        &mut self,
+        mut buf: *mut u8,
+        buf_len: u16,
+        num_entries: u32,
+        length: u16,
+    ) {
+        if buf_len as (u32) < num_entries * (length as u32 + 8 + (4 - (length as u32 + 8) % 4)) {
+            debug!("Queue Error: Buffer length shorter than entry length.");
+            return;
+        } else {
+            let pad: u8 = (4u32 - (length as (u32) + 8u32) % 4u32) as u8;
+            debug!("pad: {:?}", pad);
+            let first_entry: *mut u8 = buf;
+            let mut i: u32;
+            i = 0;
+            while i < num_entries {
+                buf = first_entry.offset((i * (8 + length as u32 + pad as u32)) as isize);
+                (*(buf as (*mut dataEntry))).status = 0u8;
+                (*(buf as (*mut dataEntry))).config.d_type = 0u8;
+                (*(buf as (*mut dataEntry))).config.len_sz = 0u8;
+                (*(buf as (*mut dataEntry))).length = length;
+                (*(buf as (*mut dataEntryGeneral))).p_next_entry =
+                    (&mut (*(buf as (*mut dataEntryGeneral))).data as (*mut u8))
+                        .offset(length as (isize))
+                        .offset(pad as (isize));
+                i = i + 1;
+            }
+
+            (*(buf as (*mut dataEntry))).p_next_entry = first_entry;
+            self.p_curr_entry = first_entry;
+            self.p_last_entry = core::ptr::null_mut();
+            READENTRY = first_entry as (*mut dataEntryGeneral);
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
 #[repr(C)]
-pub struct QueueEntry {
-    next_entry: u8,
-    dtype: u8,
-    len_sz: u8,
-    irq_int: u8,
-    length: u16,
-    data: u8,
+pub struct DataConfig {
+    pub d_type: u8,
+    pub len_sz: u8,
+    pub irq_intv: u8,
 }
 
-impl<'a, T: Copy> RFBuffer<'a, T> {
-    pub fn new(ring: &'a mut [T]) -> RFBuffer<'a, T> {
-        // let cmd: &mut prop::CommandRx = &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandRx);
-        unsafe {
-            let p_ring = &mut *(ring.as_mut_ptr() as *mut QueueEntry);
-            p_ring.next_entry = 0;
-            p_ring.dtype = 2;
-            p_ring.len_sz = 2;
-            p_ring.irq_int = 4;
-            p_ring.length = 240;
-        }
-
-        RFBuffer {
-            head: ring.as_ptr() as u8,
-            tail: ring.as_ptr() as u8,
-            ring: ring,
-        }
-    }
+#[derive(Copy, Clone)]
+#[repr(C)]
+pub struct dataEntry {
+    pub p_next_entry: *mut u8,
+    pub status: u8,
+    pub config: DataConfig,
+    pub length: u16,
 }
 
-/*
-impl<'a, T: Copy> Queue<T> for RFBuffer<'a, T> {
-    fn has_elements(&self) -> bool {
-        self.head != self.tail
-    }
-
-    fn is_full(&self) -> bool {
-        self.head == ((self.tail + 1) % self.ring.len())
-    }
-
-    fn len(&self) -> usize {
-        if self.tail > self.head {
-            self.tail - self.head
-        } else if self.tail < self.head {
-            (self.ring.len() - self.head) + self.tail
-        } else {
-            // head equals tail, length is zero
-            0
-        }
-    }
-
-    fn enqueue(&mut self, val: T) -> bool {
-        if ((self.tail + 1) % self.ring.len()) == self.head {
-            // Incrementing tail will overwrite head
-            return false;
-        } else {
-            self.ring[self.tail] = val;
-            self.tail = (self.tail + 1) % self.ring.len();
-            return true;
-        }
-    }
-
-    fn dequeue(&mut self) -> Option<T> {
-        if self.has_elements() {
-            let val = self.ring[self.head];
-            self.head = (self.head + 1) % self.ring.len();
-            Some(val)
-        } else {
-            None
-        }
-    }
-
-    fn empty(&mut self) {
-        self.head = 0;
-        self.tail = 0;
-    }
+#[derive(Copy, Clone)]
+#[repr(C)]
+pub struct dataEntryGeneral {
+    pub p_next_entry: *mut u8,
+    pub status: u8,
+    pub config: DataConfig,
+    pub length: u16,
+    pub data: u8,
 }
-*/
+
+pub struct TestQueue {
+    pub p_next_entry: *mut u8,
+    pub status: u8,
+    pub d_type: u8,
+    pub len_sz: u8,
+    pub irq_intv: u8,
+    pub length: u16,
+    pub data: u8,
+}

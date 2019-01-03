@@ -134,6 +134,18 @@ pub struct CommandCommon {
     pub condition: RfcCondition,
 }
 
+#[repr(C)]
+pub struct AddDataEntry {
+    pub command_no: u16, // 0x0005
+    pub _reserved: u16,
+    pub p_queue: u32,
+    pub p_entry: u32,
+}
+
+unsafe impl RadioCommand for AddDataEntry {
+    fn guard(&mut self) {}
+}
+
 // Command and parameters for radio setup
 
 pub unsafe trait RadioCommand {
@@ -216,50 +228,18 @@ pub mod prop_commands {
         pub _reserved, _set_reserved    : 7;
     }
 
-    /*
     bitfield! {
         #[derive(Copy, Clone)]
         pub struct RxConfiguration(u8);
         impl Debug;
         pub _auto_flush_ignored, set_auto_flush_ignored     : 0;
         pub _auto_flush_crc_error, set_auto_flush_crc_error : 1;
-        pub _reserved, _set_reserved:                       : 2;
-        pub _include_header, set_include_header:            : 3;
-        pub _include_crc, set_include_crc:                  : 4;
-        pub _append_rssi, set_append_rssi:                  : 5;
-        pub _append_timestamp, set_append_timestamp:        : 6;
-        pub _append_status, set_append_status:              : 7;
-    }
-    */
-
-    #[repr(C)]
-    pub struct DataConfig {
-        size: u8,
-        len: u8,
-        irq_len: u8,
-    }
-
-    #[repr(C)]
-    pub struct DataEntry {
-        next_entry: *mut u8,
-        status: u8,
-        config: DataConfig,
-        length: u16,
-    }
-
-    #[repr(C)]
-    pub struct DataQueue {
-        pub current_entry: u8, //&'static [u8],
-        pub next_entry: u8,
-    }
-
-    impl DataQueue {
-        pub fn new(a: u8) -> DataQueue {
-            DataQueue {
-                current_entry: a,
-                next_entry: 0,
-            }
-        }
+        pub _reserved, _set_reserved                        : 2;
+        pub _include_header, set_include_header             : 3;
+        pub _include_crc, set_include_crc                   : 4;
+        pub _append_rssi, set_append_rssi                   : 5;
+        pub _append_timestamp, set_append_timestamp         : 6;
+        pub _append_status, set_append_status               : 7;
     }
 
     // Radio Operation Commands
@@ -389,15 +369,15 @@ pub mod prop_commands {
         pub start_trigger: u8,
         pub condition: RfcCondition,
         pub packet_conf: RfcPacketConfRx,
-        pub rx_config: u8, //RxConfiguration,
+        pub rx_config: RxConfiguration,
         pub sync_word: u32,
         pub max_packet_len: u8,
         pub address_0: u8,
         pub address_1: u8,
         pub end_trigger: u8,
         pub end_time: u8,
-        pub p_queue: u32,
-        pub p_output: u32,
+        pub p_queue: *mut u8,
+        pub p_output: *mut u8,
     }
 
     unsafe impl RadioCommand for CommandRx {

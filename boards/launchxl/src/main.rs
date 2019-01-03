@@ -491,7 +491,7 @@ pub unsafe fn reset_handler() {
     virtual_device.set_receive_client(radio_driver);
 
     let rfc = &cc26x2::radio::MULTIMODE_RADIO;
-    rfc.run_tests();
+    rfc.run_rx_tests();
 
     // set nominal voltage
     cc26x2::adc::ADC.nominal_voltage = Some(3300);
