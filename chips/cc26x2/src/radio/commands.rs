@@ -156,6 +156,7 @@ pub mod prop_commands {
     #![allow(unused)]
     use kernel::common::registers::ReadOnly;
     use radio::commands::{RadioCommand, RfcCondition, RfcSetupConfig, RfcTrigger};
+    use radio::queue;
 
     // Radio and data commands bitfields
     bitfield! {
@@ -376,7 +377,7 @@ pub mod prop_commands {
         pub address_1: u8,
         pub end_trigger: u8,
         pub end_time: u8,
-        pub p_queue: *mut u8,
+        pub p_queue: *mut queue::DataQueue,
         pub p_output: *mut u8,
     }
 

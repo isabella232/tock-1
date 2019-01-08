@@ -2,7 +2,7 @@ use core;
 
 pub static mut READENTRY: *mut dataEntryGeneral = 0 as (*mut dataEntryGeneral);
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct DataQueue {
     pub p_curr_entry: *mut u8,
@@ -36,8 +36,8 @@ impl DataQueue {
             while i < num_entries {
                 buf = first_entry.offset((i * (8 + length as u32 + pad as u32)) as isize);
                 (*(buf as (*mut dataEntry))).status = 0u8;
-                (*(buf as (*mut dataEntry))).config.d_type = 0u8;
-                (*(buf as (*mut dataEntry))).config.len_sz = 0u8;
+                (*(buf as (*mut dataEntry))).config.d_type = 2u8;
+                (*(buf as (*mut dataEntry))).config.len_sz = 2u8;
                 (*(buf as (*mut dataEntry))).length = length;
                 (*(buf as (*mut dataEntryGeneral))).p_next_entry =
                     (&mut (*(buf as (*mut dataEntryGeneral))).data as (*mut u8))
@@ -81,6 +81,7 @@ pub struct dataEntryGeneral {
     pub data: u8,
 }
 
+#[repr(C)]
 pub struct TestQueue {
     pub p_next_entry: *mut u8,
     pub status: u8,

@@ -285,7 +285,9 @@ impl RFCore {
                 + CPEInterrupts::TX_DONE::SET
                 + CPEInterrupts::BOOT_DONE::SET
                 + CPEInterrupts::RX_OK::SET
-                + CPEInterrupts::RX_NOK::SET,
+                + CPEInterrupts::RX_NOK::SET
+                + CPEInterrupts::RX_ENTRY_DONE::SET
+                + CPEInterrupts::RX_BUF_FULL::SET,
         );
         dbell_regs.rfcpe_ifg.set(0x0000);
 
@@ -593,6 +595,9 @@ impl RFCore {
         let tx_done = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::TX_DONE);
         let rx_ok = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_OK);
         let rx_nok = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_NOK);
+        let rx_buf_full = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_BUF_FULL);
+        let rx_entry_done = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_ENTRY_DONE);
+
         dbell_regs.rfcpe_ifg.set(0);
         if tx_done {
             self.client.get().map(|client| client.tx_done());
@@ -600,8 +605,19 @@ impl RFCore {
         if command_done || last_command_done {
             self.client.get().map(|client| client.command_done());
         }
-        if rx_ok || rx_nok {
+        if rx_buf_full {
+            debug!("RX buf full");
+            self.client.get().map(|client| client.rx_buf_full());
+        }
+        if rx_entry_done {
+            debug!("RX entry done");
+            self.client.get().map(|client| client.rx_entry_done());
+        }
+        if rx_ok {
             self.client.get().map(|client| client.rx_ok());
+        }
+        if rx_nok {
+            self.client.get().map(|client| client.rx_nok());
         }
 
         self.cpe0_nvic.clear_pending();
@@ -623,4 +639,7 @@ pub trait RFCoreClient {
     fn command_done(&self);
     fn tx_done(&self);
     fn rx_ok(&self);
+    fn rx_nok(&self);
+    fn rx_buf_full(&self);
+    fn rx_entry_done(&self);
 }

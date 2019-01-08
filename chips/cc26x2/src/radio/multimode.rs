@@ -1,26 +1,21 @@
-use core;
 use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::rfcore;
 use kernel::ReturnCode;
 use osc;
 use radio::commands::{
-    prop_commands as prop, AddDataEntry, DirectCommand, RadioCommand, RfcCondition, GFSK_RFPARAMS,
-    LR_RFPARAMS,
+    prop_commands as prop, DirectCommand, RadioCommand, RfcCondition, GFSK_RFPARAMS,
 };
-use radio::patches::{
-    patch_cpe_prop as cpe, patch_mce_genfsk as mce, patch_mce_longrange as mce_lr,
-    patch_rfe_genfsk as rfe,
-};
+use radio::patches::{patch_cpe_prop as cpe, patch_mce_genfsk as mce, patch_rfe_genfsk as rfe};
 use radio::queue;
 use radio::rfc;
 use rtc;
 
-const TEST_PAYLOAD: [u32; 30] = [0; 30];
+const TEST_PAYLOAD: [u8; 30] = [0; 30];
 
 static mut COMMAND_BUF: [u8; 256] = [0; 256];
 static mut TX_BUF: [u8; 250] = [0; 250];
-static mut RX_BUF: [u8; 500] = [0; 500];
+static mut RX_BUF: [u8; 100] = [0; 100];
 static mut RX_DAT: [u8; 300] = [0; 300];
 
 #[allow(unused)]
@@ -151,6 +146,12 @@ impl Radio {
             RX_BUF[i] = 0;
         }
 
+        let mut data_queue = queue::DataQueue::new(RX_BUF.as_mut_ptr(), RX_BUF.as_mut_ptr());
+
+        data_queue.define_queue(RX_BUF.as_mut_ptr(), 88, 2, 32);
+
+        let p_queue: *mut queue::DataQueue = &mut data_queue as *mut queue::DataQueue;
+
         let cmd: &mut prop::CommandRx = &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandRx);
         cmd.command_no = 0x3801;
         cmd.status = 0;
@@ -191,7 +192,7 @@ impl Radio {
         cmd.address_1 = 1;
         cmd.end_trigger = 0;
         cmd.end_time = 0;
-        cmd.p_queue = RX_BUF.as_mut_ptr();
+        cmd.p_queue = p_queue;
         cmd.p_output = RX_DAT.as_mut_ptr();
 
         RadioCommand::guard(cmd);
@@ -254,7 +255,7 @@ impl Radio {
 
     fn test_radio_tx(&self) {
         let mut packet = TEST_PAYLOAD;
-        let mut seq: u32 = 0;
+        let mut seq: u8 = 0;
         for p in packet.iter_mut() {
             *p = seq;
             seq += 1;
@@ -287,10 +288,9 @@ impl Radio {
                 packet.set_var_len(true);
                 packet
             };
-            cmd.packet_len = 0x1E;
+            cmd.packet_len = TEST_PAYLOAD.len() as u8;
             cmd.sync_word = 0x930B51DE;
             cmd.packet_pointer = p_packet;
-
             RadioCommand::guard(cmd);
 
             self.rfc
@@ -311,8 +311,18 @@ impl Radio {
 
             let mut data_queue = queue::DataQueue::new(RX_BUF.as_mut_ptr(), RX_BUF.as_mut_ptr());
 
-            data_queue.define_queue(RX_BUF.as_mut_ptr(), 300, 1, 32);
+            data_queue.define_queue(RX_BUF.as_mut_ptr(), 88, 2, 32);
 
+            let p_queue: *mut queue::DataQueue = &mut data_queue as *mut queue::DataQueue;
+            /* 
+            let ref_queue = &data_queue;
+            self.rx_buf.put(Some(&mut RX_BUF));
+            
+            self.rx_buf.take().map_or(ReturnCode::ERESERVE, |rbuf| {
+                debug!("BUF: {:?}", rbuf);
+                ReturnCode::SUCCESS
+            });
+            */
             cmd.command_no = 0x3802;
             cmd.status = 0;
             cmd.p_nextop = 0;
@@ -337,9 +347,9 @@ impl Radio {
             };
             cmd.rx_config = {
                 let mut config = prop::RxConfiguration(0);
-                config.set_auto_flush_ignored(true);
-                config.set_auto_flush_crc_error(true);
-                config.set_include_header(true);
+                config.set_auto_flush_ignored(false);
+                config.set_auto_flush_crc_error(false);
+                config.set_include_header(false);
                 config.set_include_crc(false);
                 config.set_append_rssi(false);
                 config.set_append_timestamp(false);
@@ -352,7 +362,7 @@ impl Radio {
             cmd.address_1 = 0xBB;
             cmd.end_trigger = 0x1;
             cmd.end_time = 0;
-            cmd.p_queue = RX_BUF.as_mut_ptr();
+            cmd.p_queue = p_queue;
             cmd.p_output = RX_DAT.as_mut_ptr();
 
             RadioCommand::guard(cmd);
@@ -441,11 +451,64 @@ impl rfc::RFCoreClient for Radio {
         debug!("Rx cb fired!");
         unsafe {
             rtc::RTC.sync();
-            self.rx_buf.put(Some(&mut RX_DAT));
+            self.rx_buf.put(Some(&mut RX_BUF));
         }
 
         self.rx_buf.take().map_or(ReturnCode::ERESERVE, |rbuf| {
-            debug!("RX: {:?}", rbuf);
+            debug!("rbuf: {:X?}", rbuf);
+            let frame_len = rbuf.len();
+            let crc_valid = true;
+            self.rx_client.map(move |client| {
+                client.receive_event(rbuf, frame_len, crc_valid, ReturnCode::SUCCESS)
+            });
+            ReturnCode::SUCCESS
+        });
+    }
+
+    fn rx_nok(&self) {
+        debug!("Rx cb fired!");
+        unsafe {
+            rtc::RTC.sync();
+            self.rx_buf.put(Some(&mut RX_BUF));
+        }
+
+        self.rx_buf.take().map_or(ReturnCode::ERESERVE, |rbuf| {
+            debug!("rbuf: {:X?}", rbuf);
+            let frame_len = rbuf.len();
+            let crc_valid = true;
+            self.rx_client.map(move |client| {
+                client.receive_event(rbuf, frame_len, crc_valid, ReturnCode::SUCCESS)
+            });
+            ReturnCode::SUCCESS
+        });
+    }
+
+    fn rx_buf_full(&self) {
+        debug!("Rx cb fired!");
+        unsafe {
+            rtc::RTC.sync();
+            self.rx_buf.put(Some(&mut RX_BUF));
+        }
+
+        self.rx_buf.take().map_or(ReturnCode::ERESERVE, |rbuf| {
+            let frame_len = rbuf.len();
+            let crc_valid = true;
+            self.rx_client.map(move |client| {
+                client.receive_event(rbuf, frame_len, crc_valid, ReturnCode::SUCCESS)
+            });
+            ReturnCode::SUCCESS
+        });
+    }
+
+    fn rx_entry_done(&self) {
+        debug!("Rx cb fired!");
+        unsafe {
+            rtc::RTC.sync();
+            self.rx_buf.put(Some(&mut RX_BUF));
+        }
+
+        self.rx_buf.take().map_or(ReturnCode::ERESERVE, |rbuf| {
+            debug!("rbuf: {:X?}", rbuf);
             let frame_len = rbuf.len();
             let crc_valid = true;
             self.rx_client.map(move |client| {
