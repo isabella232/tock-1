@@ -243,6 +243,25 @@ pub mod prop_commands {
         pub _append_status, set_append_status               : 7;
     }
 
+    bitfield! {
+        #[derive(Copy, Clone)]
+        pub struct RfcHeaderConf(u16);
+        impl Debug;
+        pub _num_header_bits, set_num_header_bits           : 5, 0;
+        pub _len_pos, set_len_pos                           :10, 6;
+        pub _num_len_bits, set_num_len_bits                 :15, 11;
+    }
+
+    bitfield! {
+        #[derive(Copy, Clone)]
+        pub struct RfcAddressConf(u16);
+        impl Debug;
+        pub _addr_type, set_addr_type                       : 0;
+        pub _addr_size, set_addr_size                       : 5, 1;
+        pub _addr_pos, set_addr_pos                         : 10, 6;
+        pub _num_addr, set_num_addr                         : 15, 11;
+    }
+
     // Radio Operation Commands
     #[repr(C)]
     #[derive(Copy, Clone)]
@@ -376,12 +395,41 @@ pub mod prop_commands {
         pub address_0: u8,
         pub address_1: u8,
         pub end_trigger: u8,
-        pub end_time: u8,
+        pub end_time: u32,
         pub p_queue: *mut queue::DataQueue,
         pub p_output: *mut u8,
+        pub _rx_sniff: [u8; 14],
     }
 
     unsafe impl RadioCommand for CommandRx {
+        fn guard(&mut self) {}
+    }
+
+    #[repr(C)]
+    pub struct CommandRxAdv {
+        pub command_no: u16, // 0x080D
+        pub status: u16,
+        pub p_nextop: u32,
+        pub start_time: u32,
+        pub start_trigger: u8,
+        pub condition: RfcCondition,
+        pub packet_conf: RfcPacketConfRx,
+        pub rx_config: RxConfiguration,
+        pub sync_word_0: u32,
+        pub sync_word_1: u32,
+        pub max_packet_len: u16,
+        pub header_conf: RfcHeaderConf,
+        pub address: RfcAddressConf,
+        pub len_offset: u8,
+        pub end_trigger: u8,
+        pub end_time: u32,
+        pub p_addr: u32,
+        pub p_queue: *mut queue::DataQueue,
+        pub p_output: *mut u8,
+        pub _rx_sniff: [u8; 14],
+    }
+
+    unsafe impl RadioCommand for CommandRxAdv {
         fn guard(&mut self) {}
     }
 }

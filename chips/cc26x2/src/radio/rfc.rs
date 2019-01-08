@@ -596,7 +596,7 @@ impl RFCore {
         let rx_ok = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_OK);
         let rx_nok = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_NOK);
         let rx_buf_full = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_BUF_FULL);
-        let rx_entry_done = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_ENTRY_DONE);
+        // let rx_entry_done = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_ENTRY_DONE);
 
         dbell_regs.rfcpe_ifg.set(0);
         if tx_done {
@@ -609,10 +609,12 @@ impl RFCore {
             debug!("RX buf full");
             self.client.get().map(|client| client.rx_buf_full());
         }
+        /*
         if rx_entry_done {
             debug!("RX entry done");
             self.client.get().map(|client| client.rx_entry_done());
         }
+        */
         if rx_ok {
             self.client.get().map(|client| client.rx_ok());
         }

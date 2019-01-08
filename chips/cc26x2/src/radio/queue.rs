@@ -29,23 +29,22 @@ impl DataQueue {
             return;
         } else {
             let pad: u8 = (4u32 - (length as (u32) + 8u32) % 4u32) as u8;
-            debug!("pad: {:?}", pad);
             let first_entry: *mut u8 = buf;
             let mut i: u32;
             i = 0;
             while i < num_entries {
                 buf = first_entry.offset((i * (8 + length as u32 + pad as u32)) as isize);
-                (*(buf as (*mut dataEntry))).status = 0u8;
-                (*(buf as (*mut dataEntry))).config.d_type = 2u8;
-                (*(buf as (*mut dataEntry))).config.len_sz = 2u8;
-                (*(buf as (*mut dataEntry))).length = length;
-                (*(buf as (*mut dataEntryGeneral))).p_next_entry =
+                (*(buf as *mut dataEntry)).status = 0u8;
+                (*(buf as *mut dataEntry)).config.d_type = 0u8;
+                (*(buf as *mut dataEntry)).config.len_sz = 1u8;
+                (*(buf as *mut dataEntry)).config.irq_intv = 4u8;
+                (*(buf as *mut dataEntry)).length = length;
+                (*(buf as *mut dataEntryGeneral)).p_next_entry =
                     (&mut (*(buf as (*mut dataEntryGeneral))).data as (*mut u8))
                         .offset(length as (isize))
                         .offset(pad as (isize));
                 i = i + 1;
             }
-
             (*(buf as (*mut dataEntry))).p_next_entry = first_entry;
             self.p_curr_entry = first_entry;
             self.p_last_entry = core::ptr::null_mut();
