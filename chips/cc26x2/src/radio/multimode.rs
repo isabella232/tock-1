@@ -1,4 +1,5 @@
 use core::cell::Cell;
+use enum_primitive::cast::FromPrimitive;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::rfcore;
 use kernel::ReturnCode;
@@ -12,6 +13,13 @@ use radio::rfc;
 use rtc;
 
 const TEST_PAYLOAD: [u8; 30] = [0; 30];
+
+enum_from_primitive!{
+pub enum TestType {
+    Tx = 0,
+    Rx = 1,
+}
+}
 
 static mut COMMAND_BUF: [u8; 256] = [0; 256];
 static mut TX_BUF: [u8; 250] = [0; 250];
@@ -206,7 +214,7 @@ impl Radio {
         ReturnCode::SUCCESS
     }
 
-    pub fn run_tx_tests(&self) {
+    pub fn run_tests(&self, test: u8) {
         self.rfc.set_mode(rfc::RfcMode::BLE);
 
         osc::OSC.request_switch_to_hf_xosc();
@@ -227,31 +235,12 @@ impl Radio {
 
         self.test_radio_fs();
 
-        self.test_radio_tx();
-    }
-
-    pub fn run_rx_tests(&self) {
-        self.rfc.set_mode(rfc::RfcMode::BLE);
-
-        osc::OSC.request_switch_to_hf_xosc();
-        self.rfc.enable();
-
-        cpe::CPE_PATCH.apply_patch();
-        mce::MCE_PATCH.apply_patch();
-        // mce_lr::LONGRANGE_PATCH.apply_patch();
-        rfe::RFE_PATCH.apply_patch();
-        self.rfc.start_rat();
-
-        osc::OSC.switch_to_hf_xosc();
-
-        unsafe {
-            let reg_overrides: u32 = GFSK_RFPARAMS.as_mut_ptr() as u32;
-            self.rfc.setup(reg_overrides, 0xFFFF);
+        if let Some(t) = TestType::from_u8(test) {
+            match t {
+                TestType::Tx => self.test_radio_tx(),
+                TestType::Rx => self.test_radio_rx(),
+            }
         }
-
-        self.test_radio_fs();
-
-        self.test_radio_rx();
     }
 
     fn test_radio_tx(&self) {
