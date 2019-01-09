@@ -36,7 +36,7 @@ impl DataQueue {
                 buf = first_entry.offset((i * (8 + length as u32 + pad as u32)) as isize);
                 (*(buf as *mut dataEntry)).status = 0u8;
                 (*(buf as *mut dataEntry)).config.d_type = 0u8;
-                (*(buf as *mut dataEntry)).config.len_sz = 1u8;
+                (*(buf as *mut dataEntry)).config.len_sz = 2u8;
                 (*(buf as *mut dataEntry)).config.irq_intv = 4u8;
                 (*(buf as *mut dataEntry)).length = length;
                 (*(buf as *mut dataEntryGeneral)).p_next_entry =

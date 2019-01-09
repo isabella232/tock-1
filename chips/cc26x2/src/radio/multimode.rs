@@ -1,4 +1,5 @@
 use core::cell::Cell;
+use core::slice;
 use enum_primitive::cast::FromPrimitive;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::rfcore;
@@ -12,8 +13,8 @@ use radio::queue;
 use radio::rfc;
 use rtc;
 
+// Fields for testing
 const TEST_PAYLOAD: [u8; 30] = [0; 30];
-
 enum_from_primitive!{
 pub enum TestType {
     Tx = 0,
@@ -21,10 +22,13 @@ pub enum TestType {
 }
 }
 
+const MAX_RX_LENGTH: u16 = 255;
 static mut COMMAND_BUF: [u8; 256] = [0; 256];
 static mut TX_BUF: [u8; 250] = [0; 250];
-static mut RX_BUF: [u8; 300] = [0; 300];
-static mut RX_DAT: [u8; 300] = [0; 300];
+
+static mut RX_BUF: [u8; 600] = [0; 600];
+static mut RX_DAT: [u8; 16] = [0; 16];
+static mut RX_PAYLOAD: [u8; 255] = [0; 255];
 
 #[allow(unused)]
 // TODO Implement update config for changing radio modes and tie in the WIP power client to manage
@@ -156,7 +160,7 @@ impl Radio {
 
         let mut data_queue = queue::DataQueue::new(RX_BUF.as_mut_ptr(), RX_BUF.as_mut_ptr());
 
-        data_queue.define_queue(RX_BUF.as_mut_ptr(), 88, 2, 32);
+        data_queue.define_queue(RX_BUF.as_mut_ptr(), 600, 2, MAX_RX_LENGTH + 2);
 
         let p_queue: *mut queue::DataQueue = &mut data_queue as *mut queue::DataQueue;
 
@@ -196,7 +200,7 @@ impl Radio {
             config
         };
         cmd.sync_word = 0x930B51DE;
-        cmd.max_packet_len = 250;
+        cmd.max_packet_len = 0xFF;
         cmd.address_0 = 0;
         cmd.address_1 = 1;
         cmd.end_trigger = 0;
@@ -278,7 +282,7 @@ impl Radio {
                 packet.set_var_len(true);
                 packet
             };
-            cmd.packet_len = TEST_PAYLOAD.len() as u8;
+            cmd.packet_len = 0x1E;
             cmd.sync_word = 0x930B51DE;
             cmd.packet_pointer = p_packet;
             RadioCommand::guard(cmd);
@@ -301,18 +305,10 @@ impl Radio {
 
             let mut data_queue = queue::DataQueue::new(RX_BUF.as_mut_ptr(), RX_BUF.as_mut_ptr());
 
-            data_queue.define_queue(RX_BUF.as_mut_ptr(), 300, 2, 130);
+            data_queue.define_queue(RX_BUF.as_mut_ptr(), 600, 2, 257);
 
             let p_queue: *mut queue::DataQueue = &mut data_queue as *mut queue::DataQueue;
-            /* 
-            let ref_queue = &data_queue;
-            self.rx_buf.put(Some(&mut RX_BUF));
-            
-            self.rx_buf.take().map_or(ReturnCode::ERESERVE, |rbuf| {
-                debug!("BUF: {:?}", rbuf);
-                ReturnCode::SUCCESS
-            });
-            */
+
             cmd.command_no = 0x3802;
             cmd.status = 0;
             cmd.p_nextop = 0;
@@ -337,8 +333,8 @@ impl Radio {
             };
             cmd.rx_config = {
                 let mut config = prop::RxConfiguration(0);
-                config.set_auto_flush_ignored(false);
-                config.set_auto_flush_crc_error(false);
+                config.set_auto_flush_ignored(true);
+                config.set_auto_flush_crc_error(true);
                 config.set_include_header(true);
                 config.set_include_crc(false);
                 config.set_append_rssi(false);
@@ -347,9 +343,9 @@ impl Radio {
                 config
             };
             cmd.sync_word = 0x930B51DE;
-            cmd.max_packet_len = 0x80;
+            cmd.max_packet_len = 0xFF;
             cmd.address_0 = 0xAA;
-            cmd.address_1 = 0xAA;
+            cmd.address_1 = 0xBB;
             cmd.end_trigger = 0x1;
             cmd.end_time = 0;
             cmd.p_queue = p_queue;
@@ -360,8 +356,6 @@ impl Radio {
                 .send_sync(cmd)
                 .and_then(|_| self.rfc.wait(cmd))
                 .ok();
-
-            debug!("{:?}", (*(RX_BUF.as_ptr() as *mut queue::dataEntry)).status);
         }
     }
 
@@ -440,14 +434,25 @@ impl rfc::RFCoreClient for Radio {
     }
 
     fn rx_ok(&self) {
-        debug!("Rx cb fired!");
+        debug!("Rx ok cb fired!");
         unsafe {
             rtc::RTC.sync();
-            self.rx_buf.put(Some(&mut RX_BUF));
+            //TODO: FIX THIS DISGUSTING CODE!
+            let entry_data: *mut u8 = &mut (*queue::READENTRY).data as *mut u8;
+            let packet_p = entry_data.offset(-1);
+            let length = packet_p.offset(-1);
+            debug!("LEN: {:?}", *length);
+            let packet: &[u8] = slice::from_raw_parts(packet_p, 255);
+
+            for (i, c) in packet[0..MAX_RX_LENGTH as usize].iter().enumerate() {
+                RX_PAYLOAD[i] = *c;
+            }
+
+            self.rx_buf.put(Some(&mut RX_PAYLOAD));
         }
 
         self.rx_buf.take().map_or(ReturnCode::ERESERVE, |rbuf| {
-            debug!("RX BUF: {:X?}", rbuf);
+            debug!("PAYLOAD: {:?}", rbuf);
             let frame_len = rbuf.len();
             let crc_valid = true;
             self.rx_client.map(move |client| {
@@ -458,7 +463,7 @@ impl rfc::RFCoreClient for Radio {
     }
 
     fn rx_nok(&self) {
-        debug!("Rx cb fired!");
+        debug!("Rx nok cb fired!");
         unsafe {
             rtc::RTC.sync();
             self.rx_buf.put(Some(&mut RX_BUF));
@@ -475,7 +480,7 @@ impl rfc::RFCoreClient for Radio {
     }
 
     fn rx_buf_full(&self) {
-        debug!("Rx cb fired!");
+        debug!("Rx buf full cb fired!");
         unsafe {
             rtc::RTC.sync();
             self.rx_buf.put(Some(&mut RX_BUF));
@@ -492,7 +497,7 @@ impl rfc::RFCoreClient for Radio {
     }
 
     fn rx_entry_done(&self) {
-        debug!("Rx cb fired!");
+        debug!("Rx entry done cb fired!");
         unsafe {
             rtc::RTC.sync();
             self.rx_buf.put(Some(&mut RX_BUF));
