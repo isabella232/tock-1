@@ -2,7 +2,7 @@
 
 TOCK_ARCH=cortex-m4
 TOCK_BOARD=launchxl
-TARGET=thumbv7em-none-eabi
+TARGET=thumbv7em-none-eabihf
 PLATFORM=launchxl
 OPENOCD ?= openocd
 JLINK_EXE ?= JLinkExe

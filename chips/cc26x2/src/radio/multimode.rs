@@ -440,11 +440,12 @@ impl rfc::RFCoreClient for Radio {
             //TODO: FIX THIS DISGUSTING CODE!
             let entry_data: *mut u8 = &mut (*queue::READENTRY).data as *mut u8;
             let packet_p = entry_data.offset(-1);
-            let length = packet_p.offset(-1);
-            debug!("LEN: {:?}", *length);
-            let packet: &[u8] = slice::from_raw_parts(packet_p, 255);
+            let length_p = packet_p.offset(-1);
+            let length = *length_p;
+            debug!("LEN: {:?}", length);
+            let packet: &[u8] = slice::from_raw_parts(packet_p, length as usize);
 
-            for (i, c) in packet[0..MAX_RX_LENGTH as usize].iter().enumerate() {
+            for (i, c) in packet[0..length as usize].iter().enumerate() {
                 RX_PAYLOAD[i] = *c;
             }
 
