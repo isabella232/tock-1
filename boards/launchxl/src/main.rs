@@ -4,7 +4,7 @@
 
 extern crate capsules;
 extern crate cc26x2;
-extern crate cortexm4;
+extern crate cortexm4f;
 #[macro_use]
 extern crate enum_primitive;
 extern crate fixedvec;
@@ -599,7 +599,7 @@ pub unsafe fn reset_handler() {
 
     kernel::procs::load_processes(
         board_kernel,
-        &cortexm4::syscall::SysCall::new(),
+        &cortexm4f::syscall::SysCall::new(),
         chip.mpu(),
         &_sapps as *const u8,
         &mut APP_MEMORY,

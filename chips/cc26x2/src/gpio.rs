@@ -11,7 +11,7 @@ use kernel::common::registers::{FieldValue, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
 use kernel::hil;
 
-use cortexm4::nvic;
+use cortexm4f::nvic;
 use event;
 use ioc;
 use peripheral_interrupts;

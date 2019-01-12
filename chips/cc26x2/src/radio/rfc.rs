@@ -21,7 +21,7 @@
 //! radio RAM, the system CPU may go into power-down mode to save current.
 //!
 use core::cell::Cell;
-use cortexm4::nvic;
+use cortexm4f::nvic;
 use kernel::common::registers::{ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::ReturnCode;

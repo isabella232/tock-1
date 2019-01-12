@@ -37,7 +37,7 @@ version = "0.1.0"
 dependencies = [
  "bitfield 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "cortexm 0.1.0",
- "cortexm4 0.1.0",
+ "cortexm4f 0.1.0",
  "enum_primitive 0.1.0",
  "fixedvec 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "kernel 0.1.0",
@@ -51,7 +51,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cortexm4"
+name = "cortexm4f"
 version = "0.1.0"
 dependencies = [
  "cortexm 0.1.0",
@@ -106,7 +106,7 @@ version = "0.1.0"
 dependencies = [
  "capsules 0.1.0",
  "cc26x2 0.1.0",
- "cortexm4 0.1.0",
+ "cortexm4f 0.1.0",
  "enum_primitive 0.1.0",
  "fixedvec 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "kernel 0.1.0",

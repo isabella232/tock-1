@@ -1,7 +1,7 @@
 use cc26x2;
 use core::fmt::Write;
 use core::panic::PanicInfo;
-use cortexm4;
+use cortexm4f;
 use kernel::debug;
 use kernel::hil::led;
 use kernel::hil::uart;
@@ -43,5 +43,5 @@ pub unsafe extern "C" fn panic_fmt(pi: &PanicInfo) -> ! {
 
     let led = &mut led::LedLow::new(&mut cc26x2::gpio::PORT[LED_PIN]);
     let writer = &mut WRITER;
-    debug::panic(&mut [led], writer, pi, &cortexm4::support::nop, &PROCESSES)
+    debug::panic(&mut [led], writer, pi, &cortexm4f::support::nop, &PROCESSES)
 }

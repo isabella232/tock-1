@@ -25,7 +25,7 @@ name = "launchxlccfg"
 path = "src/ccfg.rs"
 
 [dependencies]
-cortexm4 = { path = "../../arch/cortex-m4" }
+cortexm4f = { path = "../../arch/cortex-m4f" }
 capsules = { path = "../../capsules" }
 kernel = { path = "../../kernel" }
 cc26x2 = { path = "../../chips/cc26x2" }

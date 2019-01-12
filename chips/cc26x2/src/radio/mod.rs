@@ -4,7 +4,7 @@ pub mod patches;
 pub mod queue;
 pub mod rfc;
 pub mod test_settings;
-use cortexm4::nvic;
+use cortexm4f::nvic;
 use peripheral_interrupts;
 
 pub mod commands;

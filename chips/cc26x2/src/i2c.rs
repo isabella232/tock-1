@@ -6,7 +6,7 @@ use kernel::common::registers::{ReadOnly, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
 use kernel::hil::i2c;
 
-use cortexm4::nvic;
+use cortexm4f::nvic;
 use peripheral_interrupts;
 use prcm;
 

@@ -1,7 +1,7 @@
 use adi;
 use adi::AuxAdi4Registers;
 use aux;
-use cortexm4::nvic;
+use cortexm4f::nvic;
 use enum_primitive::cast::FromPrimitive;
 use fcfg1;
 use kernel::common::cells::OptionalCell;

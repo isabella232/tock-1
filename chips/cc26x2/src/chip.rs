@@ -1,5 +1,5 @@
 use adc;
-use cortexm4;
+use cortexm4f;
 use event_priority::EVENT_PRIORITY;
 use events;
 use gpio;
@@ -30,23 +30,23 @@ impl From<u32> for SleepMode {
 }
 
 pub struct Cc26X2 {
-    mpu: cortexm4::mpu::MPU,
-    systick: cortexm4::systick::SysTick,
+    mpu: cortexm4f::mpu::MPU,
+    systick: cortexm4f::systick::SysTick,
 }
 
 impl Cc26X2 {
     pub unsafe fn new(hfreq: u32) -> Cc26X2 {
         Cc26X2 {
-            mpu: cortexm4::mpu::MPU::new(),
+            mpu: cortexm4f::mpu::MPU::new(),
             // The systick clocks with 48MHz by default
-            systick: cortexm4::systick::SysTick::new_with_calibration(hfreq),
+            systick: cortexm4f::systick::SysTick::new_with_calibration(hfreq),
         }
     }
 }
 
 impl kernel::Chip for Cc26X2 {
-    type MPU = cortexm4::mpu::MPU;
-    type SysTick = cortexm4::systick::SysTick;
+    type MPU = cortexm4f::mpu::MPU;
+    type SysTick = cortexm4f::systick::SysTick;
 
     fn mpu(&self) -> &Self::MPU {
         &self.mpu
@@ -85,7 +85,7 @@ impl kernel::Chip for Cc26X2 {
 
     fn sleep(&self) {
         unsafe {
-            cortexm4::support::wfi();
+            cortexm4f::support::wfi();
         }
     }
 
@@ -93,6 +93,6 @@ impl kernel::Chip for Cc26X2 {
     where
         F: FnOnce() -> R,
     {
-        cortexm4::support::atomic(f)
+        cortexm4f::support::atomic(f)
     }
 }

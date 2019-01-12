@@ -7,7 +7,7 @@ use kernel::hil::uart;
 use kernel::ReturnCode;
 
 use core::cmp;
-use cortexm4::nvic;
+use cortexm4f::nvic;
 use peripheral_interrupts;
 use prcm;
 

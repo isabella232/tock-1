@@ -3,7 +3,7 @@
 #![crate_name = "cc26x2"]
 #![crate_type = "rlib"]
 extern crate cortexm;
-extern crate cortexm4;
+extern crate cortexm4f;
 #[allow(unused_imports)]
 #[macro_use]
 extern crate kernel;

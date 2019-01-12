@@ -5,7 +5,7 @@ use kernel::common::registers::{ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::hil::time::{self, Alarm, Frequency, Time};
 
-use cortexm4::nvic;
+use cortexm4f::nvic;
 use peripheral_interrupts;
 
 #[repr(C)]
