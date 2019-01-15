@@ -134,19 +134,14 @@ pub unsafe extern "C" fn disable_specific_nvic() {
 pub unsafe extern "C" fn enable_fpu() {
     asm!(
         "
-    /* Set thread mode to privileged */
-    mov r0, #0
-    msr CONTROL, r0
-    movw LR, #0xFFF9
-    movt LR, #0xFFFF
     /* CPACR */
-    LDR.W r0, =0xE000ED88
+    ldr.w r0, =0xE000ED88
     /* Read CPACR */
-    LDR r1, [r0]
+    ldr r1, [r0]
     /* Set bits 20-23 to enable CP10 and CP11 coprocessors */
-    ORR r1, r1, #(0xF << 20)
+    orr r1, r1, #(0xF << 20)
     /* Write back the modified value to CPACR */
-    STR r1, [r0]"
+    str r1, [r0]"
     : : : : "volatile" );
 }
 

@@ -499,7 +499,6 @@ impl RFCore {
             status = dbell_regs.cmdsta.get();
             if (status & 0xFF) == 0x01 {
                 dbell_regs.rfack_ifg.set(0);
-                // debug!("CMDR OK");
                 return Ok(());
             }
             timeout += 1;
@@ -529,7 +528,6 @@ impl RFCore {
             status = command_op.status.get();
             self.status.set(status.into());
             if (status & 0x0FFF) == 0x0400 {
-                debug!("OP OK");
                 return Ok(());
             }
             timeout += 1;
@@ -606,12 +604,10 @@ impl RFCore {
             self.client.get().map(|client| client.command_done());
         }
         if rx_buf_full {
-            debug!("RX buf full");
             self.client.get().map(|client| client.rx_buf_full());
         }
         /*
         if rx_entry_done {
-            debug!("RX entry done");
             self.client.get().map(|client| client.rx_entry_done());
         }
         */

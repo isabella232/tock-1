@@ -1,6 +1,6 @@
 use cortexm4f::{
-    disable_specific_nvic, generic_isr, hard_fault_handler, nvic, set_privileged_thread,
-    stash_process_state, svc_handler, systick_handler,
+    disable_specific_nvic, enable_fpu, generic_isr, hard_fault_handler, nvic,
+    set_privileged_thread, stash_process_state, svc_handler, systick_handler,
 };
 use setup;
 
@@ -175,4 +175,5 @@ pub unsafe extern "C" fn init() {
 
     setup::perform();
     nvic::enable_all();
+    enable_fpu();
 }

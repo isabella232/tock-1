@@ -6,9 +6,12 @@ use kernel::hil::rfcore;
 use kernel::ReturnCode;
 use osc;
 use radio::commands::{
-    prop_commands as prop, DirectCommand, RadioCommand, RfcCondition, GFSK_RFPARAMS,
+    prop_commands as prop, DirectCommand, RadioCommand, RfcCondition, GFSK_RFPARAMS, LR_RFPARAMS,
 };
-use radio::patches::{patch_cpe_prop as cpe, patch_mce_genfsk as mce, patch_rfe_genfsk as rfe};
+use radio::patches::{
+    patch_cpe_prop as cpe, patch_mce_genfsk as mce, patch_mce_longrange as mce_lr,
+    patch_rfe_genfsk as rfe,
+};
 use radio::queue;
 use radio::rfc;
 use rtc;
@@ -283,6 +286,7 @@ impl Radio {
                 packet
             };
             cmd.packet_len = 0x1E;
+            // cmd.sync_word = 0x00000000;
             cmd.sync_word = 0x930B51DE;
             cmd.packet_pointer = p_packet;
             RadioCommand::guard(cmd);
@@ -434,7 +438,6 @@ impl rfc::RFCoreClient for Radio {
     }
 
     fn rx_ok(&self) {
-        debug!("Rx ok cb fired!");
         unsafe {
             rtc::RTC.sync();
             //TODO: FIX THIS DISGUSTING CODE!
@@ -442,7 +445,6 @@ impl rfc::RFCoreClient for Radio {
             let packet_p = entry_data.offset(-1);
             let length_p = packet_p.offset(-1);
             let length = *length_p;
-            debug!("LEN: {:?}", length);
             let packet: &[u8] = slice::from_raw_parts(packet_p, length as usize);
 
             for (i, c) in packet[0..length as usize].iter().enumerate() {
@@ -453,7 +455,6 @@ impl rfc::RFCoreClient for Radio {
         }
 
         self.rx_buf.take().map_or(ReturnCode::ERESERVE, |rbuf| {
-            debug!("PAYLOAD: {:?}", rbuf);
             let frame_len = rbuf.len();
             let crc_valid = true;
             self.rx_client.map(move |client| {
@@ -464,7 +465,6 @@ impl rfc::RFCoreClient for Radio {
     }
 
     fn rx_nok(&self) {
-        debug!("Rx nok cb fired!");
         unsafe {
             rtc::RTC.sync();
             self.rx_buf.put(Some(&mut RX_BUF));
@@ -481,7 +481,6 @@ impl rfc::RFCoreClient for Radio {
     }
 
     fn rx_buf_full(&self) {
-        debug!("Rx buf full cb fired!");
         unsafe {
             rtc::RTC.sync();
             self.rx_buf.put(Some(&mut RX_BUF));
@@ -498,7 +497,6 @@ impl rfc::RFCoreClient for Radio {
     }
 
     fn rx_entry_done(&self) {
-        debug!("Rx entry done cb fired!");
         unsafe {
             rtc::RTC.sync();
             self.rx_buf.put(Some(&mut RX_BUF));
