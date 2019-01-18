@@ -38,6 +38,37 @@ pub static mut LR_RFPARAMS: [u32; 28] = [
     0xFFFFFFFF,
 ];
 
+pub static mut LR_PARAMS: [u32; 28] = [
+    0x847,
+    0x6e88e3,
+    0x2400403,
+    0x68793,
+    0x1c8473,
+    0x88433,
+    0x684a3,
+    0x40014005,
+    0x180c0618,
+    0xc00401a1,
+    0x10101,
+    0xc0040141,
+    0x214ad3,
+    0x2980243,
+    0xa480583,
+    0x7ab80603,
+    0x623,
+    0x30c5068,
+    0x146f5128,
+    0xeb90512c,
+    0x362e5124,
+    0x4c5118,
+    0x3e055140,
+    0x288a3,
+    0x7ddf0002,
+    0xfcfc08c3,
+    0x82a86c2b,
+    0xffffffff,
+];
+
 pub static mut GFSK_RFPARAMS: [u32; 26] = [
     // override_use_patch_prop_genfsk.xml
     0x00000847, // PHY: Use MCE RAM patch, RFE RAM patch MCE_RFE_OVERRIDE(1,0,0,1,0,0),
@@ -75,10 +106,10 @@ bitfield! {
     #[derive(Copy, Clone)]
     pub struct RfcTrigger(u8);
     impl Debug;
-    pub _trigger_type, _set_trigger_type : 3, 0;
-    pub _enable_cmd, _set_enable_cmd      : 4;
-    pub _trigger_no, _set_trigger_no      : 6, 5;
-    pub _past_trigger, _set_past_trigger  : 7;
+    pub _trigger_type, set_trigger_type : 3, 0;
+    pub _enable_cmd, set_enable_cmd      : 4;
+    pub _trigger_no, set_trigger_no      : 6, 5;
+    pub _past_trigger, set_past_trigger  : 7;
 }
 
 bitfield! {
@@ -331,7 +362,7 @@ pub mod prop_commands {
         pub status: u16,
         pub p_nextop: u32,
         pub start_time: u32,
-        pub start_trigger: u8,
+        pub start_trigger: RfcTrigger,
         pub condition: RfcCondition,
         pub packet_conf: RfcPacketConfTx,
         pub packet_len: u8,

@@ -7,6 +7,7 @@ pub struct RFERam {
     rfe_ram: [VolatileCell<u32>; 512],
 }
 
+#[repr(C)]
 #[derive(Copy, Clone)]
 pub struct Patches {
     rfe_patch: *const RFERam,

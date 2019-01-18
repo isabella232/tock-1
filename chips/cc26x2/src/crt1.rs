@@ -175,5 +175,5 @@ pub unsafe extern "C" fn init() {
 
     setup::perform();
     nvic::enable_all();
-    enable_fpu();
+    //enable_fpu();
 }
