@@ -12,7 +12,7 @@ debug = true
 
 [profile.release]
 panic = "abort"
-lto = true
+lto = false
 opt-level = "z"
 debug = true
 

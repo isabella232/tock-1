@@ -28,7 +28,9 @@ use kernel::ReturnCode;
 use prcm;
 use radio::commands as cmd;
 use radio::commands::prop_commands as prop;
-use radio::patches::{patch_cpe_prop as patch_cpe, patch_mce_longrange as patch_mce, patch_rfe_genfsk as patch_rfe, patch_mce_genfsk as patch_mce_gfsk};
+use radio::patches::{
+    patch_cpe_prop as patch_cpe, patch_mce_longrange as patch_mce, patch_rfe_genfsk as patch_rfe,
+};
 use radio::RFC;
 use rtc;
 // This section defines the register offsets of
@@ -292,22 +294,25 @@ impl RFCore {
         );
         dbell_regs.rfcpe_ifg.set(0x0000);
 
-        patch_cpe::CPE_PATCH.apply_patch();
         // Initialize radio module
         let cmd_init = cmd::DirectCommand::new(cmd::RFC_CMD0, 0x10 | 0x40);
         self.send_direct(&cmd_init).ok();
-        debug!("cmd init");
-        // patch_mce_gfsk::MCE_PATCH.apply_patch();
+
+        patch_cpe::CPE_PATCH.apply_patch();
         patch_mce::LONGRANGE_PATCH.apply_patch();
         patch_rfe::RFE_PATCH.apply_patch();
+
+        // Turn off extra clocks
+        let cmd_clock_off = cmd::DirectCommand::new(cmd::RFC_CMD0, 0);
+        self.send_direct(&cmd_clock_off).ok();
+
         // Request bus
         let cmd_bus_req = cmd::DirectCommand::new(cmd::RFC_BUS_REQUEST, 1);
         self.send_direct(&cmd_bus_req).ok();
-        debug!("cmd bus");
+
         // Ping radio module
         let cmd_ping = cmd::DirectCommand::new(cmd::RFC_PING, 0);
         self.send_direct(&cmd_ping).ok();
-        debug!("cmd ping");
     }
 
     // Disable RFCore
@@ -349,62 +354,6 @@ impl RFCore {
 
     // Call commands to setup RFCore with optional register overrides and power output
     pub fn setup(&self, reg_overrides: u32, tx_power: u16) {
-        /*
-        let mut setup_cmd = prop::CommandRadioDivSetup {
-            command_no: 0x3807,
-            status: 0,
-            p_nextop: 0,
-            start_time: 0,
-            start_trigger: 0,
-            condition: {
-                let mut cond = cmd::RfcCondition(0);
-                cond.set_rule(0x01);
-                cond
-            },
-            modulation: {
-                let mut mdl = prop::RfcModulation(0);
-                mdl.set_mod_type(0x01);
-                mdl.set_deviation(0x64);
-                mdl.set_deviation_step(0x0);
-                mdl
-            },
-            symbol_rate: {
-                let mut sr = prop::RfcSymbolRate(0);
-                sr.set_prescale(0xF);
-                sr.set_rate_word(0x8000);
-                sr
-            },
-            rx_bandwidth: 0x52,
-            preamble_conf: {
-                let mut preamble = prop::RfcPreambleConf(0);
-                preamble.set_num_preamble_bytes(0x4);
-                preamble.set_pream_mode(0x0);
-                preamble
-            },
-            format_conf: {
-                let mut format = prop::RfcFormatConf(0);
-                format.set_num_syncword_bits(0x20);
-                format.set_bit_reversal(false);
-                format.set_msb_first(true);
-                format.set_fec_mode(0x0);
-                format.set_whiten_mode(0x0);
-                format
-            },
-            config: {
-                let mut cfg = cmd::RfcSetupConfig(0);
-                cfg.set_frontend_mode(0);
-                cfg.set_bias_mode(true);
-                cfg.set_analog_config_mode(0x0);
-                cfg.set_no_fs_powerup(false);
-                cfg
-            },
-            tx_power: tx_power,
-            reg_overrides: reg_overrides,
-            center_freq: 0x0393,
-            int_freq: 0x8000,
-            lo_divider: 0x05,
-        };
-        */
         let mut setup_cmd = prop::CommandRadioDivSetup {
             command_no: 0x3807,
             status: 0,

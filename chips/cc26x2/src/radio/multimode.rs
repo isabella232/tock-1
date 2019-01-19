@@ -6,11 +6,7 @@ use kernel::hil::rfcore;
 use kernel::ReturnCode;
 use osc;
 use radio::commands::{
-    prop_commands as prop, DirectCommand, RadioCommand, RfcCondition, RfcTrigger, GFSK_RFPARAMS, LR_RFPARAMS
-};
-use radio::patches::{
-    patch_cpe_prop as cpe, patch_mce_genfsk as mce, patch_mce_longrange as mce_lr,
-    patch_rfe_genfsk as rfe,
+    prop_commands as prop, DirectCommand, RadioCommand, RfcCondition, RfcTrigger, LR_RFPARAMS,
 };
 use radio::queue;
 use radio::rfc;
@@ -74,11 +70,7 @@ impl Radio {
         osc::OSC.request_switch_to_hf_xosc();
 
         self.rfc.enable();
-        /*
-        cpe::CPE_PATCH.apply_patch();
-        mce::MCE_PATCH.apply_patch();
-        rfe::RFE_PATCH.apply_patch();
-        */
+
         self.rfc.start_rat();
 
         osc::OSC.switch_to_hf_xosc();
@@ -90,7 +82,6 @@ impl Radio {
         }
 
         self.test_radio_fs();
-
         self.power_client
             .map(|client| client.power_mode_changed(true));
     }
@@ -149,35 +140,7 @@ impl Radio {
             cmd.packet_len = len as u8;
             cmd.sync_word = 0x00000000;
             cmd.packet_pointer = p_packet;
-            /*
-            let p_packet = buf.as_mut_ptr() as u32;
 
-            let cmd: &mut prop::CommandTx =
-                &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandTx);
-            cmd.command_no = 0x3801;
-            cmd.status = 0;
-            cmd.p_nextop = 0;
-            cmd.start_time = 0;
-            cmd.start_trigger = {
-                let mut trig = RfcTrigger(0);
-                trig
-            };
-            cmd.condition = {
-                let mut cond = RfcCondition(0);
-                cond.set_rule(0x01);
-                cond
-            };
-            cmd.packet_conf = {
-                let mut packet = prop::RfcPacketConfTx(0);
-                packet.set_fs_off(false);
-                packet.set_use_crc(true);
-                packet.set_var_len(true);
-                packet
-            };
-            cmd.packet_len = len as u8;
-            cmd.sync_word = 0x930B51DE;
-            cmd.packet_pointer = p_packet;
-            */
             RadioCommand::guard(cmd);
             self.rfc
                 .send_sync(cmd)
@@ -261,10 +224,6 @@ impl Radio {
         osc::OSC.request_switch_to_hf_xosc();
         self.rfc.enable();
 
-        // cpe::CPE_PATCH.apply_patch();
-        // mce::MCE_PATCH.apply_patch();
-        // mce_lr::LONGRANGE_PATCH.apply_patch();
-        // rfe::RFE_PATCH.apply_patch();
         self.rfc.start_rat();
 
         osc::OSC.switch_to_hf_xosc();
@@ -298,7 +257,7 @@ impl Radio {
                 COMMAND_BUF[i] = 0;
             }
         }
-        
+
         unsafe {
             let cmd: &mut prop::CommandTx =
                 &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandTx);
@@ -328,7 +287,6 @@ impl Radio {
             };
             cmd.packet_len = 0x14;
             cmd.sync_word = 0x00000000;
-            // cmd.sync_word = 0x930B51DE;
             cmd.packet_pointer = p_packet;
             RadioCommand::guard(cmd);
 

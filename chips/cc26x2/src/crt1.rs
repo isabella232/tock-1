@@ -1,7 +1,8 @@
 use cortexm4f::{
-    disable_specific_nvic, enable_fpu, generic_isr, hard_fault_handler, nvic,
-    set_privileged_thread, stash_process_state, svc_handler, systick_handler,
+    disable_specific_nvic, generic_isr, hard_fault_handler, nvic, set_privileged_thread,
+    stash_process_state, svc_handler, systick_handler,
 };
+//use cortexm4f::enable_fpu;
 use setup;
 
 extern "C" {
