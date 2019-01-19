@@ -171,20 +171,6 @@ pub enum RfcMode {
     Unchanged = 0xFF,
 }
 
-#[derive(Clone, Copy)]
-pub enum RfcCMDSTA {
-    Pending = 0x00,
-    Done = 0x01,
-    IllegalPointer = 0x81,
-    UnknownCommand = 0x82,
-    UnknownDirCommand = 0x83,
-    ContextError = 0x85,
-    SchedulingError = 0x86,
-    ParError = 0x87,
-    QueueError = 0x88,
-    QueueBusy = 0x89,
-}
-
 type RadioReturnCode = Result<(), u32>;
 
 const RFC_PWC_BASE: StaticRef<RfcPWCRegisters> =
@@ -595,18 +581,6 @@ impl RFCore {
         }
         debug!("timeout OP: {:X?}", self.status.get());
         Err(status as u32)
-    }
-
-    // Get status from CMDSTA register after ACK Interrupt flag has been thrown, then handle ACK
-    // flag
-    // Return CMDSTA register value
-    pub fn cmdsta(&self) {
-        let dbell_regs = &*self.dbell_regs;
-        let status: u32 = dbell_regs.cmdsta.get();
-        match status & 0xFF {
-            0x01 => self.ack_status.set(0x01),
-            _ => self.ack_status.set(status),
-        };
     }
 
     pub fn send_async<T: cmd::RadioCommand>(&self, rf_command: &T) -> RadioReturnCode {
