@@ -535,10 +535,61 @@ impl RFCore {
         let mut timeout: u32 = 0;
         const MAX_TIMEOUT: u32 = 0x2FFFFFF;
         while timeout < MAX_TIMEOUT {
-            status = command_op.status.get();
-            self.status.set(status.into());
-            if (status & 0x0FFF) == 0x0400 {
-                return Ok(());
+            match self.mode.get() {
+                Some(RfcMode::BLE) => {
+                    status = command_op.status.get();
+                    self.status.set(status.into());
+                    match status {
+                        0x0000 => (),
+                        0x0001 => (),
+                        0x0002 => (),
+                        0x0003 => return Ok(()), // Operation skipped
+                        0x0400 => return Ok(()),
+                        0x0401 => return Ok(()),
+                        0x0402 => return Ok(()),
+                        0x0403 => return Ok(()),
+                        0x0404 => return Ok(()),
+                        0x0405 => return Ok(()),
+                        0x0800 => return Err(status as u32),
+                        0x0801 => return Err(status as u32),
+                        0x0802 => return Err(status as u32),
+                        0x0803 => return Err(status as u32),
+                        0x0804 => return Err(status as u32),
+                        0x0805 => return Err(status as u32),
+                        // There actually is no 0x0806, don't go looking
+                        0x0807 => return Err(status as u32),
+                        0x0808 => return Err(status as u32),
+                        0x0809 => return Err(status as u32),
+                        0x080A => return Err(status as u32),
+                        0x080B => return Err(status as u32),
+                        0x080C => return Err(status as u32),
+                        0x3400 => return Ok(()),
+                        0x3401 => return Ok(()),
+                        0x3402 => return Ok(()),
+                        0x3403 => return Ok(()),
+                        0x3404 => return Ok(()),
+                        0x3405 => return Ok(()),
+                        0x3406 => return Ok(()),
+                        0x3407 => return Ok(()),
+                        0x3408 => return Ok(()),
+                        0x3409 => return Ok(()),
+                        0x340A => return Ok(()),
+                        0x3800 => return Err(status as u32),
+                        0x3801 => return Err(status as u32),
+                        0x3802 => return Err(status as u32),
+                        0x3803 => return Err(status as u32),
+                        0x3804 => return Err(status as u32),
+                        0x3805 => return Err(status as u32),
+                        0x3806 => return Err(status as u32),
+                        _ => {
+                            debug!("UNKNOWN STATUS");
+                            return Err(status as u32);
+                        }
+                    }
+                }
+                _ => {
+                    debug!("Mode unimplemented");
+                }
             }
             timeout += 1;
         }
