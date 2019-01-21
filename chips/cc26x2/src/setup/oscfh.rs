@@ -31,33 +31,9 @@
 // Clock switching and source select code from Texas Instruments
 // The registers and fields are undefined in the technical reference
 // manual necesistating this component until it is revealed to the world.
+
 use rom;
 use setup::ddi;
-
-#[derive(Copy)]
-#[repr(C)]
-pub struct Struct1 {
-    pub previousStartupTimeInUs: u32,
-    pub timeXoscOff_CV: u32,
-    pub timeXoscOn_CV: u32,
-    pub timeXoscStable_CV: u32,
-    pub tempXoscOff: i32,
-}
-
-impl Clone for Struct1 {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-#[allow(non_upper_case_globals)]
-static mut oscHfGlobals: Struct1 = Struct1 {
-    previousStartupTimeInUs: 0u32,
-    timeXoscOff_CV: 0u32,
-    timeXoscOn_CV: 0u32,
-    timeXoscStable_CV: 0u32,
-    tempXoscOff: 0i32,
-};
 
 #[allow(non_snake_case)]
 pub unsafe extern "C" fn clock_source_set(ui32src_clk: u32, ui32osc: u32) {
@@ -93,70 +69,4 @@ unsafe fn source_ready() -> bool {
 
 pub unsafe fn source_switch() {
     (rom::HAPI.hf_source_safe_switch)();
-}
-
-/*
-unsafe extern "C" fn AONRTCCurrentCompareValueGet() -> u32 {
-    *((0x40092000i32 + 0x30i32) as (*mut usize)) as (u32)
-}
-*/
-
-unsafe extern "C" fn OSCHfSourceReady() -> bool {
-    (if ddi::ddi16bitfield_read(0x400ca000u32, 0x3cu32, 0x1u32, 0u32) != 0 {
-        1i32
-    } else {
-        0i32
-    }) != 0
-}
-
-pub unsafe extern "C" fn OSCHF_TurnOnXosc() {
-    clock_source_set(0x1u32, 0x1u32);
-    // oscHfGlobals.timeXoscOn_CV = AONRTCCurrentCompareValueGet();
-}
-
-pub unsafe extern "C" fn OSCHF_AttemptToSwitchToXosc() -> bool {
-    let mut startupTimeInUs: u32;
-    let mut prevLimmit25InUs: u32;
-    if clock_source_get(0x1u32) == 0x1u32 {
-        true
-    } else if OSCHfSourceReady() {
-        source_switch();
-        // oscHfGlobals.timeXoscStable_CV = AONRTCCurrentCompareValueGet();
-        startupTimeInUs = 1000000u32.wrapping_mul(
-            oscHfGlobals
-                .timeXoscStable_CV
-                .wrapping_sub(oscHfGlobals.timeXoscOn_CV),
-        ) >> 16i32;
-        prevLimmit25InUs = oscHfGlobals.previousStartupTimeInUs;
-        prevLimmit25InUs = prevLimmit25InUs.wrapping_sub(prevLimmit25InUs >> 2i32);
-        oscHfGlobals.previousStartupTimeInUs = startupTimeInUs;
-        if prevLimmit25InUs > startupTimeInUs {
-            oscHfGlobals.previousStartupTimeInUs = prevLimmit25InUs;
-        }
-        true
-    } else {
-        false
-    }
-}
-
-pub unsafe extern "C" fn OSCHF_SwitchToRcOscTurnOffXosc() {
-    clock_source_set(0x1u32, 0x0u32);
-    if clock_source_get(0x1u32) != 0x0u32 {
-        source_switch();
-    }
-    // oscHfGlobals.timeXoscOff_CV = AONRTCCurrentCompareValueGet();
-    oscHfGlobals.tempXoscOff = AONBatMonTemperatureGetDegC();
-}
-
-pub unsafe extern "C" fn AONBatMonTemperatureGetDegC() -> i32 {
-    let mut signedTemp: i32;
-    let mut tempCorrection: i32;
-    let mut voltageSlope: i8;
-    signedTemp = *((0x40095000i32 + 0x30i32) as (*mut usize)) as (i32) << 32i32 - 9i32 - 8i32
-        >> 32i32 - 9i32 - 8i32;
-    voltageSlope = *((0x50001000i32 + 0x30ci32) as (*mut u8)) as (i8);
-    tempCorrection = voltageSlope as (i32)
-        * (*((0x40095000i32 + 0x28i32) as (*mut usize)) as (i32) - 0x300i32)
-        >> 4i32;
-    signedTemp - tempCorrection + 0x80i32 >> 8i32
 }

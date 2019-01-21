@@ -38,6 +38,13 @@ pub static mut LR_RFPARAMS: [u32; 28] = [
     0xFFFFFFFF,
 ];
 
+pub static mut LR_PARAMS: [u32; 28] = [
+    0x847, 0x6e88e3, 0x2400403, 0x68793, 0x1c8473, 0x88433, 0x684a3, 0x40014005, 0x180c0618,
+    0xc00401a1, 0x10101, 0xc0040141, 0x214ad3, 0x2980243, 0xa480583, 0x7ab80603, 0x623, 0x30c5068,
+    0x146f5128, 0xeb90512c, 0x362e5124, 0x4c5118, 0x3e055140, 0x288a3, 0x7ddf0002, 0xfcfc08c3,
+    0x82a86c2b, 0xffffffff,
+];
+
 pub static mut GFSK_RFPARAMS: [u32; 26] = [
     // override_use_patch_prop_genfsk.xml
     0x00000847, // PHY: Use MCE RAM patch, RFE RAM patch MCE_RFE_OVERRIDE(1,0,0,1,0,0),
@@ -75,10 +82,10 @@ bitfield! {
     #[derive(Copy, Clone)]
     pub struct RfcTrigger(u8);
     impl Debug;
-    pub _trigger_type, _set_trigger_type : 3, 0;
-    pub _enable_cmd, _set_enable_cmd      : 4;
-    pub _trigger_no, _set_trigger_no      : 6, 5;
-    pub _past_trigger, _set_past_trigger  : 7;
+    pub _trigger_type, set_trigger_type : 3, 0;
+    pub _enable_cmd, set_enable_cmd      : 4;
+    pub _trigger_no, set_trigger_no      : 6, 5;
+    pub _past_trigger, set_past_trigger  : 7;
 }
 
 bitfield! {
@@ -134,6 +141,18 @@ pub struct CommandCommon {
     pub condition: RfcCondition,
 }
 
+#[repr(C)]
+pub struct AddDataEntry {
+    pub command_no: u16, // 0x0005
+    pub _reserved: u16,
+    pub p_queue: u32,
+    pub p_entry: u32,
+}
+
+unsafe impl RadioCommand for AddDataEntry {
+    fn guard(&mut self) {}
+}
+
 // Command and parameters for radio setup
 
 pub unsafe trait RadioCommand {
@@ -144,6 +163,7 @@ pub mod prop_commands {
     #![allow(unused)]
     use kernel::common::registers::ReadOnly;
     use radio::commands::{RadioCommand, RfcCondition, RfcSetupConfig, RfcTrigger};
+    use radio::queue;
 
     // Radio and data commands bitfields
     bitfield! {
@@ -184,7 +204,7 @@ pub mod prop_commands {
 
     bitfield! {
         #[derive(Copy, Clone)]
-        pub struct RfcPacketConf(u8);
+        pub struct RfcPacketConfTx(u8);
         impl Debug;
         pub _fs_off, set_fs_off         : 0;
         pub _reserved, _set_reserved    : 2, 1;
@@ -195,11 +215,58 @@ pub mod prop_commands {
 
     bitfield! {
         #[derive(Copy, Clone)]
+        pub struct RfcPacketConfRx(u8);
+        impl Debug;
+        pub _fs_off, set_fs_off                 : 0;
+        pub _brepeat_ok, set_brepeat_ok        : 1;
+        pub _brepeat_nok, set_brepeat_nok      : 2;
+        pub _use_crc, set_use_crc               : 3;
+        pub _var_len, set_var_len               : 4;
+        pub _check_address, set_check_address  : 5;
+        pub _end_type, set_end_type            : 6;
+        pub _filter_op, set_filter_op          : 7;
+    }
+
+    bitfield! {
+        #[derive(Copy, Clone)]
         pub struct RfcSynthConf(u8);
         impl Debug;
         pub _tx_mode, set_tx_mode       : 0;
         pub _ref_freq, set_ref_freq     : 6, 1;
         pub _reserved, _set_reserved    : 7;
+    }
+
+    bitfield! {
+        #[derive(Copy, Clone)]
+        pub struct RxConfiguration(u8);
+        impl Debug;
+        pub _auto_flush_ignored, set_auto_flush_ignored     : 0;
+        pub _auto_flush_crc_error, set_auto_flush_crc_error : 1;
+        pub _reserved, _set_reserved                        : 2;
+        pub _include_header, set_include_header             : 3;
+        pub _include_crc, set_include_crc                   : 4;
+        pub _append_rssi, set_append_rssi                   : 5;
+        pub _append_timestamp, set_append_timestamp         : 6;
+        pub _append_status, set_append_status               : 7;
+    }
+
+    bitfield! {
+        #[derive(Copy, Clone)]
+        pub struct RfcHeaderConf(u16);
+        impl Debug;
+        pub _num_header_bits, set_num_header_bits           : 5, 0;
+        pub _len_pos, set_len_pos                           :10, 6;
+        pub _num_len_bits, set_num_len_bits                 :15, 11;
+    }
+
+    bitfield! {
+        #[derive(Copy, Clone)]
+        pub struct RfcAddressConf(u16);
+        impl Debug;
+        pub _addr_type, set_addr_type                       : 0;
+        pub _addr_size, set_addr_size                       : 5, 1;
+        pub _addr_pos, set_addr_pos                         : 10, 6;
+        pub _num_addr, set_num_addr                         : 15, 11;
     }
 
     // Radio Operation Commands
@@ -271,9 +338,9 @@ pub mod prop_commands {
         pub status: u16,
         pub p_nextop: u32,
         pub start_time: u32,
-        pub start_trigger: u8,
+        pub start_trigger: RfcTrigger,
         pub condition: RfcCondition,
-        pub packet_conf: RfcPacketConf,
+        pub packet_conf: RfcPacketConfTx,
         pub packet_len: u8,
         pub sync_word: u32,
         pub packet_pointer: u32,
@@ -296,6 +363,10 @@ pub mod prop_commands {
         pub frequency: u16,
         pub fract_freq: u16,
         pub synth_conf: RfcSynthConf,
+        pub dummy0: u8,
+        pub dummy1: u8,
+        pub dummy2: u8,
+        pub dummy3: u16,
     }
 
     unsafe impl RadioCommand for CommandFS {
@@ -324,6 +395,48 @@ pub mod prop_commands {
         pub start_time: u32,
         pub start_trigger: u8,
         pub condition: RfcCondition,
+        pub packet_conf: RfcPacketConfRx,
+        pub rx_config: RxConfiguration,
+        pub sync_word: u32,
+        pub max_packet_len: u8,
+        pub address_0: u8,
+        pub address_1: u8,
+        pub end_trigger: u8,
+        pub end_time: u32,
+        pub p_queue: *mut queue::DataQueue,
+        pub p_output: *mut u8,
+        pub _rx_sniff: [u8; 14],
     }
 
+    unsafe impl RadioCommand for CommandRx {
+        fn guard(&mut self) {}
+    }
+
+    #[repr(C)]
+    pub struct CommandRxAdv {
+        pub command_no: u16, // 0x080D
+        pub status: u16,
+        pub p_nextop: u32,
+        pub start_time: u32,
+        pub start_trigger: u8,
+        pub condition: RfcCondition,
+        pub packet_conf: RfcPacketConfRx,
+        pub rx_config: RxConfiguration,
+        pub sync_word_0: u32,
+        pub sync_word_1: u32,
+        pub max_packet_len: u16,
+        pub header_conf: RfcHeaderConf,
+        pub address: RfcAddressConf,
+        pub len_offset: u8,
+        pub end_trigger: u8,
+        pub end_time: u32,
+        pub p_addr: u32,
+        pub p_queue: *mut queue::DataQueue,
+        pub p_output: *mut u8,
+        pub _rx_sniff: [u8; 14],
+    }
+
+    unsafe impl RadioCommand for CommandRxAdv {
+        fn guard(&mut self) {}
+    }
 }

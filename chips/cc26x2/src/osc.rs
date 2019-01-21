@@ -1,7 +1,7 @@
 use kernel::common::registers::{ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 use prcm;
-use setup::oscfh;
+use rom;
 
 pub struct DdiRegisters {
     ctl0: ReadWrite<u32, Ctl0::Register>,
@@ -195,7 +195,7 @@ impl Oscillator {
     // Switch the source OSC in DDI0
     pub fn switch_osc(&self) {
         unsafe {
-            oscfh::source_switch();
+            (rom::HAPI.hf_source_safe_switch)();
         }
     }
 }
