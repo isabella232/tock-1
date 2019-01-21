@@ -158,13 +158,13 @@ impl Radio {
             RX_BUF[i] = 0;
         }
 
+        let cmd: &mut prop::CommandRx = &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandRx);
+
         let mut data_queue = queue::DataQueue::new(RX_BUF.as_mut_ptr(), RX_BUF.as_mut_ptr());
 
         data_queue.define_queue(RX_BUF.as_mut_ptr(), 600, 2, MAX_RX_LENGTH + 2);
 
         let p_queue: *mut queue::DataQueue = &mut data_queue as *mut queue::DataQueue;
-
-        let cmd: &mut prop::CommandRx = &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandRx);
 
         cmd.command_no = 0x3802;
         cmd.status = 0;
@@ -193,17 +193,17 @@ impl Radio {
             config.set_auto_flush_ignored(true);
             config.set_auto_flush_crc_error(true);
             config.set_include_header(true);
-            config.set_include_crc(true);
-            config.set_append_rssi(true);
+            config.set_include_crc(false);
+            config.set_append_rssi(false);
             config.set_append_timestamp(false);
             config.set_append_status(true);
             config
         };
-        cmd.sync_word = 0x930B51DE;
+        cmd.sync_word = 0x00000000;
         cmd.max_packet_len = 0xFF;
-        cmd.address_0 = 0;
-        cmd.address_1 = 1;
-        cmd.end_trigger = 0;
+        cmd.address_0 = 0xAA;
+        cmd.address_1 = 0xBB;
+        cmd.end_trigger = 0x1;
         cmd.end_time = 0;
         cmd.p_queue = p_queue;
         cmd.p_output = RX_DAT.as_mut_ptr();
@@ -308,7 +308,7 @@ impl Radio {
 
             let mut data_queue = queue::DataQueue::new(RX_BUF.as_mut_ptr(), RX_BUF.as_mut_ptr());
 
-            data_queue.define_queue(RX_BUF.as_mut_ptr(), 600, 2, 257);
+            data_queue.define_queue(RX_BUF.as_mut_ptr(), 600, 2, MAX_RX_LENGTH + 2);
 
             let p_queue: *mut queue::DataQueue = &mut data_queue as *mut queue::DataQueue;
 
@@ -345,7 +345,7 @@ impl Radio {
                 config.set_append_status(true);
                 config
             };
-            cmd.sync_word = 0x930B51DE;
+            cmd.sync_word = 0x00000000;
             cmd.max_packet_len = 0xFF;
             cmd.address_0 = 0xAA;
             cmd.address_1 = 0xBB;
@@ -454,6 +454,7 @@ impl rfc::RFCoreClient for Radio {
         }
 
         self.rx_buf.take().map_or(ReturnCode::ERESERVE, |rbuf| {
+            debug!("RX: {:X?}", rbuf);
             let frame_len = rbuf.len();
             let crc_valid = true;
             self.rx_client.map(move |client| {
