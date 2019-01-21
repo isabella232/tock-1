@@ -4,8 +4,8 @@ pub const CPE_PATCH: Patches = Patches::new();
 
 #[repr(C)]
 pub struct CPERam {
-    // rfc_ram: [VolatileCell<u32>; 252],
-    rfc_ram: [u32; 252],
+    rfc_ram: [VolatileCell<u32>; 252],
+    //rfc_ram: [u32; 252],
 }
 
 #[repr(C)]
@@ -69,17 +69,19 @@ impl Patches {
     }
 
     fn enter_prop_cpe_patch(&self) {
-        //let regs = unsafe { &*self.patch_vec_offset };
-        // let mut i = 0;
-        /*
+        let regs = unsafe { &*self.patch_vec_offset };
+        let mut i = 0;
+        
         for reg in regs.rfc_ram.iter() {
             reg.set(PATCH_IMAGE_PROP[i]);
             i += 1;
         }
-        */
+        
+        /*
         for i in 0..PATCH_IMAGE_PROP.len() {
             unsafe { (*self.patch_vec_offset).rfc_ram[i] = PATCH_IMAGE_PROP[i] }
         }
+        */
     }
 }
 static PATCH_IMAGE_PROP: [u32; 252] = [

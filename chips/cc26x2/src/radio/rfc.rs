@@ -29,7 +29,7 @@ use prcm;
 use radio::commands as cmd;
 use radio::commands::prop_commands as prop;
 use radio::patches::{
-    patch_cpe_prop as patch_cpe, patch_mce_longrange as patch_mce, patch_rfe_genfsk as patch_rfe,
+    patch_cpe_prop as patch_cpe, patch_mce_longrange as patch_mce, patch_rfe_genfsk as patch_rfe
 };
 use radio::RFC;
 use rtc;
@@ -235,6 +235,7 @@ impl RFCore {
     pub fn enable(&self) {
         // Make sure RFC power is enabled
         prcm::Power::enable_domain(prcm::PowerDomain::RFC);
+        
         prcm::Clock::enable_rfc();
 
         unsafe {
@@ -282,19 +283,15 @@ impl RFCore {
 
         // Initialize radio module
         let cmd_init = cmd::DirectCommand::new(cmd::RFC_CMD0, 0x10 | 0x40);
-        self.send_direct(&cmd_init).ok();
-
-        patch_cpe::CPE_PATCH.apply_patch();
-        patch_mce::LONGRANGE_PATCH.apply_patch();
-        patch_rfe::RFE_PATCH.apply_patch();
-
-        // Turn off extra clocks
-        let cmd_clock_off = cmd::DirectCommand::new(cmd::RFC_CMD0, 0);
-        self.send_direct(&cmd_clock_off).ok();
-
+        self.send_direct_async(&cmd_init).ok();
+        
+        self.apply_rfcore_patch();
+        
         // Request bus
         let cmd_bus_req = cmd::DirectCommand::new(cmd::RFC_BUS_REQUEST, 1);
-        self.send_direct(&cmd_bus_req).ok();
+        self.send_direct_async(&cmd_bus_req).ok();
+        
+        self.sync_on_ack();
 
         // Ping radio module
         let cmd_ping = cmd::DirectCommand::new(cmd::RFC_PING, 0);
@@ -336,6 +333,22 @@ impl RFCore {
 
         self.stop_rat();
         self.mode.set(None);
+    }
+    
+    pub fn apply_rfcore_patch(&self) {
+        patch_cpe::CPE_PATCH.apply_patch();
+        self.sync_on_ack();
+        patch_mce::LONGRANGE_PATCH.apply_patch();
+        patch_rfe::RFE_PATCH.apply_patch();
+
+        let cmd = cmd::DirectCommand::new(cmd::RFC_CMD0, 0);
+        self.send_direct(&cmd).ok();
+    }
+
+    pub fn sync_on_ack(&self) {
+        let dbell_regs = &*self.dbell_regs;
+        while dbell_regs.rfack_ifg.get() != 1 {};
+        dbell_regs.rfhw_ifg.set(0);
     }
 
     // Call commands to setup RFCore with optional register overrides and power output
@@ -521,6 +534,17 @@ impl RFCore {
         let mut timeout: u32 = 0;
         const MAX_TIMEOUT: u32 = 0x2FFFFFF;
         while timeout < MAX_TIMEOUT {
+            status = command_op.status.get();
+            self.status.set(status.into());
+            if (status & 0x0FFF) == 0x0400 {
+                return Ok(());
+            }
+            timeout += 1;
+        }
+        debug!("timeout OP: {:X?}", self.status.get());
+        Err(status as u32)
+    }
+    /*
             match self.mode.get() {
                 Some(RfcMode::BLE) => {
                     status = command_op.status.get();
@@ -582,6 +606,7 @@ impl RFCore {
         debug!("timeout OP: {:X?}", self.status.get());
         Err(status as u32)
     }
+    */
 
     pub fn send_async<T: cmd::RadioCommand>(&self, rf_command: &T) -> RadioReturnCode {
         let command = { (rf_command as *const T) as u32 };
@@ -596,6 +621,8 @@ impl RFCore {
     }
 
     pub fn send_direct(&self, dir_command: &cmd::DirectCommand) -> RadioReturnCode {
+        let dbell_regs = &*self.dbell_regs;
+        dbell_regs.rfack_ifg.set(0);
         let command = {
             let cmd = dir_command.command_no as u32;
             let par = dir_command.params as u32;
@@ -603,6 +630,18 @@ impl RFCore {
         };
 
         self.post_cmdr_sync(command)
+    }
+
+    pub fn send_direct_async(&self, dir_command: &cmd::DirectCommand) -> RadioReturnCode {
+        let dbell_regs = &*self.dbell_regs;
+        dbell_regs.rfack_ifg.set(0);
+        let command = {
+            let cmd = dir_command.command_no as u32;
+            let par = dir_command.params as u32;
+            (cmd << 16) | (par & 0xFFFC) | 1
+        };
+
+        self.post_cmdr_async(command)
     }
 
     pub fn wait<T: cmd::RadioCommand>(&self, rf_command: &T) -> RadioReturnCode {
@@ -664,7 +703,7 @@ impl RFCore {
         self.cpe1_nvic.clear_pending();
         self.cpe1_nvic.enable();
 
-        panic!("Internal occurred during radio command!\r");
+        panic!("Internal error occurred during radio command!\r");
     }
 }
 
