@@ -3,7 +3,6 @@ pub mod multimode;
 pub mod patches;
 pub mod queue;
 pub mod rfc;
-pub mod status_codes;
 pub mod test_settings;
 use cortexm4f::nvic;
 use peripheral_interrupts;

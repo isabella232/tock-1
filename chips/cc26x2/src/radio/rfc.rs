@@ -29,7 +29,7 @@ use prcm;
 use radio::commands as cmd;
 use radio::commands::prop_commands as prop;
 use radio::patches::{
-    patch_cpe_prop as patch_cpe, patch_mce_longrange as patch_mce, patch_rfe_genfsk as patch_rfe
+    patch_cpe_prop as patch_cpe, patch_mce_longrange as patch_mce, patch_rfe_genfsk as patch_rfe,
 };
 use radio::RFC;
 use rtc;
@@ -173,6 +173,10 @@ pub enum RfcMode {
 
 type RadioReturnCode = Result<(), u32>;
 
+const BOOT0: u32 = 0xE0000011;
+#[allow(unused)]
+const BOOT1: u32 = 0x00000080;
+
 const RFC_PWC_BASE: StaticRef<RfcPWCRegisters> =
     unsafe { StaticRef::new(0x4004_0000 as *const RfcPWCRegisters) };
 
@@ -235,9 +239,8 @@ impl RFCore {
     pub fn enable(&self) {
         // Make sure RFC power is enabled
         prcm::Power::enable_domain(prcm::PowerDomain::RFC);
-        
         prcm::Clock::enable_rfc();
-
+        prcm::set_rfc_bits(BOOT0);
         unsafe {
             rtc::RTC.set_upd_en(true);
         }
@@ -284,13 +287,13 @@ impl RFCore {
         // Initialize radio module
         let cmd_init = cmd::DirectCommand::new(cmd::RFC_CMD0, 0x10 | 0x40);
         self.send_direct_async(&cmd_init).ok();
-        
+
         self.apply_rfcore_patch();
-        
+
         // Request bus
         let cmd_bus_req = cmd::DirectCommand::new(cmd::RFC_BUS_REQUEST, 1);
         self.send_direct_async(&cmd_bus_req).ok();
-        
+
         self.sync_on_ack();
 
         // Ping radio module
@@ -333,22 +336,6 @@ impl RFCore {
 
         self.stop_rat();
         self.mode.set(None);
-    }
-    
-    pub fn apply_rfcore_patch(&self) {
-        patch_cpe::CPE_PATCH.apply_patch();
-        self.sync_on_ack();
-        patch_mce::LONGRANGE_PATCH.apply_patch();
-        patch_rfe::RFE_PATCH.apply_patch();
-
-        let cmd = cmd::DirectCommand::new(cmd::RFC_CMD0, 0);
-        self.send_direct(&cmd).ok();
-    }
-
-    pub fn sync_on_ack(&self) {
-        let dbell_regs = &*self.dbell_regs;
-        while dbell_regs.rfack_ifg.get() != 1 {};
-        dbell_regs.rfhw_ifg.set(0);
     }
 
     // Call commands to setup RFCore with optional register overrides and power output
@@ -544,69 +531,22 @@ impl RFCore {
         debug!("timeout OP: {:X?}", self.status.get());
         Err(status as u32)
     }
-    /*
-            match self.mode.get() {
-                Some(RfcMode::BLE) => {
-                    status = command_op.status.get();
-                    self.status.set(status.into());
-                    match status {
-                        0x0000 => (),
-                        0x0001 => (),
-                        0x0002 => (),
-                        0x0003 => return Ok(()), // Operation skipped
-                        0x0400 => return Ok(()),
-                        0x0401 => return Ok(()),
-                        0x0402 => return Ok(()),
-                        0x0403 => return Ok(()),
-                        0x0404 => return Ok(()),
-                        0x0405 => return Ok(()),
-                        0x0800 => return Err(status as u32),
-                        0x0801 => return Err(status as u32),
-                        0x0802 => return Err(status as u32),
-                        0x0803 => return Err(status as u32),
-                        0x0804 => return Err(status as u32),
-                        0x0805 => return Err(status as u32),
-                        // There actually is no 0x0806, don't go looking
-                        0x0807 => return Err(status as u32),
-                        0x0808 => return Err(status as u32),
-                        0x0809 => return Err(status as u32),
-                        0x080A => return Err(status as u32),
-                        0x080B => return Err(status as u32),
-                        0x080C => return Err(status as u32),
-                        0x3400 => return Ok(()),
-                        0x3401 => return Ok(()),
-                        0x3402 => return Ok(()),
-                        0x3403 => return Ok(()),
-                        0x3404 => return Ok(()),
-                        0x3405 => return Ok(()),
-                        0x3406 => return Ok(()),
-                        0x3407 => return Ok(()),
-                        0x3408 => return Ok(()),
-                        0x3409 => return Ok(()),
-                        0x340A => return Ok(()),
-                        0x3800 => return Err(status as u32),
-                        0x3801 => return Err(status as u32),
-                        0x3802 => return Err(status as u32),
-                        0x3803 => return Err(status as u32),
-                        0x3804 => return Err(status as u32),
-                        0x3805 => return Err(status as u32),
-                        0x3806 => return Err(status as u32),
-                        _ => {
-                            debug!("UNKNOWN STATUS");
-                            return Err(status as u32);
-                        }
-                    }
-                }
-                _ => {
-                    debug!("Mode unimplemented");
-                }
-            }
-            timeout += 1;
-        }
-        debug!("timeout OP: {:X?}", self.status.get());
-        Err(status as u32)
+
+    pub fn apply_rfcore_patch(&self) {
+        patch_cpe::CPE_PATCH.apply_patch();
+        self.sync_on_ack();
+        patch_mce::LONGRANGE_PATCH.apply_patch();
+        patch_rfe::RFE_PATCH.apply_patch();
+
+        let cmd = cmd::DirectCommand::new(cmd::RFC_CMD0, 0);
+        self.send_direct(&cmd).ok();
     }
-    */
+
+    pub fn sync_on_ack(&self) {
+        let dbell_regs = &*self.dbell_regs;
+        while dbell_regs.rfack_ifg.get() != 1 {}
+        dbell_regs.rfhw_ifg.set(0);
+    }
 
     pub fn send_async<T: cmd::RadioCommand>(&self, rf_command: &T) -> RadioReturnCode {
         let command = { (rf_command as *const T) as u32 };
@@ -703,7 +643,7 @@ impl RFCore {
         self.cpe1_nvic.clear_pending();
         self.cpe1_nvic.enable();
 
-        panic!("Internal error occurred during radio command!\r");
+        panic!("Internal occurred during radio command!\r");
     }
 }
 

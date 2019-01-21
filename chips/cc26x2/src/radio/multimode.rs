@@ -241,7 +241,6 @@ impl Radio {
                 TestType::Rx => self.test_radio_rx(),
             }
         }
-        debug!("Test Complete");
     }
 
     fn test_radio_tx(&self) {
@@ -257,7 +256,9 @@ impl Radio {
             for i in 0..COMMAND_BUF.len() {
                 COMMAND_BUF[i] = 0;
             }
+        }
 
+        unsafe {
             let cmd: &mut prop::CommandTx =
                 &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandTx);
             cmd.command_no = 0x3801;
