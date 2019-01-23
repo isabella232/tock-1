@@ -40,6 +40,9 @@ use gpio;
 use kernel::common::StaticRef;
 use prcm;
 use rtc;
+use aux::ddi0;
+use osc;
+use aon;
 
 pub fn perform() {
     unsafe { SetupTrimDevice() }
@@ -132,38 +135,25 @@ pub unsafe extern "C" fn SetupTrimDevice() {
     }
 }
 
-// unsafe extern "C" fn TrimAfterColdResetWakeupFromShutDownWakeupFromPowerDown() {}
 
 unsafe extern "C" fn Step_RCOSCHF_CTRIM(mut toCode: u32) {
+    let ddi0_reg = ddi0::REG;
+    
     let mut currentRcoscHfCtlReg: u32;
     let mut currentTrim: u32;
-    currentRcoscHfCtlReg = *((0x400ca000i32 + 0x30i32) as (*mut u16)) as (u32);
-    currentTrim = (currentRcoscHfCtlReg & 0xff00u32) >> 8i32 ^ 0xc0u32;
-    /*
+    currentRcoscHfCtlReg = osc::OSC.rcosc_hf_trim_get();
+
+    currentTrim = currentRcoscHfCtlReg ^ 0xc0;
+
     while toCode != currentTrim {
-        *((0x40092000i32 + 0x34i32) as (*mut usize));
+        rtc::RTC.synclf();
         if toCode > currentTrim {
             currentTrim.wrapping_add(1u32);
         }
         else {
             currentTrim.wrapping_sub(1u32);
         }
-        *((0x400ca000i32 + 0x30i32) as (*mut u16)) =
-            (currentRcoscHfCtlReg & !0xff00i32 as (u32) | (currentTrim ^ 0xc0u32) << 8i32) as (u16);
-    }
-    */
-    'loop1: loop {
-        if !(toCode != currentTrim) {
-            break;
-        }
-        while *((0x40092000i32 + 0x34i32) as (*mut usize)) & 0x1usize != 0x1usize {}
-        if toCode > currentTrim {
-            currentTrim = currentTrim.wrapping_add(1u32);
-        } else {
-            currentTrim = currentTrim.wrapping_sub(1u32);
-        }
-        *((0x400ca000i32 + 0x30i32) as (*mut u16)) =
-            (currentRcoscHfCtlReg & !0xff00i32 as (u32) | (currentTrim ^ 0xc0u32) << 8i32) as (u16);
+        osc::OSC.rcosc_hf_trim_set(currentTrim);
     }
 }
 
@@ -172,9 +162,10 @@ unsafe extern "C" fn Step_VBG(mut targetSigned: i32) {
     let mut currentSigned: i32;
 
     'loop1: loop {
-        refSysCtl3Reg = *((0x40086200i32 + 0x5i32) as (*mut u8)) as (u32);
+        refSysCtl3Reg = *((0x40086200i32 + 0x5i32) as (*mut u8)) as (u32); // ADI2 unimplemented
         currentSigned = (refSysCtl3Reg << 32i32 - 6i32 - 0i32) as (i32) >> 32i32 - 6i32;
-        *((0x40092000i32 + 0x34i32) as (*mut usize));
+        rtc::RTC.synclf();
+        //*((0x40092000i32 + 0x34i32) as (*mut usize));
         if targetSigned != currentSigned {
             if targetSigned > currentSigned {
                 currentSigned = currentSigned + 1;
@@ -242,7 +233,6 @@ unsafe extern "C" fn TrimAfterColdResetWakeupFromShutDown(mut ui32Fcfg1Revision:
 
     // Wait for xxx_LOSS_EN setting to propagate
     rtc::RTC.sync();
-    // *((0x40092000i32 + 0x2ci32) as (*mut usize));
 
     // The VDDS_BOD trim and the VDDR trim is already stepped up to max/HH if "CC1352 boost mode" is requested.
     // See function SetupAfterColdResetWakeupFromShutDownCfg1() in setup_rom.c for details.
@@ -260,14 +250,7 @@ unsafe extern "C" fn TrimAfterColdResetWakeupFromShutDown(mut ui32Fcfg1Revision:
             *((0x40086200i32 + 0x60i32 + (0x3i32 << 1i32)) as (*mut u16)) =
                 ((0xf8i32 << 8i32) as (u32) | (ui32EfuseData & 0xf800u32) >> 11i32 << 3i32)
                     as (u16);
-        } /*
-        let _rhs = !0x80i32;
-        let _lhs = &mut *((0x40086200i32 + 0x5i32) as (*mut u8));
-        *_lhs = (*_lhs as (i32) & _rhs) as (u8);
-        let _rhs = 0x80i32;
-        let _lhs = &mut *((0x40086200i32 + 0x5i32) as (*mut u8));
-        *_lhs = (*_lhs as (i32) | _rhs) as (u8);
-        */
+        }
         SetupStepVddrTrimTo((ui32EfuseData & 0x1f0000u32) >> 16i32);
     }
 
@@ -275,18 +258,21 @@ unsafe extern "C" fn TrimAfterColdResetWakeupFromShutDown(mut ui32Fcfg1Revision:
     Step_VBG((ui32EfuseData << 32i32 - 6i32 - 0i32) as (i32) >> 32i32 - 6i32);
 
     // Wait two more LF edges before restoring xxx_LOSS_EN settings
-    *((0x40092000i32 + 0x34i32) as (*mut usize));
-    *((0x40092000i32 + 0x34i32) as (*mut usize));
+    rtc::RTC.synclf();
+    rtc::RTC.synclf();
+    // aon::AON.reset_ctl_set(orgResetCtl as u32);
+    // Issue replacing unsafe write with aon set call here
     *((0x40090000i32 + 0x28i32) as (*mut usize)) = orgResetCtl as (usize);
 
     // Wait for xxx_LOSS_EN setting to propagate
     rtc::RTC.sync();
-    // *((0x40092000i32 + 0x2ci32) as (*mut usize));
 
     let mut trimReg: u32;
     let mut ui32TrimValue: u32;
     trimReg = *((0x50001000i32 + 0x40ci32) as (*mut usize)) as (u32);
     ui32TrimValue = (trimReg & 0x3f000u32) >> 12i32;
+
+    // 0x400cb000 = AUX_ADI4 registers, these addresses are unimplemented in AUX
     *((0x400cb000i32 + 0xei32) as (*mut u8)) = (ui32TrimValue << 0i32 & 0x3fu32) as (u8);
     *((0x40086200i32 + 0x10i32 + 0xci32) as (*mut u8)) = 0x40u8;
     *((0x400cb000i32 + 0x60i32 + 0x5i32 * 2i32) as (*mut u16)) =
@@ -310,7 +296,7 @@ unsafe extern "C" fn TrimAfterColdResetWakeupFromShutDown(mut ui32Fcfg1Revision:
 unsafe extern "C" fn TrimAfterColdReset() {}
 
 #[allow(unused_variables, unused_mut)]
-unsafe extern "C" fn SetupSignExtendVddrTrimValue(mut ui32VddrTrimVal: u32) -> i32 {
+pub fn SetupSignExtendVddrTrimValue(mut ui32VddrTrimVal: u32) -> i32 {
     let mut i32SignedVddrVal: i32 = ui32VddrTrimVal as (i32);
     if i32SignedVddrVal > 0x15i32 {
         i32SignedVddrVal = i32SignedVddrVal - 0x20i32;
@@ -327,16 +313,13 @@ pub unsafe extern "C" fn SetupStepVddrTrimTo(mut toCode: u32) {
         ((*((0x40086200i32 + 0x6i32) as (*mut u8)) as (i32) & 0x1fi32) >> 0i32) as (u32),
     );
     if targetTrim != currentTrim {
-        pmctlResetctl_reg =
-            (*((0x40090000i32 + 0x28i32) as (*mut usize)) & !0x10i32 as (usize)) as (u32);
+        pmctlResetctl_reg = aon::AON.reset_ctl_get() & !0x10;
         if pmctlResetctl_reg & 0x80u32 != 0 {
-            *((0x40090000i32 + 0x28i32) as (*mut usize)) =
-                (pmctlResetctl_reg & !0x80i32 as (u32)) as (usize);
+            aon::AON.reset_ctl_set(pmctlResetctl_reg & !0x80 as u32);
             rtc::RTC.sync();
-            // *((0x40092000i32 + 0x2ci32) as (*mut usize));
         }
         while targetTrim != currentTrim {
-            *((0x40092000i32 + 0x34i32) as (*mut usize));
+            rtc::RTC.synclf();
             if targetTrim > currentTrim {
                 currentTrim = currentTrim + 1;
             } else {
@@ -346,14 +329,12 @@ pub unsafe extern "C" fn SetupStepVddrTrimTo(mut toCode: u32) {
                 ((*((0x40086200i32 + 0x6i32) as (*mut u8)) as (i32) & !0x1fi32) as (u32)
                     | currentTrim as (u32) << 0i32 & 0x1fu32) as (u8);
         }
-
-        *((0x40092000i32 + 0x34i32) as (*mut usize));
+        rtc::RTC.synclf();
         if pmctlResetctl_reg & 0x80u32 != 0 {
-            *((0x40092000i32 + 0x34i32) as (*mut usize));
-            *((0x40092000i32 + 0x34i32) as (*mut usize));
-            *((0x40090000i32 + 0x28i32) as (*mut usize)) = pmctlResetctl_reg as (usize);
+            rtc::RTC.synclf();
+            rtc::RTC.synclf();
+            aon::AON.reset_ctl_set(pmctlResetctl_reg as u32);
             rtc::RTC.sync();
-            // *((0x40092000i32 + 0x2ci32) as (*mut usize));
         }
     }
 }
@@ -376,6 +357,7 @@ pub unsafe extern "C" fn SetupAfterColdResetWakeupFromShutDownCfg1(mut ccfg_Mode
             | ((0x40095000i32 + 0x24i32) as (usize) & 0xfffffusize) << 5i32
             | (5i32 << 2i32) as (usize)) as (*mut usize)) = 0usize;
     }
+    // Lots of changes to power control. Documentation shows these registers as RESERVED
     *(((0x40090000i32 + 0x10i32) as (usize) & 0xf0000000usize
         | 0x2000000usize
         | ((0x40090000i32 + 0x10i32) as (usize) & 0xfffffusize) << 5i32
@@ -400,7 +382,8 @@ pub unsafe extern "C" fn SetupAfterColdResetWakeupFromShutDownCfg2(
     // Trim CAP settings. Get and set trim value for the ANABYPASS_VALUE1
     // register
     ui32Trim = SetupGetTrimForAnabypassValue1(ccfg_ModeConfReg);
-    ddi::ddi32reg_write(0x400ca000u32, 0x18u32, ui32Trim);
+    osc::OSC.xosc_hf_set_ana_bypass_1(ui32Trim);
+    //ddi::ddi32reg_write(0x400ca000u32, 0x18u32, ui32Trim);
 
     // Trim RCOSC_LF. Get and set trim values for the RCOSCLF_RTUNE_TRIM and
     // RCOSCLF_CTUNE_TRIM fields in the XOSCLF_RCOSCLF_CTRL register.
