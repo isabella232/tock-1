@@ -476,7 +476,7 @@ pub unsafe extern "C" fn SetupAfterColdResetWakeupFromShutDownCfg3(mut ccfg_Mode
                     | ((fcfg1OscConf & 0x60u32) >> 5i32 << 5i32) as (usize)
                     | ((fcfg1OscConf & 0x6u32) >> 1i32 << 1i32) as (usize)
                     | ((fcfg1OscConf & 0x1u32) >> 0i32 << 0i32) as (usize);
-                osc::OSC.set_xtal_24mhz();
+                osc::OSC.set_xtal_24mhz(osc::XtalFreq::X24Mhz);
             }
         }
         _ => (),
@@ -488,7 +488,7 @@ pub unsafe extern "C" fn SetupAfterColdResetWakeupFromShutDownCfg3(mut ccfg_Mode
     }
     // Clear DDI_0_OSC_CTL0_CLK_LOSS_EN (ClockLossEventEnable()). This is bit 9 in DDI_0_OSC_O_CTL0.
     // This is typically already 0 except on Lizard where it is set in ROM-boot
-    osc::OSC.set_clock_loss_en();
+    osc::OSC.clock_loss_en(osc::ClockLoss::En);
 
     // Setting DDI_0_OSC_CTL1_XOSC_HF_FAST_START according to value found in FCFG1
     ui32Trim = SetupGetTrimForXoscHfFastStart();
@@ -511,7 +511,7 @@ pub unsafe extern "C" fn SetupAfterColdResetWakeupFromShutDownCfg3(mut ccfg_Mode
             // IOC Port configure
             gpio::PORT[((ccfgExtLfClk & 0xff000000u32) >> 24) as usize]
                 .enable_32khz_system_clock_input();
-            osc::OSC.set_digital_bypass();
+            osc::OSC.set_digital_bypass(osc::DigBypass::Dis);
             osc::OSC.clock_source_set(osc::ClockType::LF, 0x3);
         }
         2u32 => {

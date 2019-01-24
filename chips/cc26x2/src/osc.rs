@@ -225,6 +225,21 @@ pub enum ClockType {
     HF,
 }
 
+pub enum ClockLoss {
+    En,
+    Dis,
+}
+
+pub enum DigBypass {
+    En,
+    Dis,
+}
+
+pub enum XtalFreq {
+    X24Mhz,
+    X48Mhz,
+}
+
 pub const HF_RCOSC: u8 = 0x00;
 pub const HF_XOSC: u8 = 0x01;
 
@@ -352,19 +367,28 @@ impl Oscillator {
         dir_regs.xosc_hf_ctl.modify(XOscHfCtl::BYPASS::SET);
     }
 
-    pub fn set_clock_loss_en(&self) {
+    pub fn clock_loss_en(&self, val: ClockLoss) {
         let dir_regs = self.dir_regs;
-        dir_regs.ctl0.modify(Ctl0::CLK_LOSS_EN::SET);
+        match val {
+            ClockLoss::En => dir_regs.ctl0.modify(Ctl0::CLK_LOSS_EN::SET),
+            ClockLoss::Dis => dir_regs.ctl0.modify(Ctl0::CLK_LOSS_EN::CLEAR),
+        }
     }
 
-    pub fn set_digital_bypass(&self) {
+    pub fn set_digital_bypass(&self, val: DigBypass) {
         let dir_regs = self.dir_regs;
-        dir_regs.ctl0.modify(Ctl0::XOSC_LF_DIG_BYPASS::SET);
+        match val {
+            DigBypass::Dis => dir_regs.ctl0.modify(Ctl0::XOSC_LF_DIG_BYPASS::CLEAR),
+            DigBypass::En => dir_regs.ctl0.modify(Ctl0::XOSC_LF_DIG_BYPASS::SET),
+        }
     }
 
-    pub fn set_xtal_24mhz(&self) {
+    pub fn set_xtal_24mhz(&self, val: XtalFreq) {
         let dir_regs = self.dir_regs;
-        dir_regs.ctl0.modify(Ctl0::XTAL_IS_24M::SET);
+        match val {
+            XtalFreq::X24Mhz => dir_regs.ctl0.modify(Ctl0::XTAL_IS_24M::SET),
+            XtalFreq::X48Mhz => dir_regs.ctl0.modify(Ctl0::XTAL_IS_24M::CLEAR),
+        }
     }
 
     pub fn set_rcosc_tune_trim(&self, val: u32) {
