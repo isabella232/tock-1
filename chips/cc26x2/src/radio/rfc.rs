@@ -600,38 +600,26 @@ impl RFCore {
 
     pub fn handle_cpe0_event(&self) {
         let dbell_regs = &*self.dbell_regs;
-        let command_done = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::COMMAND_DONE);
-        let last_command_done = dbell_regs
-            .rfcpe_ifg
-            .is_set(CPEInterrupts::LAST_COMMAND_DONE);
-        let tx_done = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::TX_DONE);
-        let rx_ok = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_OK);
-        let rx_nok = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_NOK);
-        let rx_buf_full = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_BUF_FULL);
-        // let rx_entry_done = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_ENTRY_DONE);
-
-        dbell_regs.rfcpe_ifg.set(0);
-        if tx_done {
+        if dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::TX_DONE) {
             self.client.get().map(|client| client.tx_done());
         }
-        if command_done || last_command_done {
+
+        if dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::COMMAND_DONE) || dbell_regs
+            .rfcpe_ifg
+            .is_set(CPEInterrupts::LAST_COMMAND_DONE)
+        {
             self.client.get().map(|client| client.command_done());
         }
-        if rx_buf_full {
+        if dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_BUF_FULL) {
             self.client.get().map(|client| client.rx_buf_full());
         }
-        /*
-        if rx_entry_done {
-            self.client.get().map(|client| client.rx_entry_done());
-        }
-        */
-        if rx_ok {
+        if dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_OK) {
             self.client.get().map(|client| client.rx_ok());
         }
-        if rx_nok {
+        if dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_NOK) {
             self.client.get().map(|client| client.rx_nok());
         }
-
+        dbell_regs.rfcpe_ifg.set(0);
         self.cpe0_nvic.clear_pending();
         self.cpe0_nvic.enable();
     }
