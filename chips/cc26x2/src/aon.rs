@@ -277,7 +277,7 @@ impl Aon {
     }
 
     pub fn reset_ctl_get(&self) -> u32 {
-        let regs = &* self.pmctl_regs;
+        let regs = &*self.pmctl_regs;
         regs.reset_ctl.get()
     }
 }

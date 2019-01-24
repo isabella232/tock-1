@@ -35,14 +35,14 @@ pub mod ddi;
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
  * OF THE POSSIBILITY OF SUCH DAMAGE.
 */
+use aon;
 use aux;
+use ccfg;
 use gpio;
 use kernel::common::StaticRef;
+use osc;
 use prcm;
 use rtc;
-use aux::ddi0;
-use osc;
-use aon;
 
 pub fn perform() {
     unsafe { SetupTrimDevice() }
@@ -135,10 +135,7 @@ pub unsafe extern "C" fn SetupTrimDevice() {
     }
 }
 
-
 unsafe extern "C" fn Step_RCOSCHF_CTRIM(mut toCode: u32) {
-    let ddi0_reg = ddi0::REG;
-    
     let mut currentRcoscHfCtlReg: u32;
     let mut currentTrim: u32;
     currentRcoscHfCtlReg = osc::OSC.rcosc_hf_trim_get();
@@ -149,8 +146,7 @@ unsafe extern "C" fn Step_RCOSCHF_CTRIM(mut toCode: u32) {
         rtc::RTC.synclf();
         if toCode > currentTrim {
             currentTrim.wrapping_add(1u32);
-        }
-        else {
+        } else {
             currentTrim.wrapping_sub(1u32);
         }
         osc::OSC.rcosc_hf_trim_set(currentTrim);
@@ -465,17 +461,10 @@ pub unsafe extern "C" fn SetupAfterColdResetWakeupFromShutDownCfg2(
     ddi::ddi32reg_write(0x400ca000u32, 0x8u32, ui32Trim);
 }
 
-/*
-unsafe extern "C" fn SysCtrlAonSync() {
-    rtc::RTC.sync();
-    // *((0x40092000i32 + 0x2ci32) as (*mut usize));
-}
-*/
-
 pub unsafe extern "C" fn SetupAfterColdResetWakeupFromShutDownCfg3(mut ccfg_ModeConfReg: u32) {
     let mut fcfg1OscConf: u32;
     let mut ui32Trim: u32;
-    let mut currentHfClock: u32;
+    let mut currentHfClock: u8;
     let mut ccfgExtLfClk: u32;
     let switch1 = (ccfg_ModeConfReg & 0xc0000u32) >> 18i32;
 
@@ -484,7 +473,7 @@ pub unsafe extern "C" fn SetupAfterColdResetWakeupFromShutDownCfg3(mut ccfg_Mode
         1u32 => {
             fcfg1OscConf = *((0x50001000i32 + 0x38ci32) as (*mut usize)) as (u32);
             if fcfg1OscConf & 0x20000u32 == 0u32 {
-                *((0x400ca000i32 + 0x80i32 + 0x0i32) as (*mut usize)) = 0x4000usize;
+                osc::OSC.set_hposc();
                 *((0x40086000i32 + 0xci32) as (*mut usize)) =
                     *((0x40086000i32 + 0xci32) as (*mut usize)) & !(0x80i32 | 0xfi32) as (usize)
                         | ((fcfg1OscConf & 0x10000u32) >> 16i32 << 7i32) as (usize)
@@ -499,7 +488,7 @@ pub unsafe extern "C" fn SetupAfterColdResetWakeupFromShutDownCfg3(mut ccfg_Mode
                     | ((fcfg1OscConf & 0x60u32) >> 5i32 << 5i32) as (usize)
                     | ((fcfg1OscConf & 0x6u32) >> 1i32 << 1i32) as (usize)
                     | ((fcfg1OscConf & 0x1u32) >> 0i32 << 0i32) as (usize);
-                *((0x400ca000i32 + 0x80i32 + 0x0i32) as (*mut usize)) = 0x80000000usize;
+                osc::OSC.set_xtal_24mhz();
             }
         }
         _ => (),
@@ -507,11 +496,11 @@ pub unsafe extern "C" fn SetupAfterColdResetWakeupFromShutDownCfg3(mut ccfg_Mode
 
     // Set XOSC_HF in bypass mode if CCFG is configured for external TCXO
     if *((0x50003000i32 + 0x1fb0i32) as (*mut usize)) & 0x8usize == 0usize {
-        *((0x400ca000i32 + 0x80i32 + 0x28i32) as (*mut usize)) = 0x40usize;
+        osc::OSC.set_xosc_bypass();
     }
     // Clear DDI_0_OSC_CTL0_CLK_LOSS_EN (ClockLossEventEnable()). This is bit 9 in DDI_0_OSC_O_CTL0.
     // This is typically already 0 except on Lizard where it is set in ROM-boot
-    *((0x400ca000i32 + 0x100i32 + 0x0i32) as (*mut usize)) = 0x200usize;
+    osc::OSC.set_clock_loss_en();
 
     // Setting DDI_0_OSC_CTL1_XOSC_HF_FAST_START according to value found in FCFG1
     ui32Trim = SetupGetTrimForXoscHfFastStart();
@@ -521,29 +510,27 @@ pub unsafe extern "C" fn SetupAfterColdResetWakeupFromShutDownCfg3(mut ccfg_Mode
     let switch2 = ((ccfg_ModeConfReg & 0xc00000u32) >> 22i32) as (u32);
     match switch2 {
         0u32 => {
-            oscfh::clock_source_set(0x4u32, 0x1u32);
+            osc::OSC.clock_source_set(osc::ClockType::LF, 0x1);
             SetupSetAonRtcSubSecInc(0x8637bdu32);
         }
         1u32 => {
-            currentHfClock = oscfh::clock_source_get(0x1u32);
-            oscfh::clock_source_set(0x4u32, currentHfClock);
-            while oscfh::clock_source_get(0x4u32) == currentHfClock {}
-
-            ccfgExtLfClk = *((0x50003000i32 + 0x1fa8i32) as (*mut usize)) as (u32);
+            currentHfClock = osc::OSC.clock_source_get(osc::ClockType::HF);
+            osc::OSC.clock_source_set(osc::ClockType::LF, currentHfClock);
+            while osc::OSC.clock_source_get(osc::ClockType::LF) == currentHfClock {}
+            ccfgExtLfClk = ccfg::REG.ext_lf_clk.get();
             SetupSetAonRtcSubSecInc((ccfgExtLfClk & 0xffffffu32) >> 0i32);
 
             // IOC Port configure
             gpio::PORT[((ccfgExtLfClk & 0xff000000u32) >> 24) as usize]
                 .enable_32khz_system_clock_input();
-
-            *((0x400ca000i32 + 0x80i32 + 0x0i32) as (*mut usize)) = 0x400usize;
-            oscfh::clock_source_set(0x4u32, 0x3u32);
+            osc::OSC.set_digital_bypass();
+            osc::OSC.clock_source_set(osc::ClockType::LF, 0x3);
         }
         2u32 => {
-            oscfh::clock_source_set(0x4u32, 0x3u32);
+            osc::OSC.clock_source_set(osc::ClockType::LF, 0x3);
         }
         _ => {
-            oscfh::clock_source_set(0x4u32, 0x2u32);
+            osc::OSC.clock_source_set(osc::ClockType::LF, 0x2);
         }
     }
 
@@ -553,7 +540,6 @@ pub unsafe extern "C" fn SetupAfterColdResetWakeupFromShutDownCfg3(mut ccfg_Mode
 
     // Sync with AON
     rtc::RTC.sync();
-    // *((0x40092000i32 + 0x2ci32) as (*mut usize));
 }
 
 pub unsafe extern "C" fn SetupGetTrimForAnabypassValue1(mut ccfg_ModeConfReg: u32) -> u32 {
@@ -799,9 +785,13 @@ pub unsafe extern "C" fn SetupSetCacheModeAccordingToCcfgSetting() {
 }
 
 pub unsafe extern "C" fn SetupSetAonRtcSubSecInc(mut subSecInc: u32) {
-    *((0x400c6000i32 + 0x7ci32) as (*mut usize)) = (subSecInc & 0xffffu32) as (usize);
-    *((0x400c6000i32 + 0x80i32) as (*mut usize)) = (subSecInc >> 16i32 & 0xffu32) as (usize);
-    *((0x400c6000i32 + 0x84i32) as (*mut usize)) = 0x1usize;
+    aux::sysif::REGISTERS
+        .rtc_subsec_inc0
+        .set((subSecInc & 0xffff) as u32);
+    aux::sysif::REGISTERS
+        .rtc_subsec_inc1
+        .set((subSecInc >> 16 & 0xff) as u32);
+    aux::sysif::REGISTERS.rtc_subsec_incctl.set(0x1 as u32);
     'loop1: loop {
         if !(*(((0x400c6000i32 + 0x84i32) as (usize) & 0xf0000000usize
             | 0x2000000usize
@@ -812,5 +802,5 @@ pub unsafe extern "C" fn SetupSetAonRtcSubSecInc(mut subSecInc: u32) {
             break;
         }
     }
-    *((0x400c6000i32 + 0x84i32) as (*mut usize)) = 0usize;
+    aux::sysif::REGISTERS.rtc_subsec_incctl.set(0 as u32);
 }

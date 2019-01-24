@@ -234,21 +234,17 @@ pub const LF_XOSC: u8 = 0x03;
 
 pub const DDI_0_R_BASE: StaticRef<DdiRegisters> =
     unsafe { StaticRef::new(0x400C_A000 as *const DdiRegisters) };
-/*
-const DDI_0_WR_BASE: StaticRef<DdiRegisters> =
-    unsafe { StaticRef::new(0x400C_A080 as *const DdiRegisters) };
-*/
 
 pub const OSC: Oscillator = Oscillator::new();
 
 pub struct Oscillator {
-    r_regs: StaticRef<DdiRegisters>,
+    dir_regs: StaticRef<DdiRegisters>,
 }
 
 impl Oscillator {
     pub const fn new() -> Oscillator {
         Oscillator {
-            r_regs: DDI_0_R_BASE,
+            dir_regs: DDI_0_R_BASE,
         }
     }
 
@@ -275,7 +271,7 @@ impl Oscillator {
     pub fn switch_to_hf_xosc(&self) {
         if self.clock_source_get(ClockType::HF) != HF_XOSC {
             // Wait for source ready to switch
-            let regs = &*self.r_regs;
+            let regs = &*self.dir_regs;
 
             while !regs.stat0.is_set(Stat0::PENDING_SCLK_HF_SWITCHING) {}
 
@@ -284,7 +280,7 @@ impl Oscillator {
     }
 
     pub fn switch_to_hf_rcosc(&self) {
-        let regs = self.r_regs;
+        let regs = self.dir_regs;
 
         self.clock_source_set(ClockType::HF, HF_RCOSC);
         while !regs.stat0.is_set(Stat0::PENDING_SCLK_HF_SWITCHING) {}
@@ -294,7 +290,7 @@ impl Oscillator {
     }
 
     pub fn disable_lfclk_qualifier(&self) {
-        let regs = self.r_regs;
+        let regs = self.dir_regs;
 
         while self.clock_source_get(ClockType::LF) != LF_RCOSC {}
 
@@ -304,7 +300,7 @@ impl Oscillator {
 
     // Get the current clock source of either LF or HF sources
     pub fn clock_source_get(&self, source: ClockType) -> u8 {
-        let regs = self.r_regs;
+        let regs = self.dir_regs;
         match source {
             ClockType::LF => regs.stat0.read(Stat0::SCLK_LF_SRC) as u8,
             ClockType::HF => regs.stat0.read(Stat0::SCLK_HF_SRC) as u8,
@@ -313,7 +309,7 @@ impl Oscillator {
 
     // Set the clock source in DDI_0_OSC
     pub fn clock_source_set(&self, clock: ClockType, src: u8) {
-        let regs = self.r_regs;
+        let regs = self.dir_regs;
         match clock {
             ClockType::LF => {
                 regs.ctl0.modify(Ctl0::SCLK_LF_SRC_SEL.val(src as u32));
@@ -330,20 +326,45 @@ impl Oscillator {
     }
 
     pub fn rcosc_hf_trim_get(&self) -> u32 {
-        let regs = self.r_regs;
+        let regs = self.dir_regs;
         regs.rc_osc_hf_ctl.read(RcOscHfCtl::RCOSCHF_CTRIM)
     }
 
     pub fn rcosc_hf_trim_set(&self, val: u32) {
-        let regs = self.r_regs;
-        regs.rc_osc_hf_ctl.modify(RcOscHfCtl::RCOSCHF_CTRIM.val(val ^ 0xc0));
+        let regs = self.dir_regs;
+        regs.rc_osc_hf_ctl
+            .modify(RcOscHfCtl::RCOSCHF_CTRIM.val(val ^ 0xc0));
     }
 
     pub fn xosc_hf_set_ana_bypass_1(&self, val: u32) {
-        let regs = self.r_regs;
+        let regs = self.dir_regs;
         regs.ana_bypass_val1.set(val);
     }
 
+    pub fn set_hposc(&self) {
+        let dir_regs = self.dir_regs;
+        dir_regs.ctl0.modify(Ctl0::HPOSC_MODE_ON::SET);
+    }
+
+    pub fn set_xosc_bypass(&self) {
+        let dir_regs = self.dir_regs;
+        dir_regs.xosc_hf_ctl.modify(XOscHfCtl::BYPASS::SET);
+    }
+
+    pub fn set_clock_loss_en(&self) {
+        let dir_regs = self.dir_regs;
+        dir_regs.ctl0.modify(Ctl0::CLK_LOSS_EN::SET);
+    }
+
+    pub fn set_digital_bypass(&self) {
+        let dir_regs = self.dir_regs;
+        dir_regs.ctl0.modify(Ctl0::XOSC_LF_DIG_BYPASS::SET);
+    }
+
+    pub fn set_xtal_24mhz(&self) {
+        let dir_regs = self.dir_regs;
+        dir_regs.ctl0.modify(Ctl0::XTAL_IS_24M::SET);
+    }
     // Switch the source OSC in DDI0
     pub fn switch_osc(&self) {
         unsafe {
