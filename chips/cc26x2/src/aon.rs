@@ -270,4 +270,14 @@ impl Aon {
     pub fn sync(&self) {
         unsafe { rtc::RTC.sync() };
     }
+
+    pub fn reset_ctl_set(&self, val: u32) {
+        let regs = &*self.pmctl_regs;
+        regs.reset_ctl.set(val);
+    }
+
+    pub fn reset_ctl_get(&self) -> u32 {
+        let regs = &*self.pmctl_regs;
+        regs.reset_ctl.get()
+    }
 }

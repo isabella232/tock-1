@@ -7,6 +7,7 @@ pub struct MCERam {
     mce_ram: [VolatileCell<u32>; 228],
 }
 
+#[repr(C)]
 #[derive(Copy, Clone)]
 pub struct Patches {
     mce_patch: *const MCERam,

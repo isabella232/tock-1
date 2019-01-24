@@ -108,7 +108,7 @@ struct PrcmRegisters {
 
     _reserved9: [ReadOnly<u8>; 0x24],
 
-    _rfc_bits: ReadOnly<u32, AutoControl::Register>, // CPE auto check at boot for immediate start up tasks
+    pub rfc_bits: ReadWrite<u32, AutoControl::Register>, // CPE auto check at boot for immediate start up tasks
 
     // RF
     pub rfc_mode_sel: ReadWrite<u32>,
@@ -195,7 +195,7 @@ register_bitfields![
         CPU_ON      OFFSET(1) NUMBITS(1) []
     ],
     AutoControl [
-        Startup_Prefs OFFSET(0) NUMBITS(32) []
+        STARTUP OFFSET(0) NUMBITS(32) []
     ],
     OscInterrupt [
         HF_SRC OFFSET(7) NUMBITS(1) [],
@@ -248,6 +248,16 @@ pub fn acquire_uldo() {
 pub fn release_uldo() {
     let regs = PRCM_BASE;
     regs.vd_ctl.modify(VDControl::ULDO::CLEAR);
+}
+
+pub fn set_rfc_bits(val: u32) {
+    let regs = PRCM_BASE;
+    regs.rfc_bits.modify(AutoControl::STARTUP.val(val));
+}
+
+pub fn get_rfc_bits() -> u32 {
+    let regs = PRCM_BASE;
+    regs.rfc_bits.get()
 }
 
 pub enum PowerDomain {

@@ -28,6 +28,9 @@ use kernel::ReturnCode;
 use prcm;
 use radio::commands as cmd;
 use radio::commands::prop_commands as prop;
+use radio::patches::{
+    patch_cpe_prop as patch_cpe, patch_mce_longrange as patch_mce, patch_rfe_genfsk as patch_rfe,
+};
 use radio::RFC;
 use rtc;
 // This section defines the register offsets of
@@ -168,21 +171,11 @@ pub enum RfcMode {
     Unchanged = 0xFF,
 }
 
-#[derive(Clone, Copy)]
-pub enum RfcCMDSTA {
-    Pending = 0x00,
-    Done = 0x01,
-    IllegalPointer = 0x81,
-    UnknownCommand = 0x82,
-    UnknownDirCommand = 0x83,
-    ContextError = 0x85,
-    SchedulingError = 0x86,
-    ParError = 0x87,
-    QueueError = 0x88,
-    QueueBusy = 0x89,
-}
-
 type RadioReturnCode = Result<(), u32>;
+
+const BOOT0: u32 = 0xE0000011;
+#[allow(unused)]
+const BOOT1: u32 = 0x00000080;
 
 const RFC_PWC_BASE: StaticRef<RfcPWCRegisters> =
     unsafe { StaticRef::new(0x4004_0000 as *const RfcPWCRegisters) };
@@ -247,7 +240,7 @@ impl RFCore {
         // Make sure RFC power is enabled
         prcm::Power::enable_domain(prcm::PowerDomain::RFC);
         prcm::Clock::enable_rfc();
-
+        prcm::set_rfc_bits(BOOT0);
         unsafe {
             rtc::RTC.set_upd_en(true);
         }
@@ -283,17 +276,25 @@ impl RFCore {
             CPEInterrupts::INTERNAL_ERROR::SET
                 + CPEInterrupts::COMMAND_DONE::SET
                 + CPEInterrupts::TX_DONE::SET
-                + CPEInterrupts::BOOT_DONE::SET,
+                + CPEInterrupts::BOOT_DONE::SET
+                + CPEInterrupts::RX_OK::SET
+                + CPEInterrupts::RX_NOK::SET
+                + CPEInterrupts::RX_ENTRY_DONE::SET
+                + CPEInterrupts::RX_BUF_FULL::SET,
         );
         dbell_regs.rfcpe_ifg.set(0x0000);
 
         // Initialize radio module
         let cmd_init = cmd::DirectCommand::new(cmd::RFC_CMD0, 0x10 | 0x40);
-        self.send_direct(&cmd_init).ok();
+        self.send_direct_async(&cmd_init).ok();
+
+        self.apply_rfcore_patch();
 
         // Request bus
         let cmd_bus_req = cmd::DirectCommand::new(cmd::RFC_BUS_REQUEST, 1);
-        self.send_direct(&cmd_bus_req).ok();
+        self.send_direct_async(&cmd_bus_req).ok();
+
+        self.sync_on_ack();
 
         // Ping radio module
         let cmd_ping = cmd::DirectCommand::new(cmd::RFC_PING, 0);
@@ -353,20 +354,20 @@ impl RFCore {
             modulation: {
                 let mut mdl = prop::RfcModulation(0);
                 mdl.set_mod_type(0x01);
-                mdl.set_deviation(0x64);
+                mdl.set_deviation(0x14);
                 mdl.set_deviation_step(0x0);
                 mdl
             },
             symbol_rate: {
                 let mut sr = prop::RfcSymbolRate(0);
                 sr.set_prescale(0xF);
-                sr.set_rate_word(0x8000);
+                sr.set_rate_word(0x3333);
                 sr
             },
-            rx_bandwidth: 0x52,
+            rx_bandwidth: 0x4C,
             preamble_conf: {
                 let mut preamble = prop::RfcPreambleConf(0);
-                preamble.set_num_preamble_bytes(0x4);
+                preamble.set_num_preamble_bytes(0x2);
                 preamble.set_pream_mode(0x0);
                 preamble
             },
@@ -374,8 +375,8 @@ impl RFCore {
                 let mut format = prop::RfcFormatConf(0);
                 format.set_num_syncword_bits(0x20);
                 format.set_bit_reversal(false);
-                format.set_msb_first(true);
-                format.set_fec_mode(0x0);
+                format.set_msb_first(false);
+                format.set_fec_mode(0x8);
                 format.set_whiten_mode(0x0);
                 format
             },
@@ -389,11 +390,10 @@ impl RFCore {
             },
             tx_power: tx_power,
             reg_overrides: reg_overrides,
-            center_freq: 0x0393,
+            center_freq: 0x0395,
             int_freq: 0x8000,
             lo_divider: 0x05,
         };
-
         cmd::RadioCommand::guard(&mut setup_cmd);
 
         self.send_sync(&setup_cmd)
@@ -497,9 +497,9 @@ impl RFCore {
                 dbell_regs.rfack_ifg.set(0);
                 return Ok(());
             }
-
             timeout += 1;
         }
+        debug!("timeout CMDR: {:X?}", dbell_regs.cmdsta.get());
         Err(status)
     }
 
@@ -528,19 +528,24 @@ impl RFCore {
             }
             timeout += 1;
         }
+        debug!("timeout OP: {:X?}", self.status.get());
         Err(status as u32)
     }
 
-    // Get status from CMDSTA register after ACK Interrupt flag has been thrown, then handle ACK
-    // flag
-    // Return CMDSTA register value
-    pub fn cmdsta(&self) {
+    pub fn apply_rfcore_patch(&self) {
+        patch_cpe::CPE_PATCH.apply_patch();
+        self.sync_on_ack();
+        patch_mce::LONGRANGE_PATCH.apply_patch();
+        patch_rfe::RFE_PATCH.apply_patch();
+
+        let cmd = cmd::DirectCommand::new(cmd::RFC_CMD0, 0);
+        self.send_direct(&cmd).ok();
+    }
+
+    pub fn sync_on_ack(&self) {
         let dbell_regs = &*self.dbell_regs;
-        let status: u32 = dbell_regs.cmdsta.get();
-        match status & 0xFF {
-            0x01 => self.ack_status.set(0x01),
-            _ => self.ack_status.set(status),
-        };
+        while dbell_regs.rfack_ifg.get() != 1 {}
+        dbell_regs.rfhw_ifg.set(0);
     }
 
     pub fn send_async<T: cmd::RadioCommand>(&self, rf_command: &T) -> RadioReturnCode {
@@ -556,6 +561,8 @@ impl RFCore {
     }
 
     pub fn send_direct(&self, dir_command: &cmd::DirectCommand) -> RadioReturnCode {
+        let dbell_regs = &*self.dbell_regs;
+        dbell_regs.rfack_ifg.set(0);
         let command = {
             let cmd = dir_command.command_no as u32;
             let par = dir_command.params as u32;
@@ -563,6 +570,18 @@ impl RFCore {
         };
 
         self.post_cmdr_sync(command)
+    }
+
+    pub fn send_direct_async(&self, dir_command: &cmd::DirectCommand) -> RadioReturnCode {
+        let dbell_regs = &*self.dbell_regs;
+        dbell_regs.rfack_ifg.set(0);
+        let command = {
+            let cmd = dir_command.command_no as u32;
+            let par = dir_command.params as u32;
+            (cmd << 16) | (par & 0xFFFC) | 1
+        };
+
+        self.post_cmdr_async(command)
     }
 
     pub fn wait<T: cmd::RadioCommand>(&self, rf_command: &T) -> RadioReturnCode {
@@ -581,23 +600,26 @@ impl RFCore {
 
     pub fn handle_cpe0_event(&self) {
         let dbell_regs = &*self.dbell_regs;
-        let command_done = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::COMMAND_DONE);
-        let last_command_done = dbell_regs
-            .rfcpe_ifg
-            .is_set(CPEInterrupts::LAST_COMMAND_DONE);
-        let tx_done = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::TX_DONE);
-        let rx_ok = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_OK);
-        dbell_regs.rfcpe_ifg.set(0);
-        if tx_done {
+        if dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::TX_DONE) {
             self.client.get().map(|client| client.tx_done());
         }
-        if command_done || last_command_done {
+
+        if dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::COMMAND_DONE) || dbell_regs
+            .rfcpe_ifg
+            .is_set(CPEInterrupts::LAST_COMMAND_DONE)
+        {
             self.client.get().map(|client| client.command_done());
         }
-        if rx_ok {
+        if dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_BUF_FULL) {
+            self.client.get().map(|client| client.rx_buf_full());
+        }
+        if dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_OK) {
             self.client.get().map(|client| client.rx_ok());
         }
-
+        if dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_NOK) {
+            self.client.get().map(|client| client.rx_nok());
+        }
+        dbell_regs.rfcpe_ifg.set(0);
         self.cpe0_nvic.clear_pending();
         self.cpe0_nvic.enable();
     }
@@ -617,4 +639,7 @@ pub trait RFCoreClient {
     fn command_done(&self);
     fn tx_done(&self);
     fn rx_ok(&self);
+    fn rx_nok(&self);
+    fn rx_buf_full(&self);
+    fn rx_entry_done(&self);
 }

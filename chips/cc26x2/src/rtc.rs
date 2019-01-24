@@ -105,6 +105,12 @@ impl Rtc {
         let regs = &*self.registers;
         regs.sync.get();
     }
+
+    pub fn synclf(&self) {
+        let regs = &*self.registers;
+        regs.synclf.get();
+    }
+
     fn read_counter(&self) -> u32 {
         let regs = &*self.registers;
 
