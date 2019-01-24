@@ -1,11 +1,5 @@
 #![allow(non_snake_case, unused_mut, unused_variables, unused_must_use)]
 
-#[allow(unused_variables, unused_mut, non_snake_case)]
-pub mod oscfh;
-
-#[allow(unused_variables, unused_mut, non_snake_case)]
-pub mod ddi;
-
 /*
  * Copyright (c) 2015, Texas Instruments Incorporated - http://www.ti.com/
  * All rights reserved.
@@ -371,7 +365,7 @@ pub unsafe extern "C" fn SetupAfterColdResetWakeupFromShutDownCfg2(
     mut ccfg_ModeConfReg: u32,
 ) {
     let mut ui32Trim: u32;
-
+    let mut lf_ctl: u32;
     // Following sequence is required for using XOSCHF, if not included
     // devices crashes when trying to switch to XOSCHF.
     //
@@ -384,27 +378,21 @@ pub unsafe extern "C" fn SetupAfterColdResetWakeupFromShutDownCfg2(
     // Trim RCOSC_LF. Get and set trim values for the RCOSCLF_RTUNE_TRIM and
     // RCOSCLF_CTUNE_TRIM fields in the XOSCLF_RCOSCLF_CTRL register.
     ui32Trim = SetupGetTrimForRcOscLfRtuneCtuneTrim();
-    ddi::ddi16bitfield_write(
-        0x400ca000u32,
-        0x2cu32,
-        (0xffi32 | 0x300i32) as (u32),
-        0u32,
-        ui32Trim as (u16),
-    );
+    osc::OSC.set_rcosc_tune_trim(ui32Trim);
 
     // Trim XOSCHF IBIAS THERM. Get and set trim value for the
     // XOSCHF IBIAS THERM bit field in the ANABYPASS_VALUE2 register. Other
     // register bit fields are set to 0.
     ui32Trim = SetupGetTrimForXoscHfIbiastherm();
-    ddi::ddi32reg_write(0x400ca000u32, 0x1cu32, ui32Trim << 0i32);
+    osc::DDI_0_R_BASE.ana_bypass_val2.set(ui32Trim as u32);
 
     // Trim AMPCOMP settings required before switch to XOSCHF
     ui32Trim = SetupGetTrimForAmpcompTh2();
-    ddi::ddi32reg_write(0x400ca000u32, 0x14u32, ui32Trim);
+    osc::DDI_0_R_BASE.amp_comp_th2.set(ui32Trim);
     ui32Trim = SetupGetTrimForAmpcompTh1();
-    ddi::ddi32reg_write(0x400ca000u32, 0x10u32, ui32Trim);
+    osc::DDI_0_R_BASE.amp_comp_th1.set(ui32Trim);
     ui32Trim = SetupGetTrimForAmpcompCtrl(ui32Fcfg1Revision);
-    ddi::ddi32reg_write(0x400ca000u32, 0xcu32, ui32Trim);
+    osc::DDI_0_R_BASE.amp_comp_ctl.set(ui32Trim);
 
     // Set trim for DDI_0_OSC_ADCDOUBLERNANOAMPCTL_ADC_SH_MODE_EN in accordance to FCFG1 setting
     // This is bit[5] in the DDI_0_OSC_O_ADCDOUBLERNANOAMPCTL register
@@ -424,7 +412,7 @@ pub unsafe extern "C" fn SetupAfterColdResetWakeupFromShutDownCfg2(
     // in the DDI0_OSC_O_XOSCHFCTL register in accordance to FCFG1 setting.
     // Remaining register bit fields are set to their reset values of 0.
     ui32Trim = SetupGetTrimForXoscHfCtl(ui32Fcfg1Revision);
-    ddi::ddi32reg_write(0x400ca000u32, 0x28u32, ui32Trim);
+    osc::DDI_0_R_BASE.xosc_hf_ctl.set(ui32Trim);
 
     // Set trim for DBLR_LOOP_FILTER_RESET_VOLTAGE in accordance to FCFG1 setting
     // (This is bits [18:17] in DDI_0_OSC_O_ADCDOUBLERNANOAMPCTL)
@@ -458,7 +446,7 @@ pub unsafe extern "C" fn SetupAfterColdResetWakeupFromShutDownCfg2(
     // fields in the DDI0_OSC_O_RADCEXTCFG register in accordance to FCFG1 setting.
     // Remaining register bit fields are set to their reset values of 0.
     ui32Trim = SetupGetTrimForRadcExtCfg(ui32Fcfg1Revision);
-    ddi::ddi32reg_write(0x400ca000u32, 0x8u32, ui32Trim);
+    osc::DDI_0_R_BASE.radc_ext_cfg.set(ui32Trim);
 }
 
 pub unsafe extern "C" fn SetupAfterColdResetWakeupFromShutDownCfg3(mut ccfg_ModeConfReg: u32) {

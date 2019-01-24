@@ -141,8 +141,9 @@ register_bitfields! [
         XOSCLF_REGULATOR_TRIM   OFFSET(22) NUMBITS(2) [],
         XOSCLF_CMIRRWR_RATIO    OFFSET(18) NUMBITS(3) [],
         // Reserved 17-10
-        RCOSCLF_RTUNE_TRIM      OFFSET(8) NUMBITS(2) [],
-        RCOSCLF_CTUNE_TRIM      OFFSET(0) NUMBITS(8) []
+        // RCOSCLF_RTUNE_TRIM      OFFSET(8) NUMBITS(2) [],
+        // RCOSCLF_CTUNE_TRIM      OFFSET(0) NUMBITS(8) []
+        RCOSCLF_TUNE_TRIM       OFFSET(0) NUMBITS(10) []
     ],
     RcOscHfCtl [
         // Reserved 31 - 16
@@ -364,6 +365,13 @@ impl Oscillator {
     pub fn set_xtal_24mhz(&self) {
         let dir_regs = self.dir_regs;
         dir_regs.ctl0.modify(Ctl0::XTAL_IS_24M::SET);
+    }
+
+    pub fn set_rcosc_tune_trim(&self, val: u32) {
+        let dir_regs = self.dir_regs;
+        dir_regs
+            .lf_osc_ctl
+            .modify(LfOscCtl::RCOSCLF_TUNE_TRIM.val(val));
     }
     // Switch the source OSC in DDI0
     pub fn switch_osc(&self) {
