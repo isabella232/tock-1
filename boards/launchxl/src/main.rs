@@ -329,7 +329,7 @@ pub unsafe fn reset_handler() {
         UartMux::new(
             &cc26x2::uart::UART1,
             &mut capsules::virtual_uart::RX_BUF1,
-            115200
+            9600 //115200
         )
     );
     hil::uart::UART::set_client(&cc26x2::uart::UART1, uart1_mux);
@@ -343,7 +343,8 @@ pub unsafe fn reset_handler() {
 
     // the debug uart should be initialized by hand
     cc26x2::uart::UART1.configure(hil::uart::UARTParameters {
-        baud_rate: 115200,
+        baud_rate: 9600,
+        //baud_rate: 115200,
         stop_bits: hil::uart::StopBits::One,
         parity: hil::uart::Parity::None,
         hw_flow_control: false,

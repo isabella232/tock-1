@@ -181,7 +181,7 @@ impl<'a, U: 'static + hil::uart::UART> UartDriver<'a, U> {
                                         } else {
                                             ReturnCode::ECANCEL
                                         };
-                                        debug!("scheduled cb");
+                                        //debug!("scheduled cb");
                                         cb.schedule(From::from(rettype), rx_len, uart_index);
                                     } else {
                                         // Oops, no app buffer
