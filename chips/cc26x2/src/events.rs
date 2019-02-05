@@ -2,10 +2,10 @@
 //  These are generic event handling routines which could be defined in cortexm
 //
 
+use crate::event_priority::{EVENT_PRIORITY, FLAGS};
 use core::ptr;
 use cortexm::support::atomic;
 use enum_primitive::cast::FromPrimitive;
-use crate::event_priority::{EVENT_PRIORITY, FLAGS};
 
 pub fn has_event() -> bool {
     let event_flags;

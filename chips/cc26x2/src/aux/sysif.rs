@@ -1,4 +1,4 @@
-use kernel::common::registers::{ReadOnly, ReadWrite, register_bitfields};
+use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 
 use crate::memory_map::AUX_SYSIF_BASE;

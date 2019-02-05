@@ -1,13 +1,13 @@
 use crate::adi;
 use crate::adi::AuxAdi4Registers;
 use crate::aux;
-use cortexm4::nvic;
 use crate::enum_primitive::cast::FromPrimitive;
 use crate::fcfg1;
-use kernel::common::cells::OptionalCell;
-use kernel::common::StaticRef;
 use crate::peripheral_interrupts;
 use crate::rom;
+use cortexm4::nvic;
+use kernel::common::cells::OptionalCell;
+use kernel::common::StaticRef;
 
 use crate::memory_map::AUX_ADI4_BASE;
 
@@ -29,7 +29,7 @@ pub enum SampleCycle {
     _10p9_ms, // 10.9 mS
 }
 
-enum_from_primitive!{
+enum_from_primitive! {
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Input {
     Auxio0 = 0, // pin 30

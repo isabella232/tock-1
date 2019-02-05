@@ -1,7 +1,7 @@
-use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite};
-use kernel::common::StaticRef;
 use crate::prcm;
 use crate::rom;
+use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite};
+use kernel::common::StaticRef;
 
 pub struct DdiRegisters {
     pub ctl0: ReadWrite<u32, Ctl0::Register>,

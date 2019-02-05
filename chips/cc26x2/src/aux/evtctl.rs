@@ -28,7 +28,7 @@
 // 64h      EVSTAT3L            Event Status 3 Low                                         Section 19.8.3.25
 // 68h      EVSTAT3H            Event Status 3 High                                        Section 19.8.3.26
 
-use kernel::common::registers::{ReadOnly, ReadWrite, WriteOnly, register_bitfields};
+use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
 
 use crate::memory_map::AUX_EVCTL_BASE;

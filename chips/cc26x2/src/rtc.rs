@@ -5,8 +5,8 @@ use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::hil::time::{self, Alarm, Frequency, Time};
 
-use cortexm4::nvic;
 use crate::peripheral_interrupts;
+use cortexm4::nvic;
 
 #[repr(C)]
 struct RtcRegisters {

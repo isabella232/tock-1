@@ -1,4 +1,4 @@
-use kernel::common::registers::{ReadWrite, WriteOnly, register_bitfields};
+use kernel::common::registers::{register_bitfields, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
 
 use crate::memory_map::AUX_TIMER2_BASE;

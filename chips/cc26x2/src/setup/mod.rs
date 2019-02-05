@@ -33,10 +33,10 @@ use crate::aon;
 use crate::aux;
 use crate::ccfg;
 use crate::gpio;
-use kernel::common::StaticRef;
 use crate::osc;
 use crate::prcm;
 use crate::rtc;
+use kernel::common::StaticRef;
 
 pub fn perform() {
     unsafe { SetupTrimDevice() }
@@ -104,10 +104,9 @@ pub unsafe extern "C" fn SetupTrimDevice() {
     if (*((0x40090000i32 + 0x28i32) as (*mut usize)) & (0x2000i32 | 0x1000i32) as (usize)) >> 12i32
         == 1usize
     {
-        ui32AonSysResetctl =
-            (*((0x40090000i32 + 0x28i32) as (*mut usize))
-                & !(0x2000000i32 | 0x1000000i32 | 0x20000i32 | 0x10000i32 | 0x10i32) as (usize))
-                as (u32);
+        ui32AonSysResetctl = (*((0x40090000i32 + 0x28i32) as (*mut usize))
+            & !(0x2000000i32 | 0x1000000i32 | 0x20000i32 | 0x10000i32 | 0x10i32) as (usize))
+            as (u32);
         *((0x40090000i32 + 0x28i32) as (*mut usize)) = (ui32AonSysResetctl | 0x20000u32) as (usize);
         *((0x40090000i32 + 0x28i32) as (*mut usize)) = ui32AonSysResetctl as (usize);
     }

@@ -1,6 +1,6 @@
-use core::cmp::min;
 use crate::enum_primitive::cast::FromPrimitive;
 use crate::helium::{device, framer::CauterizeType};
+use core::cmp::min;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
 
@@ -91,7 +91,8 @@ impl Helium<'a> {
                         }
                         closure(cfg.as_ref())
                     })
-            }).unwrap_or_else(|err| err.into())
+            })
+            .unwrap_or_else(|err| err.into())
     }
 
     /// If the driver is currently idle and there are pending transmissions,
@@ -202,7 +203,8 @@ impl Helium<'a> {
                     self.perform_tx_async(appid);
                     ReturnCode::SUCCESS
                 }
-            }).unwrap_or(ReturnCode::SUCCESS)
+            })
+            .unwrap_or(ReturnCode::SUCCESS)
     }
 }
 

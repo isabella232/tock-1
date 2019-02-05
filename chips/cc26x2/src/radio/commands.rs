@@ -160,9 +160,9 @@ pub unsafe trait RadioCommand {
 
 pub mod prop_commands {
     #![allow(unused)]
-    use kernel::common::registers::ReadOnly;
     use crate::radio::commands::{RadioCommand, RfcCondition, RfcSetupConfig, RfcTrigger};
     use crate::radio::queue;
+    use kernel::common::registers::ReadOnly;
 
     // Radio and data commands bitfields
     bitfield! {

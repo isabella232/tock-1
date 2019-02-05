@@ -1,5 +1,5 @@
-use core::cell::Cell;
 use crate::helium::framer::FrameInfo;
+use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::rfcore;
 use kernel::ReturnCode;

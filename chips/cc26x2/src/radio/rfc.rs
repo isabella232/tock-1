@@ -20,11 +20,6 @@
 //! payload are in the system RAM, the system CPU must remain powered. Otherwise, if everything is in the
 //! radio RAM, the system CPU may go into power-down mode to save current.
 //!
-use core::cell::Cell;
-use cortexm4::nvic;
-use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite};
-use kernel::common::StaticRef;
-use kernel::ReturnCode;
 use crate::prcm;
 use crate::radio::commands as cmd;
 use crate::radio::commands::prop_commands as prop;
@@ -33,6 +28,11 @@ use crate::radio::patches::{
 };
 use crate::radio::RFC;
 use crate::rtc;
+use core::cell::Cell;
+use cortexm4::nvic;
+use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite};
+use kernel::common::StaticRef;
+use kernel::ReturnCode;
 // This section defines the register offsets of
 // RFC_DBELL component
 
@@ -604,9 +604,10 @@ impl RFCore {
             self.client.get().map(|client| client.tx_done());
         }
 
-        if dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::COMMAND_DONE) || dbell_regs
-            .rfcpe_ifg
-            .is_set(CPEInterrupts::LAST_COMMAND_DONE)
+        if dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::COMMAND_DONE)
+            || dbell_regs
+                .rfcpe_ifg
+                .is_set(CPEInterrupts::LAST_COMMAND_DONE)
         {
             self.client.get().map(|client| client.command_done());
         }

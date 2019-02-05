@@ -1,8 +1,8 @@
+use crate::setup;
 use cortexm4::{
     disable_specific_nvic, generic_isr, hard_fault_handler, nvic, set_privileged_thread,
     stash_process_state, svc_handler, systick_handler,
 };
-use crate::setup;
 
 use crate::events::set_event_flag_from_isr;
 use tock_rt0;

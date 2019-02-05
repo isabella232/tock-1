@@ -6,9 +6,9 @@ use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite, WriteOn
 use kernel::common::StaticRef;
 use kernel::hil::i2c;
 
-use cortexm4::nvic;
 use crate::peripheral_interrupts;
 use crate::prcm;
+use cortexm4::nvic;
 
 /// A wrapper module for interal register types.
 ///

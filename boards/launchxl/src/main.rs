@@ -278,7 +278,7 @@ pub unsafe fn reset_handler() {
     }
 
     // UART
-    
+
     // Create a shared UART channel for the uart and for kernel debug.
     let uart0_mux = static_init!(
         UartMux<'static>,
@@ -323,7 +323,7 @@ pub unsafe fn reset_handler() {
         parity: hil::uart::Parity::None,
         hw_flow_control: false,
     });
-        
+
     // Create a UART channel for the additional UART
     let uart1_mux = static_init!(
         UartMux,

@@ -1,14 +1,14 @@
 use crate::adc;
-use cortexm4;
 use crate::event_priority::EVENT_PRIORITY;
 use crate::events;
 use crate::gpio;
 use crate::i2c;
-use kernel;
 use crate::prcm;
 use crate::radio;
 use crate::rtc;
 use crate::uart;
+use cortexm4;
+use kernel;
 
 #[repr(C)]
 #[derive(Clone, Copy)]

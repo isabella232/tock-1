@@ -3,8 +3,8 @@ pub mod multimode;
 pub mod patches;
 pub mod queue;
 pub mod rfc;
-use cortexm4::nvic;
 use crate::peripheral_interrupts;
+use cortexm4::nvic;
 
 pub mod commands;
 

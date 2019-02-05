@@ -1,15 +1,15 @@
 //! UART driver, cc26x2 family
 use kernel;
 use kernel::common::cells::{MapCell, OptionalCell};
-use kernel::common::registers::{ReadOnly, ReadWrite, WriteOnly, register_bitfields};
+use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
 use kernel::hil::uart;
 use kernel::ReturnCode;
 
-use core::cmp;
-use cortexm4::nvic;
 use crate::peripheral_interrupts;
 use crate::prcm;
+use core::cmp;
+use cortexm4::nvic;
 
 use crate::memory_map::{UART0_BASE, UART1_BASE};
 
