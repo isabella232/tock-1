@@ -33,10 +33,10 @@
 // FB0h     VERSION     Peripheral Version              Section 15.5.1.1.27
 // FB4h     ANDCCP      Combined CCP Output             Section 15.5.1.1.28
 
-use kernel::common::registers::{ReadOnly, ReadWrite};
+use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 
-use memory_map::{GPT0_BASE, GPT1_BASE, GPT2_BASE, GPT3_BASE};
+use crate::memory_map::{GPT0_BASE, GPT1_BASE, GPT2_BASE, GPT3_BASE};
 
 pub const GPT: [StaticRef<Registers>; 4] = unsafe {
     [

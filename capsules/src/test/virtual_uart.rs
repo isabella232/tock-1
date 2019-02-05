@@ -5,7 +5,7 @@ use kernel::common::cells::TakeCell;
 use kernel::hil;
 use kernel::hil::uart::Client;
 use kernel::hil::uart::UART;
-use virtual_uart::UartDevice;
+use crate::virtual_uart::UartDevice;
 
 pub struct TestVirtualUartReceive {
     device: &'static UartDevice<'static>,

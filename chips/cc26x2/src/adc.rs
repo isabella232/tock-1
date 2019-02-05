@@ -1,15 +1,15 @@
-use adi;
-use adi::AuxAdi4Registers;
-use aux;
+use crate::adi;
+use crate::adi::AuxAdi4Registers;
+use crate::aux;
 use cortexm4::nvic;
-use enum_primitive::cast::FromPrimitive;
-use fcfg1;
+use crate::enum_primitive::cast::FromPrimitive;
+use crate::fcfg1;
 use kernel::common::cells::OptionalCell;
 use kernel::common::StaticRef;
-use peripheral_interrupts;
-use rom;
+use crate::peripheral_interrupts;
+use crate::rom;
 
-use memory_map::AUX_ADI4_BASE;
+use crate::memory_map::AUX_ADI4_BASE;
 
 // Redeclaration of bitfield enums s.t. client only needs adc.rs dependency
 #[allow(non_camel_case_types)]

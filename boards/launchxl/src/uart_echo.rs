@@ -1,6 +1,6 @@
 use kernel::common::cells::MapCell;
 use kernel::hil::uart;
-use kernel::hil::uart::{Client, UART};
+
 /*
     #############################################
     // Add the snippet below to main if you want to enable echo on UART1 and UART2
@@ -73,7 +73,6 @@ use kernel::hil::uart::{Client, UART};
     cc26x2::uart::UART1.configure(uart_echo::UART_PARAMS);
     echo1.initialize();
 */
-
 const DEFAULT_BAUD: u32 = 115200;
 
 const MAX_PAYLOAD: usize = 1;
@@ -91,7 +90,7 @@ pub static mut OUT_BUF1: [u8; MAX_PAYLOAD * 2] = [0; MAX_PAYLOAD * 2];
 pub static mut IN_BUF1: [u8; MAX_PAYLOAD] = [0; MAX_PAYLOAD];
 
 // just in case you want to mix and match UART types (eg: one is muxed, one is direct)
-pub struct UartEcho<UTx: 'static + UART, URx: 'static + UART> {
+pub struct UartEcho<UTx: 'static + uart::UART, URx: 'static + uart::UART> {
     uart_tx: &'static UTx,
     uart_rx: &'static URx,
     baud: u32,
@@ -99,7 +98,7 @@ pub struct UartEcho<UTx: 'static + UART, URx: 'static + UART> {
     rx_buf: MapCell<&'static mut [u8]>,
 }
 
-impl<UTx: 'static + UART, URx: 'static + UART> UartEcho<UTx, URx> {
+impl<UTx: 'static + uart::UART, URx: 'static + uart::UART> UartEcho<UTx, URx> {
     pub fn new(
         uart_tx: &'static UTx,
         uart_rx: &'static URx,
@@ -126,7 +125,7 @@ impl<UTx: 'static + UART, URx: 'static + UART> UartEcho<UTx, URx> {
     }
 }
 
-impl<UTx: 'static + UART, URx: 'static + UART> Client for UartEcho<UTx, URx> {
+impl<UTx: 'static + uart::UART, URx: 'static + uart::UART> uart::Client for UartEcho<UTx, URx> {
     fn transmit_complete(&self, buffer: &'static mut [u8], _error: uart::Error) {
         self.tx_buf.put(buffer);
     }

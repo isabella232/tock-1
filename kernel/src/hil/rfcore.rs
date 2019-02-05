@@ -7,7 +7,7 @@
 //! for address recognition. This must be committed to hardware with a call to
 //! config_commit. Please see the relevant TRD for more details.
 
-use returncode::ReturnCode;
+use crate::returncode::ReturnCode;
 
 pub trait PowerClient {
     fn power_mode_changed(&self, changed: bool);
@@ -49,9 +49,9 @@ pub trait RadioConfig {
 }
 
 pub trait RadioDriver {
-    fn set_transmit_client(&self, &'static TxClient);
-    fn set_receive_client(&self, &'static RxClient, receive_buffer: &'static mut [u8]);
-    fn set_power_client(&self, &'static PowerClient);
+    fn set_transmit_client(&self, client: &'static TxClient);
+    fn set_receive_client(&self, client: &'static RxClient, receive_buffer: &'static mut [u8]);
+    fn set_power_client(&self, client: &'static PowerClient);
     fn set_receive_buffer(&self, receive_buffer: &'static mut [u8]);
     fn transmit(
         &self,

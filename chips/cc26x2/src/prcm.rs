@@ -11,7 +11,7 @@
 //! It also manages the clocks attached to almost every peripheral, which needs to
 //! be enabled before usage.
 //!
-use kernel::common::registers::{ReadOnly, ReadWrite, WriteOnly};
+use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
 
 #[repr(C)]
@@ -109,7 +109,6 @@ struct PrcmRegisters {
     _reserved9: [ReadOnly<u8>; 0x24],
 
     pub rfc_bits: ReadWrite<u32, AutoControl::Register>, // CPE auto check at boot for immediate start up tasks
-
     // RF
     pub rfc_mode_sel: ReadWrite<u32>,
     pub rfc_mode_allowed: ReadOnly<u32>,
@@ -258,6 +257,11 @@ pub fn set_rfc_bits(val: u32) {
 pub fn get_rfc_bits() -> u32 {
     let regs = PRCM_BASE;
     regs.rfc_bits.get()
+}
+
+pub fn rf_mode_sel(mode: u32) {
+    let regs = PRCM_BASE;
+    regs.rfc_mode_sel.set(mode);
 }
 
 pub enum PowerDomain {
@@ -547,11 +551,6 @@ impl Clock {
 
         prcm_commit();
     }
-}
-
-pub fn rf_mode_sel(mode: u32) {
-    let regs = PRCM_BASE;
-    regs.rfc_mode_sel.set(mode);
 }
 
 pub fn disable_osc_interrupt() {

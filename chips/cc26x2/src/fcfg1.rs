@@ -39,10 +39,10 @@
 // 3D8h        SHDW_DIE_ID_2            Shadow of [JTAG_TAP::EFUSE:DIE_ID_2.*]      Section 11.4.1.72
 // 3DCh        SHDW_DIE_ID_3            Shadow of [JTAG_TAP::EFUSE:DIE_ID_3.*]      Section 11.4.1.73
 
-use kernel::common::registers::ReadOnly;
+use kernel::common::registers::{register_bitfields, ReadOnly};
 use kernel::common::StaticRef;
 
-use memory_map::FCFG1_BASE;
+use crate::memory_map::FCFG1_BASE;
 
 pub const REG: StaticRef<Registers> = unsafe { StaticRef::new(FCFG1_BASE as *const Registers) };
 

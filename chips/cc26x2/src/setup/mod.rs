@@ -29,14 +29,14 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
  * OF THE POSSIBILITY OF SUCH DAMAGE.
 */
-use aon;
-use aux;
-use ccfg;
-use gpio;
+use crate::aon;
+use crate::aux;
+use crate::ccfg;
+use crate::gpio;
 use kernel::common::StaticRef;
-use osc;
-use prcm;
-use rtc;
+use crate::osc;
+use crate::prcm;
+use crate::rtc;
 
 pub fn perform() {
     unsafe { SetupTrimDevice() }

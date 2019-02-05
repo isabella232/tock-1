@@ -1,17 +1,17 @@
 //! UART driver, cc26x2 family
 use kernel;
 use kernel::common::cells::{MapCell, OptionalCell};
-use kernel::common::registers::{ReadOnly, ReadWrite, WriteOnly};
+use kernel::common::registers::{ReadOnly, ReadWrite, WriteOnly, register_bitfields};
 use kernel::common::StaticRef;
 use kernel::hil::uart;
 use kernel::ReturnCode;
 
 use core::cmp;
 use cortexm4::nvic;
-use peripheral_interrupts;
-use prcm;
+use crate::peripheral_interrupts;
+use crate::prcm;
 
-use memory_map::{UART0_BASE, UART1_BASE};
+use crate::memory_map::{UART0_BASE, UART1_BASE};
 
 const MCU_CLOCK: u32 = 48_000_000;
 
@@ -252,7 +252,7 @@ impl UART {
         // Clear interrupts
         self.registers.icr.write(Interrupts::ALL_INTERRUPTS::SET);
 
-        self.rx.take().map(|mut rx| {
+        self.rx.take().map(|rx| {
             if rx.index == rx.length {
                 self.rx_client.map(move |client| {
                     client.receive_complete(
@@ -266,7 +266,7 @@ impl UART {
             }
         });
 
-        self.tx.take().map(|mut tx| {
+        self.tx.take().map(|tx| {
             if tx.index == tx.length {
                 self.tx_client.map(move |client| {
                     client.transmit_complete(tx.buffer, kernel::hil::uart::Error::CommandComplete);
