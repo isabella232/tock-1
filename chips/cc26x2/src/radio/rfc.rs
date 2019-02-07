@@ -354,14 +354,14 @@ impl RFCore {
             modulation: {
                 let mut mdl = prop::RfcModulation(0);
                 mdl.set_mod_type(0x01);
-                mdl.set_deviation(0x14);
+                mdl.set_deviation(0xA);
                 mdl.set_deviation_step(0x0);
                 mdl
             },
             symbol_rate: {
                 let mut sr = prop::RfcSymbolRate(0);
                 sr.set_prescale(0xF);
-                sr.set_rate_word(0x3333);
+                sr.set_rate_word(0x199A);
                 sr
             },
             rx_bandwidth: 0x4C,
