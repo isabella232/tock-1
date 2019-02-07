@@ -6,14 +6,14 @@
 //! You need a device that provides the `hil::uart::UART` trait.
 //!
 //! ```rust
-//! let uart_driver = static_init!(
-//!     UartDriver<usart::USART>,
-//!     UartDriver::new(&usart::USART0,
+//! let console = static_init!(
+//!     Console<usart::USART>,
+//!     Console::new(&usart::USART0,
 //!                  115200,
-//!                  &mut UartDriver::WRITE_BUF,
-//!                  &mut UartDriver::READ_BUF,
+//!                  &mut console::WRITE_BUF,
+//!                  &mut console::READ_BUF,
 //!                  kernel::Grant::create()));
-//! hil::uart::UART::set_client(&usart::USART0, uart_driver);
+//! hil::uart::UART::set_client(&usart::USART0, console);
 //! ```
 //!
 //! Usage
@@ -23,11 +23,11 @@
 //!
 //! ```c
 //! // (Optional) Set a callback to be invoked when the buffer has been written
-//! subscribe(UartDriver_DRIVER_NUM, 1, my_callback);
+//! subscribe(CONSOLE_DRIVER_NUM, 1, my_callback);
 //! // Share the buffer from userspace with the driver
-//! allow(UartDriver_DRIVER_NUM, buffer, buffer_len_in_bytes);
+//! allow(CONSOLE_DRIVER_NUM, buffer, buffer_len_in_bytes);
 //! // Initiate the transaction
-//! command(UartDriver_DRIVER_NUM, 1, len_to_write_in_bytes)
+//! command(CONSOLE_DRIVER_NUM, 1, len_to_write_in_bytes)
 //! ```
 //!
 //! When the buffer has been written successfully, the buffer is released from
@@ -36,15 +36,15 @@
 
 use core::cmp;
 use kernel::common::cells::{OptionalCell, TakeCell};
-use kernel::hil;
+use kernel::hil::uart;
 use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
 
 /// Syscall driver number.
-pub const DRIVER_NUM: usize = 0x00000001;
+use crate::driver;
+pub const DRIVER_NUM: usize = driver::NUM::CONSOLE as usize;
 
 #[derive(Default)]
 pub struct App {
-    write_uart: usize,
     write_callback: Option<Callback>,
     write_buffer: Option<AppSlice<Shared, u8>>,
     write_len: usize,
@@ -56,188 +56,33 @@ pub struct App {
     read_len: usize,
 }
 
-pub static mut WRITE_BUF0: [u8; 64] = [0; 64];
-pub static mut READ_BUF0: [u8; 64] = [0; 64];
+pub static mut WRITE_BUF: [u8; 64] = [0; 64];
+pub static mut READ_BUF: [u8; 64] = [0; 64];
 
-pub static mut WRITE_BUF1: [u8; 64] = [0; 64];
-pub static mut READ_BUF1: [u8; 64] = [0; 64];
-
-pub struct UartDriver<'a> {
-    uarts: &'a mut [&'a mut Uart<'a>],
-    apps: [Grant<App>; 2],
-}
-
-impl<'a> UartDriver<'a> {
-    pub fn new(
-        uarts: &'a mut [&'static mut Uart<'a>],
-        apps: [Grant<App>; 2],
-    ) -> UartDriver<'a> {
-        UartDriver { uarts, apps }
-    }
-
-    pub fn initialize(&mut self) {
-        for (i, uart) in self.uarts.iter_mut().enumerate() {
-            uart.index = i;
-        }
-    }
-
-    pub fn transmit_complete(
-        &self,
-        uart_index: usize,
-        buffer: &'static mut [u8],
-        _error: hil::uart::Error,
-    ) {
-        // Either print more from the AppSlice or send a callback to the
-        // application.
-        self.uarts[uart_index].tx_buffer.replace(buffer);
-        self.uarts[uart_index].tx_in_progress.take().map(|appid| {
-            self.apps[uart_index].enter(appid, |app, _| {
-                match self.uarts[uart_index].send_continue(appid, app) {
-                    Ok(more_to_send) => {
-                        if !more_to_send {
-                            // Go ahead and signal the application
-                            let written = app.write_len;
-                            app.write_len = 0;
-                            app.write_callback.map(|mut cb| {
-                                cb.schedule(written, uart_index, 0);
-                            });
-                        }
-                    }
-                    Err(return_code) => {
-                        // XXX This shouldn't ever happen?
-                        app.write_len = 0;
-                        app.write_remaining = 0;
-                        app.pending_write = false;
-                        let r0 = isize::from(return_code) as usize;
-                        app.write_callback.map(|mut cb| {
-                            cb.schedule(r0, uart_index, 0);
-                        });
-                    }
-                }
-            })
-        });
-
-        // If we are not printing more from the current AppSlice,
-        // see if any other applications have pending messages.
-        if self.uarts[uart_index].tx_in_progress.is_none() {
-            for cntr in self.apps[uart_index].iter() {
-                let started_tx = cntr.enter(|app, _| {
-                    if app.pending_write {
-                        app.pending_write = false;
-                        match self.uarts[uart_index].send_continue(app.appid(), app) {
-                            Ok(more_to_send) => more_to_send,
-                            Err(return_code) => {
-                                // XXX This shouldn't ever happen?
-                                app.write_len = 0;
-                                app.write_remaining = 0;
-                                app.pending_write = false;
-                                let r0 = isize::from(return_code) as usize;
-                                app.write_callback.map(|mut cb| {
-                                    cb.schedule(r0, uart_index, 0);
-                                });
-                                false
-                            }
-                        }
-                    } else {
-                        false
-                    }
-                });
-                if started_tx {
-                    break;
-                }
-            }
-        }
-    }
-
-    pub fn receive_complete(
-        &self,
-        uart_index: usize,
-        buffer: &'static mut [u8],
-        rx_len: usize,
-        error: hil::uart::Error,
-    ) {
-        // Either print more from the AppSlice or send a callback to the
-        // application.
-        self.uarts[uart_index]
-            .rx_in_progress
-            .take()
-            .map(|appid| {
-                self.apps[uart_index]
-                    .enter(appid, |app, _| {
-                        app.read_callback.map(|mut cb| {
-                            // An iterator over the returned buffer yielding only the first `rx_len`
-                            // bytes
-                            let rx_buffer = buffer.iter().take(rx_len);
-                            match error {
-                                hil::uart::Error::None | hil::uart::Error::Aborted => {
-                                    // Receive some bytes, signal error type and return bytes to process buffer
-                                    if let Some(mut app_buffer) = app.read_buffer.take() {
-                                        for (a, b) in app_buffer.iter_mut().zip(rx_buffer) {
-                                            *a = *b;
-                                        }
-                                        let rettype = if error == hil::uart::Error::None
-                                        {
-                                            ReturnCode::SUCCESS
-                                        } else {
-                                            ReturnCode::ECANCEL
-                                        };
-                                        debug!("scheduled cb");
-                                        cb.schedule(From::from(rettype), rx_len, uart_index);
-                                    } else {
-                                        // Oops, no app buffer
-                                        cb.schedule(From::from(ReturnCode::EINVAL), uart_index, 0);
-                                    }
-                                }
-                                _ => {
-                                    // Some UART error occurred
-                                    cb.schedule(From::from(ReturnCode::FAIL), uart_index, 0);
-                                }
-                            }
-                        });
-                    })
-                    .unwrap_or_default();
-            })
-            .unwrap_or_default();
-
-        // Whatever happens, we want to make sure to replace the rx_buffer for future transactions
-        self.uarts[uart_index].rx_buffer.replace(buffer);
-    }
-}
-
-pub struct Uart<'a> {
-    parent: Option<&'static UartDriver<'static>>,
-    hw: Option<&'a hil::uart::Uart<'a>>,
-    index: usize,
+pub struct Console<'a> {
+    uart: &'a uart::UartData<'a>,
+    apps: Grant<App>,
     tx_in_progress: OptionalCell<AppId>,
     tx_buffer: TakeCell<'static, [u8]>,
     rx_in_progress: OptionalCell<AppId>,
     rx_buffer: TakeCell<'static, [u8]>,
 }
 
-impl<'a> Uart<'a> {
-    pub const fn new(index: usize) -> Uart<'a> {
-        Uart {
-            parent: None,
-            hw: None,
-            index: index,
-            tx_in_progress: OptionalCell::empty(),
-            tx_buffer: TakeCell::empty(),
-            rx_in_progress: OptionalCell::empty(),
-            rx_buffer: TakeCell::empty(),
-        }
-    }
-
-    pub fn initialize(
-        &mut self,
-        uart: &'a hil::uart::Uart,
+impl Console<'a> {
+    pub fn new(
+        uart: &'a uart::UartData<'a>,
         tx_buffer: &'static mut [u8],
         rx_buffer: &'static mut [u8],
-        parent: &'static UartDriver<'a, hil::uart::Uart>,
-    ) {
-        self.hw = Some(uart);
-        self.tx_buffer = TakeCell::new(tx_buffer);
-        self.rx_buffer = TakeCell::new(rx_buffer);
-        self.parent = Some(parent)
+        grant: Grant<App>,
+    ) -> Console<'a> {
+        Console {
+            uart: uart,
+            apps: grant,
+            tx_in_progress: OptionalCell::empty(),
+            tx_buffer: TakeCell::new(tx_buffer),
+            rx_in_progress: OptionalCell::empty(),
+            rx_buffer: TakeCell::new(rx_buffer),
+        }
     }
 
     /// Internal helper function for setting up a new send transaction
@@ -294,9 +139,8 @@ impl<'a> Uart<'a> {
                 } else {
                     app.write_remaining = 0;
                 }
-                if let Some(hw) = self.hw {
-                    hw.transmit(buffer, transaction_len);
-                }
+
+                let (_err, _opt) = self.uart.transmit_buffer(buffer, transaction_len);
             });
         } else {
             app.pending_write = true;
@@ -307,7 +151,7 @@ impl<'a> Uart<'a> {
     /// Internal helper function for starting a receive operation
     fn receive_new(&self, app_id: AppId, app: &mut App, len: usize) -> ReturnCode {
         if self.rx_buffer.is_none() {
-            // For now, we tolerate only one concurrent receive operation on this UartDriver.
+            // For now, we tolerate only one concurrent receive operation on this console.
             // Competing apps will have to retry until success.
             return ReturnCode::EBUSY;
         }
@@ -324,9 +168,7 @@ impl<'a> Uart<'a> {
                     app.read_len = read_len;
                     self.rx_buffer.take().map(|buffer| {
                         self.rx_in_progress.set(app_id);
-                        if let Some(hw) = self.hw {
-                            hw.receive(buffer, app.read_len);
-                        }
+                        let (_err, _opt) = self.uart.receive_buffer(buffer, app.read_len);
                     });
                     ReturnCode::SUCCESS
                 }
@@ -339,25 +181,29 @@ impl<'a> Uart<'a> {
     }
 }
 
-impl Driver for UartDriver<'a, U> {
+impl Driver for Console<'a> {
     /// Setup shared buffers.
     ///
     /// ### `allow_num`
     ///
     /// - `1`: Writeable buffer for write buffer
     /// - `2`: Writeable buffer for read buffer
-    fn allow(&self, appid: AppId, arg2: usize, slice: Option<AppSlice<Shared, u8>>) -> ReturnCode {
-        let allow_num = arg2 as u16;
-        let uart_num = (arg2 >> 16) as usize;
-
+    fn allow(
+        &self,
+        appid: AppId,
+        allow_num: usize,
+        slice: Option<AppSlice<Shared, u8>>,
+    ) -> ReturnCode {
         match allow_num {
-            1 => self.apps[uart_num]
+            1 => self
+                .apps
                 .enter(appid, |app, _| {
                     app.write_buffer = slice;
                     ReturnCode::SUCCESS
                 })
                 .unwrap_or_else(|err| err.into()),
-            2 => self.apps[uart_num]
+            2 => self
+                .apps
                 .enter(appid, |app, _| {
                     app.read_buffer = slice;
                     ReturnCode::SUCCESS
@@ -372,21 +218,21 @@ impl Driver for UartDriver<'a, U> {
     /// ### `subscribe_num`
     ///
     /// - `1`: Write buffer completed callback
-    fn subscribe(&self, arg1: usize, callback: Option<Callback>, app_id: AppId) -> ReturnCode {
-        let subscribe_num = arg1 as u16;
-        let uart_num = (arg1 >> 16) as usize;
-
+    fn subscribe(
+        &self,
+        subscribe_num: usize,
+        callback: Option<Callback>,
+        app_id: AppId,
+    ) -> ReturnCode {
         match subscribe_num {
             1 /* putstr/write_done */ => {
-                self.apps[uart_num]
-                .enter(app_id, |app, _| {
+                self.apps.enter(app_id, |app, _| {
                     app.write_callback = callback;
                     ReturnCode::SUCCESS
                 }).unwrap_or_else(|err| err.into())
             },
             2 /* getnstr done */ => {
-                self.apps[uart_num]
-                .enter(app_id, |app, _| {
+                self.apps.enter(app_id, |app, _| {
                     app.read_callback = callback;
                     ReturnCode::SUCCESS
                 }).unwrap_or_else(|err| err.into())
@@ -406,61 +252,32 @@ impl Driver for UartDriver<'a, U> {
     ///        passed in `arg1`
     /// - `3`: Cancel any in progress receives and return (via callback)
     ///        what has been received so far.
-    fn command(&self, arg0: usize, arg1: usize, _: usize, appid: AppId) -> ReturnCode {
-        let cmd_num = arg0 as u16;
-        let uart_num = (arg0 >> 16) as usize;
-
+    fn command(&self, cmd_num: usize, arg1: usize, _: usize, appid: AppId) -> ReturnCode {
         match cmd_num {
             0 /* check if present */ => ReturnCode::SUCCESS,
             1 /* putstr */ => {
                 let len = arg1;
-                self.apps[uart_num]
-                .enter(appid, |app, _| {
-                    self.uarts[uart_num].send_new(appid, app, len)
+                self.apps.enter(appid, |app, _| {
+                    self.send_new(appid, app, len)
                 }).unwrap_or_else(|err| err.into())
             },
             2 /* getnstr */ => {
                 let len = arg1;
-                self.apps[uart_num].enter(appid, |app, _| {
-                    self.uarts[uart_num].receive_new(appid, app, len)
+                self.apps.enter(appid, |app, _| {
+                    self.receive_new(appid, app, len)
                 }).unwrap_or_else(|err| err.into())
             },
             3 /* abort rx */ => {
-                self.apps[uart_num]
-                .enter(appid, |app, _| {
-                    if let Some(hw) = self.uarts[app.write_uart].hw {
-                        hw.abort_receive();
-                    }
-                    ReturnCode::SUCCESS
-                }).unwrap_or_else(|err| err.into())
+                self.uart.receive_abort();
+                ReturnCode::SUCCESS
             }
             _ => ReturnCode::ENOSUPPORT
         }
     }
 }
 
-/*
-impl<U: hil::uart::UART> hil::uart::Client for Uart<'a, U> {
-    fn transmit_complete(&self, buffer: &'static mut [u8], error: hil::uart::Error) {
-        if let Some(parent) = self.parent {
-            parent.transmit_complete(self.index, buffer, error);
-        }
-    }
-
-    fn receive_complete(&self, buffer: &'static mut [u8], rx_len: usize, error: hil::uart::Error) {
-        if let Some(parent) = self.parent {
-            parent.receive_complete(self.index, buffer, rx_len, error);
-        }
-    }
-}
-*/
-
-impl uart::TransmitClient for Uart<'a> {
+impl uart::TransmitClient for Console<'a> {
     fn transmitted_buffer(&self, buffer: &'static mut [u8], _tx_len: usize, _rcode: ReturnCode) {
-        if let Some(parent) = self.parent {
-            parent.transmit_complete(self.index, buffer, rcode);
-        }
-        /*
         // Either print more from the AppSlice or send a callback to the
         // application.
         self.tx_buffer.replace(buffer);
@@ -521,11 +338,10 @@ impl uart::TransmitClient for Uart<'a> {
                 }
             }
         }
-        */
     }
 }
 
-impl uart::ReceiveClient for Uart<'a> {
+impl uart::ReceiveClient for Console<'a> {
     fn received_buffer(
         &self,
         buffer: &'static mut [u8],
@@ -533,10 +349,6 @@ impl uart::ReceiveClient for Uart<'a> {
         rcode: ReturnCode,
         error: uart::Error,
     ) {
-        if let Some(parent) = self.parent {
-            parent.receive_complete(self.index, buffer, rx_len, error);
-        }
-        /*
         self.rx_in_progress
             .take()
             .map(|appid| {
@@ -572,6 +384,5 @@ impl uart::ReceiveClient for Uart<'a> {
 
         // Whatever happens, we want to make sure to replace the rx_buffer for future transactions
         self.rx_buffer.replace(buffer);
-        */
     }
 }
