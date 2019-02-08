@@ -8,7 +8,7 @@ use kernel::ReturnCode;
 
 use crate::peripheral_interrupts;
 use crate::prcm;
-use core::cmp;
+use core::cell::Cell;
 use cortexm4::nvic;
 
 use crate::memory_map::{UART0_BASE, UART1_BASE};
@@ -109,13 +109,14 @@ struct Transaction {
     index: usize,
 }
 
-pub struct UART {
+pub struct UART<'a> {
     registers: &'static StaticRef<UartRegisters>,
     nvic: &'static nvic::Nvic,
-    tx_client: OptionalCell<&'static uart::Client>,
-    rx_client: OptionalCell<&'static uart::Client>,
+    tx_client: OptionalCell<&'a uart::TransmitClient>,
+    rx_client: OptionalCell<&'a uart::ReceiveClient>,
     tx: MapCell<Transaction>,
     rx: MapCell<Transaction>,
+    receiving_word: Cell<bool>,
 }
 
 macro_rules! uart_nvic {
@@ -152,8 +153,8 @@ macro_rules! uart_nvic {
 uart_nvic!(uart0_isr, UART0);
 uart_nvic!(uart1_isr, UART1);
 
-impl UART {
-    const fn new(registers: &'static StaticRef<UartRegisters>, nvic: &'static nvic::Nvic) -> UART {
+impl<'a> UART<'a> {
+    const fn new(registers: &'static StaticRef<UartRegisters>, nvic: &'static nvic::Nvic) -> UART<'a> {
         UART {
             registers,
             nvic,
@@ -161,6 +162,8 @@ impl UART {
             rx_client: OptionalCell::empty(),
             tx: MapCell::empty(),
             rx: MapCell::empty(),
+
+            receiving_word: Cell::new(false),
         }
     }
 
@@ -172,7 +175,8 @@ impl UART {
         self.enable_interrupts();
     }
 
-    pub fn configure(&self, params: kernel::hil::uart::UARTParameters) -> ReturnCode {
+    /*
+    pub fn configure(&self, params: kernel::hil::uart::Parameters) -> ReturnCode {
         // These could probably be implemented, but are currently ignored, so
         // throw an error.
         if params.stop_bits != kernel::hil::uart::StopBits::One {
@@ -204,6 +208,7 @@ impl UART {
 
         ReturnCode::SUCCESS
     }
+    */
 
     fn power_and_clock(&self) {
         prcm::Power::enable_domain(prcm::PowerDomain::Serial);
@@ -255,10 +260,11 @@ impl UART {
         self.rx.take().map(|rx| {
             if rx.index == rx.length {
                 self.rx_client.map(move |client| {
-                    client.receive_complete(
+                    client.received_buffer(
                         rx.buffer,
                         rx.index,
-                        kernel::hil::uart::Error::CommandComplete,
+                        ReturnCode::SUCCESS,
+                        kernel::hil::uart::Error::None,
                     );
                 });
             } else {
@@ -269,7 +275,7 @@ impl UART {
         self.tx.take().map(|tx| {
             if tx.index == tx.length {
                 self.tx_client.map(move |client| {
-                    client.transmit_complete(tx.buffer, kernel::hil::uart::Error::CommandComplete);
+                    client.transmitted_buffer(tx.buffer, tx.length, ReturnCode::SUCCESS);
                 });
             } else {
                 self.tx.put(tx);
@@ -302,6 +308,7 @@ impl UART {
         !self.registers.fr.is_set(Flags::TX_FIFO_FULL)
     }
 
+    /*
     pub fn set_tx_client(&self, client: &'static kernel::hil::uart::Client) {
         self.tx_client.set(client);
     }
@@ -309,15 +316,138 @@ impl UART {
     pub fn set_rx_client(&self, client: &'static kernel::hil::uart::Client) {
         self.rx_client.set(client);
     }
+    */
 }
 
-impl kernel::hil::uart::UART for UART {
-    fn set_client(&self, client: &'static kernel::hil::uart::Client) {
+impl<'a> uart::Uart<'a> for UART<'a> {}
+impl<'a> uart::UartData<'a> for UART<'a> {}
+
+impl<'a> uart::Configure for UART<'a> {
+    fn configure(&self, params: uart::Parameters) -> ReturnCode {
+        // These could probably be implemented, but are currently ignored, so
+        // throw an error.
+        if params.stop_bits != uart::StopBits::One {
+            return ReturnCode::ENOSUPPORT;
+        }
+        if params.parity != uart::Parity::None {
+            return ReturnCode::ENOSUPPORT;
+        }
+        if params.hw_flow_control != false {
+            return ReturnCode::ENOSUPPORT;
+        }
+
+        // Disable the UART before configuring
+        self.disable();
+
+        self.set_baud_rate(params.baud_rate);
+
+        // Set word length
+        self.registers.lcrh.write(LineControl::WORD_LENGTH::Len8);
+
+        self.fifo_enable();
+
+        self.enable_interrupts();
+
+        // Enable UART, RX and TX
+        self.registers
+            .ctl
+            .write(Control::UART_ENABLE::SET + Control::RX_ENABLE::SET + Control::TX_ENABLE::SET);
+
+        ReturnCode::SUCCESS
+    }
+}
+
+impl<'a> uart::Transmit<'a> for UART<'a> {
+    fn set_transmit_client(&self, client: &'a uart::TransmitClient) {
+        self.tx_client.set(client);
+    }
+
+    fn transmit_buffer(
+        &self,
+        buffer: &'static mut [u8],
+        len: usize,
+    ) -> (ReturnCode, Option<&'static mut [u8]>) {
+        // if there is a weird input, don't try to do any transfers
+        if len == 0 || len > buffer.len() {
+            (ReturnCode::ESIZE, Some(buffer))
+        } else if self.tx.is_some() {
+            (ReturnCode::EBUSY, Some(buffer))
+        } else {
+            // we will send one byte, causing EOT interrupt
+            if self.tx_fifo_not_full() {
+                self.send_byte(buffer[0]);
+            }
+            // Transaction will be continued in interrupt bottom half
+            self.tx.put(Transaction {
+                buffer: buffer,
+                length: len,
+                index: 1,
+            });
+            (ReturnCode::SUCCESS, None)
+        }
+    }
+
+    // Incorporating this into the state machine is tricky because
+    // it relies on implicit state from outstanding operations. I.e.,
+    // rather than see if a TX interrupt occurred it checks if the FIFO
+    // can accept data from a buffer. -pal 12/31/18
+    fn transmit_word(&self, _word: u32) -> ReturnCode {
+        ReturnCode::FAIL
+    }
+
+    fn transmit_abort(&self) -> ReturnCode {
+        ReturnCode::FAIL
+    }
+}
+
+impl<'a> uart::Receive<'a> for UART<'a> {
+    fn set_receive_client(&self, client: &'a uart::ReceiveClient) {
+        self.rx_client.set(client);
+    }
+
+    fn receive_buffer(
+        &self,
+        buffer: &'static mut [u8],
+        len: usize,
+    ) -> (ReturnCode, Option<&'static mut [u8]>) {
+        if len == 0 || len > buffer.len() {
+            (ReturnCode::ESIZE, Some(buffer))
+        } else if self.rx.is_some() || self.receiving_word.get() {
+            (ReturnCode::EBUSY, Some(buffer))
+        } else {
+            self.rx.put(Transaction {
+                buffer: buffer,
+                length: len,
+                index: 0,
+            });
+            (ReturnCode::SUCCESS, None)
+        }
+    }
+
+    fn receive_word(&self) -> ReturnCode {
+        if self.rx.is_some() || self.receiving_word.get() {
+            ReturnCode::EBUSY
+        } else {
+            self.receiving_word.set(true);
+            ReturnCode::SUCCESS
+        }
+    }
+
+    fn receive_abort(&self) -> ReturnCode {
+        ReturnCode::FAIL
+    }
+}
+
+/*
+impl kernel::hil::uart::Uart for UART {
+    fn set_transmit_client(&self, client: &'static kernel::hil::uart::TransmitClient) {
         self.rx_client.set(client);
         self.tx_client.set(client);
     }
 
-    fn configure(&self, params: kernel::hil::uart::UARTParameters) -> ReturnCode {
+    fn set_receive_client(&self, client: &'static kernel::hil::uart::ReceiveClient)
+
+    fn configure(&self, params: kernel::hil::uart::Parameters) -> ReturnCode {
         self.configure(params)
     }
 
@@ -374,3 +504,4 @@ impl kernel::hil::uart::UART for UART {
         });
     }
 }
+*/

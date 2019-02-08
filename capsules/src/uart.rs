@@ -62,16 +62,16 @@ pub static mut READ_BUF0: [u8; 64] = [0; 64];
 pub static mut WRITE_BUF1: [u8; 64] = [0; 64];
 pub static mut READ_BUF1: [u8; 64] = [0; 64];
 
-pub struct UartDriver<'a> {
-    uarts: &'a mut [&'a mut Uart<'a>],
+pub struct UartDriver<'a, U: 'static + hil::uart::Uart<'a>> { 
+    uarts: &'a mut [&'a mut Uart<'a, U>],
     apps: [Grant<App>; 2],
 }
 
-impl<'a> UartDriver<'a> {
+impl<'a, U: hil::uart::Uart<'a>> UartDriver<'a, U> {
     pub fn new(
-        uarts: &'a mut [&'static mut Uart<'a>],
+        uarts: &'a mut [&'static mut Uart<'a, U>],
         apps: [Grant<App>; 2],
-    ) -> UartDriver<'a> {
+    ) -> UartDriver<'a, U> {
         UartDriver { uarts, apps }
     }
 
@@ -204,8 +204,8 @@ impl<'a> UartDriver<'a> {
     }
 }
 
-pub struct Uart<'a> {
-    parent: Option<&'static UartDriver<'static>>,
+pub struct Uart<'a, U: 'static + hil::uart::Uart<'a>> {
+    parent: Option<&'a UartDriver<'a, U>>,
     hw: Option<&'a hil::uart::Uart<'a>>,
     index: usize,
     tx_in_progress: OptionalCell<AppId>,
@@ -214,8 +214,8 @@ pub struct Uart<'a> {
     rx_buffer: TakeCell<'static, [u8]>,
 }
 
-impl<'a> Uart<'a> {
-    pub const fn new(index: usize) -> Uart<'a> {
+impl<'a, U: 'static + hil::uart::Uart<'a>> Uart<'a, U> {
+    pub const fn new(index: usize) -> Uart<'a, U> {
         Uart {
             parent: None,
             hw: None,
@@ -232,7 +232,7 @@ impl<'a> Uart<'a> {
         uart: &'a hil::uart::Uart,
         tx_buffer: &'static mut [u8],
         rx_buffer: &'static mut [u8],
-        parent: &'static UartDriver<'a, hil::uart::Uart>,
+        parent: &'static UartDriver<'a, U>,
     ) {
         self.hw = Some(uart);
         self.tx_buffer = TakeCell::new(tx_buffer);
@@ -295,7 +295,7 @@ impl<'a> Uart<'a> {
                     app.write_remaining = 0;
                 }
                 if let Some(hw) = self.hw {
-                    hw.transmit(buffer, transaction_len);
+                    hw.transmit_buffer(buffer, transaction_len);
                 }
             });
         } else {
@@ -325,7 +325,7 @@ impl<'a> Uart<'a> {
                     self.rx_buffer.take().map(|buffer| {
                         self.rx_in_progress.set(app_id);
                         if let Some(hw) = self.hw {
-                            hw.receive(buffer, app.read_len);
+                            hw.receive_buffer(buffer, app.read_len);
                         }
                     });
                     ReturnCode::SUCCESS
@@ -339,7 +339,7 @@ impl<'a> Uart<'a> {
     }
 }
 
-impl Driver for UartDriver<'a, U> {
+impl<'a, U: 'static + hil::uart::Uart<'a>> Driver for UartDriver<'a, U> {
     /// Setup shared buffers.
     ///
     /// ### `allow_num`
@@ -429,7 +429,7 @@ impl Driver for UartDriver<'a, U> {
                 self.apps[uart_num]
                 .enter(appid, |app, _| {
                     if let Some(hw) = self.uarts[app.write_uart].hw {
-                        hw.abort_receive();
+                        hw.receive_abort();
                     }
                     ReturnCode::SUCCESS
                 }).unwrap_or_else(|err| err.into())
@@ -454,11 +454,12 @@ impl<U: hil::uart::UART> hil::uart::Client for Uart<'a, U> {
     }
 }
 */
+//impl<'a, U: 'static + hil::uart::UartData<'a>> hil::uart::Client for Uart<'a, U> {}
 
-impl uart::TransmitClient for Uart<'a> {
+impl<'a, U: 'static + hil::uart::Uart<'a>> hil::uart::TransmitClient for Uart<'a,U> {
     fn transmitted_buffer(&self, buffer: &'static mut [u8], _tx_len: usize, _rcode: ReturnCode) {
         if let Some(parent) = self.parent {
-            parent.transmit_complete(self.index, buffer, rcode);
+            parent.transmit_complete(self.index, buffer, hil::uart::Error::None);
         }
         /*
         // Either print more from the AppSlice or send a callback to the
@@ -525,13 +526,13 @@ impl uart::TransmitClient for Uart<'a> {
     }
 }
 
-impl uart::ReceiveClient for Uart<'a> {
+impl<'a, U: hil::uart::Uart<'a>> hil::uart::ReceiveClient for Uart<'a, U> {
     fn received_buffer(
         &self,
         buffer: &'static mut [u8],
         rx_len: usize,
-        rcode: ReturnCode,
-        error: uart::Error,
+        _rcode: ReturnCode,
+        error: hil::uart::Error,
     ) {
         if let Some(parent) = self.parent {
             parent.receive_complete(self.index, buffer, rx_len, error);

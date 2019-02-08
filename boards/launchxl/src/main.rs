@@ -13,7 +13,7 @@ use kernel::{create_capability, debug, debug_gpio, static_init};
 
 use capsules::helium;
 use capsules::helium::{device::Device, virtual_rfcore::RFCore};
-use capsules::virtual_uart::{UartDevice, UartMux};
+use capsules::virtual_uart::{MuxUart, UartDevice};
 use cc26x2::adc;
 use cc26x2::aon;
 use cc26x2::osc;
@@ -61,7 +61,7 @@ pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 pub struct Platform<'a> {
     gpio: &'static capsules::gpio::GPIO<'static, cc26x2::gpio::GPIOPin>,
     led: &'static capsules::led::LED<'static, cc26x2::gpio::GPIOPin>,
-    uart: &'static capsules::uart::UartDriver<'static, UartDevice<'static>>,
+    uart: &'static capsules::uart::UartDriver<'static, UartDevice<'a>>,
     //console: &'static capsules::console::Console<'static>,
     button: &'static capsules::button::Button<'static, cc26x2::gpio::GPIOPin>,
     alarm: &'static capsules::alarm::AlarmDriver<
@@ -281,14 +281,15 @@ pub unsafe fn reset_handler() {
 
     // Create a shared UART channel for the uart and for kernel debug.
     let uart0_mux = static_init!(
-        UartMux<'static>,
-        UartMux::new(
+        MuxUart<'static>,
+        MuxUart::new(
             &cc26x2::uart::UART0,
             &mut capsules::virtual_uart::RX_BUF,
             115200
         )
     );
-    hil::uart::UART::set_client(&cc26x2::uart::UART0, uart0_mux);
+    hil::uart::Receive::set_receive_client(&cc26x2::uart::UART0, uart0_mux);
+    hil::uart::Transmit::set_transmit_client(&cc26x2::uart::UART0, uart0_mux);
 
     // Create virtual device for kernel debug.
     let debugger_uart = static_init!(UartDevice, UartDevice::new(uart0_mux, false));
@@ -301,7 +302,8 @@ pub unsafe fn reset_handler() {
             &mut kernel::debug::INTERNAL_BUF,
         )
     );
-    hil::uart::UART::set_client(debugger_uart, debugger);
+    kernel::hil::uart::Transmit::set_transmit_client(debugger_uart, debugger);
+    kernel::hil::uart::Receive::set_receive_client(debugger_uart, debugger);
 
     let debug_wrapper = static_init!(
         kernel::debug::DebugWriterWrapper,
@@ -312,12 +314,13 @@ pub unsafe fn reset_handler() {
     // Create a UartDevice for the uart.
     let uart0_device = static_init!(UartDevice, UartDevice::new(uart0_mux, true));
     uart0_device.setup();
-    kernel::hil::uart::UART::set_client(uart0_device, &DRIVER_UART0);
+    kernel::hil::uart::Transmit::set_transmit_client(uart0_device, &DRIVER_UART0);
+    kernel::hil::uart::Receive::set_receive_client(uart0_device, &DRIVER_UART0);
 
     cc26x2::uart::UART0.initialize();
 
     // the debug uart should be initialized by hand
-    cc26x2::uart::UART0.configure(hil::uart::UARTParameters {
+    cc26x2::uart::UART0.configure(hil::uart::Parameters {
         baud_rate: 115200,
         stop_bits: hil::uart::StopBits::One,
         parity: hil::uart::Parity::None,
@@ -326,24 +329,29 @@ pub unsafe fn reset_handler() {
 
     // Create a UART channel for the additional UART
     let uart1_mux = static_init!(
-        UartMux,
-        UartMux::new(
+        MuxUart<'static>,
+        MuxUart::new(
             &cc26x2::uart::UART1,
             &mut capsules::virtual_uart::RX_BUF1,
             115200
         )
     );
-    hil::uart::UART::set_client(&cc26x2::uart::UART1, uart1_mux);
+    
+    hil::uart::Receive::set_receive_client(&cc26x2::uart::UART1, uart1_mux);
+    hil::uart::Transmit::set_transmit_client(&cc26x2::uart::UART1, uart1_mux);
 
     // Create a UartDevice for the second UART
     let uart1_device = static_init!(UartDevice, UartDevice::new(uart1_mux, true));
     uart1_device.setup();
-    kernel::hil::uart::UART::set_client(uart1_device, &DRIVER_UART1);
+    
+    kernel::hil::uart::Transmit::set_transmit_client(uart0_device, &DRIVER_UART1);
+    kernel::hil::uart::Receive::set_receive_client(uart0_device, &DRIVER_UART1);
+
 
     cc26x2::uart::UART1.initialize();
 
     // the debug uart should be initialized by hand
-    cc26x2::uart::UART1.configure(hil::uart::UARTParameters {
+    cc26x2::uart::UART1.configure(hil::uart::Parameters {
         baud_rate: 115200,
         stop_bits: hil::uart::StopBits::One,
         parity: hil::uart::Parity::None,
