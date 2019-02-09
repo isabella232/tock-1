@@ -62,12 +62,12 @@ pub static mut READ_BUF0: [u8; 64] = [0; 64];
 pub static mut WRITE_BUF1: [u8; 64] = [0; 64];
 pub static mut READ_BUF1: [u8; 64] = [0; 64];
 
-pub struct UartDriver<'a, U: 'static + hil::uart::Uart<'a>> { 
+pub struct UartDriver<'a, U: 'static + hil::uart::UartData<'a>> {
     uarts: &'a mut [&'a mut Uart<'a, U>],
     apps: [Grant<App>; 2],
 }
 
-impl<'a, U: hil::uart::Uart<'a>> UartDriver<'a, U> {
+impl<'a, U: hil::uart::UartData<'a>> UartDriver<'a, U> {
     pub fn new(
         uarts: &'a mut [&'static mut Uart<'a, U>],
         apps: [Grant<App>; 2],
@@ -175,8 +175,7 @@ impl<'a, U: hil::uart::Uart<'a>> UartDriver<'a, U> {
                                         for (a, b) in app_buffer.iter_mut().zip(rx_buffer) {
                                             *a = *b;
                                         }
-                                        let rettype = if error == hil::uart::Error::None
-                                        {
+                                        let rettype = if error == hil::uart::Error::None {
                                             ReturnCode::SUCCESS
                                         } else {
                                             ReturnCode::ECANCEL
@@ -204,7 +203,7 @@ impl<'a, U: hil::uart::Uart<'a>> UartDriver<'a, U> {
     }
 }
 
-pub struct Uart<'a, U: 'static + hil::uart::Uart<'a>> {
+pub struct Uart<'a, U: 'static + hil::uart::UartData<'a>> {
     parent: Option<&'a UartDriver<'a, U>>,
     hw: Option<&'a hil::uart::Uart<'a>>,
     index: usize,
@@ -214,7 +213,7 @@ pub struct Uart<'a, U: 'static + hil::uart::Uart<'a>> {
     rx_buffer: TakeCell<'static, [u8]>,
 }
 
-impl<'a, U: 'static + hil::uart::Uart<'a>> Uart<'a, U> {
+impl<'a, U: 'static + hil::uart::UartData<'a>> Uart<'a, U> {
     pub const fn new(index: usize) -> Uart<'a, U> {
         Uart {
             parent: None,
@@ -339,7 +338,7 @@ impl<'a, U: 'static + hil::uart::Uart<'a>> Uart<'a, U> {
     }
 }
 
-impl<'a, U: 'static + hil::uart::Uart<'a>> Driver for UartDriver<'a, U> {
+impl<'a, U: 'static + hil::uart::UartData<'a>> Driver for UartDriver<'a, U> {
     /// Setup shared buffers.
     ///
     /// ### `allow_num`
@@ -456,7 +455,7 @@ impl<U: hil::uart::UART> hil::uart::Client for Uart<'a, U> {
 */
 //impl<'a, U: 'static + hil::uart::UartData<'a>> hil::uart::Client for Uart<'a, U> {}
 
-impl<'a, U: 'static + hil::uart::Uart<'a>> hil::uart::TransmitClient for Uart<'a,U> {
+impl<'a, U: 'static + hil::uart::UartData<'a>> hil::uart::TransmitClient for Uart<'a, U> {
     fn transmitted_buffer(&self, buffer: &'static mut [u8], _tx_len: usize, _rcode: ReturnCode) {
         if let Some(parent) = self.parent {
             parent.transmit_complete(self.index, buffer, hil::uart::Error::None);
@@ -526,7 +525,7 @@ impl<'a, U: 'static + hil::uart::Uart<'a>> hil::uart::TransmitClient for Uart<'a
     }
 }
 
-impl<'a, U: hil::uart::Uart<'a>> hil::uart::ReceiveClient for Uart<'a, U> {
+impl<'a, U: hil::uart::UartData<'a>> hil::uart::ReceiveClient for Uart<'a, U> {
     fn received_buffer(
         &self,
         buffer: &'static mut [u8],

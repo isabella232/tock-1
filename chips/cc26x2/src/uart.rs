@@ -154,7 +154,10 @@ uart_nvic!(uart0_isr, UART0);
 uart_nvic!(uart1_isr, UART1);
 
 impl<'a> UART<'a> {
-    const fn new(registers: &'static StaticRef<UartRegisters>, nvic: &'static nvic::Nvic) -> UART<'a> {
+    const fn new(
+        registers: &'static StaticRef<UartRegisters>,
+        nvic: &'static nvic::Nvic,
+    ) -> UART<'a> {
         UART {
             registers,
             nvic,

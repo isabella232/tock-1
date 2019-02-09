@@ -268,6 +268,7 @@ pub struct UartDevice<'a> {
     tx_client: OptionalCell<&'a uart::TransmitClient>,
 }
 
+impl uart::Uart<'a> for UartDevice<'a> {}
 impl uart::UartData<'a> for UartDevice<'a> {}
 
 impl<'a> UartDevice<'a> {
@@ -402,5 +403,11 @@ impl<'a> uart::Receive<'a> for UartDevice<'a> {
 
     fn receive_word(&self) -> ReturnCode {
         ReturnCode::FAIL
+    }
+}
+
+impl<'a> uart::Configure for UartDevice<'a> {
+    fn configure(&self, params: uart::Parameters) -> ReturnCode {
+        self.mux.uart.configure(params)
     }
 }
