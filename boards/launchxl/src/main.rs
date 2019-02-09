@@ -319,15 +319,15 @@ pub unsafe fn reset_handler() {
 
     cc26x2::uart::UART0.initialize();
 
-    /*
     // the debug uart should be initialized by hand
     cc26x2::uart::UART0.configure(hil::uart::Parameters {
         baud_rate: 115200,
+        width: hil::uart::Width::Eight,
         stop_bits: hil::uart::StopBits::One,
         parity: hil::uart::Parity::None,
         hw_flow_control: false,
     });
-    */
+
     // Create a UART channel for the additional UART
     let uart1_mux = static_init!(
         MuxUart<'static>,
@@ -512,7 +512,6 @@ pub unsafe fn reset_handler() {
 
     // Setup ADC
     let adc: &'static capsules::adc::Adc<'static, cc26x2::adc::Adc>;
-
     if chip_id == cc1352p::CHIP_ID {
         let adc_channels = static_init!(
             [&cc26x2::adc::Input; 5],

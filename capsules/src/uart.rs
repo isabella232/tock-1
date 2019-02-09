@@ -40,7 +40,7 @@ use kernel::hil;
 use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
 
 /// Syscall driver number.
-pub const DRIVER_NUM: usize = 0x00000001;
+pub const DRIVER_NUM: usize = 0x0000ABCD;
 
 #[derive(Default)]
 pub struct App {
