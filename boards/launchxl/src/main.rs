@@ -16,12 +16,6 @@ use cc26x2::prcm;
 use cc26x2::pwm;
 use kernel::capabilities;
 use kernel::hil;
-use kernel::hil::entropy::Entropy32;
-use kernel::hil::gpio::InterruptMode;
-use kernel::hil::gpio::Pin;
-use kernel::hil::gpio::PinCtl;
-use kernel::hil::i2c::I2CMaster;
-use kernel::hil::rng::Rng;
 
 #[macro_use]
 pub mod io;
@@ -53,16 +47,8 @@ static mut APP_MEMORY: [u8; 0x10000] = [0; 0x10000];
 pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 
 pub struct Platform {
-    gpio: &'static capsules::gpio::GPIO<'static, cc26x2::gpio::GPIOPin>,
     led: &'static capsules::led::LED<'static, cc26x2::gpio::GPIOPin>,
     console: &'static capsules::console::Console<'static>,
-    button: &'static capsules::button::Button<'static, cc26x2::gpio::GPIOPin>,
-    alarm: &'static capsules::alarm::AlarmDriver<
-        'static,
-        capsules::virtual_alarm::VirtualMuxAlarm<'static, cc26x2::rtc::Rtc>,
-    >,
-    rng: &'static capsules::rng::RngDriver<'static>,
-    i2c_master: &'static capsules::i2c_master::I2CMasterDriver<cc26x2::i2c::I2CMaster<'static>>,
     ipc: kernel::ipc::IPC,
 }
 
@@ -73,12 +59,7 @@ impl kernel::Platform for Platform {
     {
         match driver_num {
             capsules::console::DRIVER_NUM => f(Some(self.console)),
-            capsules::gpio::DRIVER_NUM => f(Some(self.gpio)),
             capsules::led::DRIVER_NUM => f(Some(self.led)),
-            capsules::button::DRIVER_NUM => f(Some(self.button)),
-            capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
-            capsules::rng::DRIVER_NUM => f(Some(self.rng)),
-            capsules::i2c_master::DRIVER_NUM => f(Some(self.i2c_master)),
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             _ => f(None),
         }
@@ -201,36 +182,6 @@ pub unsafe fn reset_handler() {
         capsules::led::LED::new(led_pins)
     );
 
-    // BUTTONS
-    let button_pins = static_init!(
-        [(&'static cc26x2::gpio::GPIOPin, capsules::button::GpioMode); 2],
-        [
-            (
-                &cc26x2::gpio::PORT[pinmap.button1],
-                capsules::button::GpioMode::LowWhenPressed
-            ), // Button 1
-            (
-                &cc26x2::gpio::PORT[pinmap.button2],
-                capsules::button::GpioMode::LowWhenPressed
-            ), // Button 2
-        ]
-    );
-    let button = static_init!(
-        capsules::button::Button<'static, cc26x2::gpio::GPIOPin>,
-        capsules::button::Button::new(
-            button_pins,
-            board_kernel.create_grant(&memory_allocation_capability)
-        )
-    );
-
-    let mut count = 0;
-    for &(btn, _) in button_pins.iter() {
-        btn.set_input_mode(hil::gpio::InputMode::PullUp);
-        btn.enable_interrupt(count, InterruptMode::FallingEdge);
-        btn.set_client(button);
-        count += 1;
-    }
-
     // UART
     cc26x2::uart::UART0.initialize();
 
@@ -282,105 +233,11 @@ pub unsafe fn reset_handler() {
     );
     kernel::debug::set_debug_writer_wrapper(debug_wrapper);
 
-    cc26x2::i2c::I2C0.initialize();
-
-    let i2c_master = static_init!(
-        capsules::i2c_master::I2CMasterDriver<cc26x2::i2c::I2CMaster<'static>>,
-        capsules::i2c_master::I2CMasterDriver::new(
-            &cc26x2::i2c::I2C0,
-            &mut capsules::i2c_master::BUF,
-            board_kernel.create_grant(&memory_allocation_capability)
-        )
-    );
-
-    cc26x2::i2c::I2C0.set_client(i2c_master);
-    cc26x2::i2c::I2C0.enable();
-
-    // Setup for remaining GPIO pins
-    let gpio_pins = static_init!(
-        [&'static cc26x2::gpio::GPIOPin; 1],
-        [
-            // This is the order they appear on the launchxl headers.
-            // Pins 5, 8, 11, 29, 30
-            &cc26x2::gpio::PORT[pinmap.gpio0],
-        ]
-    );
-    let gpio = static_init!(
-        capsules::gpio::GPIO<'static, cc26x2::gpio::GPIOPin>,
-        capsules::gpio::GPIO::new(
-            gpio_pins,
-            board_kernel.create_grant(&memory_allocation_capability)
-        )
-    );
-    for pin in gpio_pins.iter() {
-        pin.set_client(gpio);
-    }
-
-    let rtc = &cc26x2::rtc::RTC;
-    rtc.start();
-
-    let mux_alarm = static_init!(
-        capsules::virtual_alarm::MuxAlarm<'static, cc26x2::rtc::Rtc>,
-        capsules::virtual_alarm::MuxAlarm::new(&cc26x2::rtc::RTC)
-    );
-    rtc.set_client(mux_alarm);
-
-    let virtual_alarm1 = static_init!(
-        capsules::virtual_alarm::VirtualMuxAlarm<'static, cc26x2::rtc::Rtc>,
-        capsules::virtual_alarm::VirtualMuxAlarm::new(mux_alarm)
-    );
-    let alarm = static_init!(
-        capsules::alarm::AlarmDriver<
-            'static,
-            capsules::virtual_alarm::VirtualMuxAlarm<'static, cc26x2::rtc::Rtc>,
-        >,
-        capsules::alarm::AlarmDriver::new(
-            virtual_alarm1,
-            board_kernel.create_grant(&memory_allocation_capability)
-        )
-    );
-    virtual_alarm1.set_client(alarm);
-
-    let entropy_to_random = static_init!(
-        capsules::rng::Entropy32ToRandom<'static>,
-        capsules::rng::Entropy32ToRandom::new(&cc26x2::trng::TRNG)
-    );
-    let rng = static_init!(
-        capsules::rng::RngDriver<'static>,
-        capsules::rng::RngDriver::new(
-            entropy_to_random,
-            board_kernel.create_grant(&memory_allocation_capability)
-        )
-    );
-    cc26x2::trng::TRNG.set_client(entropy_to_random);
-    entropy_to_random.set_client(rng);
-
-    let pwm_channels = [
-        pwm::Signal::new(pwm::Timer::GPT0A),
-        pwm::Signal::new(pwm::Timer::GPT0B),
-        pwm::Signal::new(pwm::Timer::GPT1A),
-        pwm::Signal::new(pwm::Timer::GPT1B),
-        pwm::Signal::new(pwm::Timer::GPT2A),
-        pwm::Signal::new(pwm::Timer::GPT2B),
-        pwm::Signal::new(pwm::Timer::GPT3A),
-        pwm::Signal::new(pwm::Timer::GPT3B),
-    ];
-
-    // all PWM channels are enabled
-    for pwm_channel in pwm_channels.iter() {
-        pwm_channel.enable();
-    }
-
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
 
     let launchxl = Platform {
         console,
-        gpio,
         led,
-        button,
-        alarm,
-        rng,
-        i2c_master,
         ipc,
     };
 
@@ -400,6 +257,8 @@ pub unsafe fn reset_handler() {
         FAULT_RESPONSE,
         &process_management_capability,
     );
+
+    debug!("alive");
 
     board_kernel.kernel_loop(&launchxl, chip, Some(&launchxl.ipc), &main_loop_capability);
 }
