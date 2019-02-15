@@ -4,6 +4,7 @@ use core::cell::Cell;
 use kernel::common::cells::{MapCell, OptionalCell};
 use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
+use kernel::hil;
 use kernel::hil::uart;
 use kernel::ReturnCode;
 
@@ -27,9 +28,6 @@ struct UartRegisters {
     icr: WriteOnly<u32, Interrupts::Register>,
     dmactl: ReadWrite<u32>,
 }
-
-pub static mut UART0: UART = UART::new(&UART0_BASE);
-pub static mut UART1: UART = UART::new(&UART1_BASE);
 
 register_bitfields![
     u32,
@@ -81,45 +79,42 @@ register_bitfields![
     ]
 ];
 
-const UART0_BASE: StaticRef<UartRegisters> =
-    unsafe { StaticRef::new(0x40001000 as *const UartRegisters) };
-
-const UART1_BASE: StaticRef<UartRegisters> =
-    unsafe { StaticRef::new(0x4000B000 as *const UartRegisters) };
-
-/// Stores an ongoing TX transaction
-struct Transaction {
-    /// The buffer containing the bytes to transmit as it should be returned to
-    /// the client
-    buffer: &'static mut [u8],
-    /// The total amount to transmit
-    length: usize,
-    /// The index of the byte currently being sent
-    index: usize,
-}
-
 pub struct UART<'a> {
-    registers: &'static StaticRef<UartRegisters>,
-    tx_client: OptionalCell<&'a uart::TransmitClient>,
-    rx_client: OptionalCell<&'a uart::ReceiveClient>,
-    tx: MapCell<Transaction>,
-    rx: MapCell<Transaction>,
+    registers: &'a UartRegisters,
+    tx: MapCell<&'a mut uart::Transaction<'a>>,
+    rx: MapCell<&'a mut uart::Transaction<'a>>,
     receiving_word: Cell<bool>,
 }
 
+pub enum PeripheralNum{
+    _0,
+    _1
+}
+
+use crate::memory_map::{UART0_BASE, UART1_BASE};
+
 impl<'a> UART<'a> {
-    const fn new(registers: &'static StaticRef<UartRegisters>) -> UART {
-        UART {
+
+    pub fn new(num: PeripheralNum) -> UART<'a> {
+        // a counter tracking if you've given these out would help make this safe
+
+        let registers = match num {
+            PeripheralNum::_0 => unsafe { &*(UART0_BASE as *const UartRegisters)},
+            PeripheralNum::_1 => unsafe { &*(UART1_BASE as *const UartRegisters)},
+        };
+
+        let ret = UART {
             registers,
-
-            tx_client: OptionalCell::empty(),
-            rx_client: OptionalCell::empty(),
-
             tx: MapCell::empty(),
             rx: MapCell::empty(),
 
             receiving_word: Cell::new(false),
-        }
+        };
+
+        ret.initialize();
+
+        ret
+
     }
 
     /// Initialize the UART hardware.
@@ -172,70 +167,6 @@ impl<'a> UART<'a> {
         );
     }
 
-    /// Clears all interrupts related to UART.
-    pub fn handle_interrupt(&self) {
-        // Clear interrupts
-        self.registers.icr.write(Interrupts::ALL_INTERRUPTS::SET);
-
-        // Hardware RX FIFO is not empty
-        while self.rx_fifo_not_empty() {
-            // word read request was made
-            if self.receiving_word.get() {
-                let word = self.read();
-                self.receiving_word.set(false);
-                self.rx_client.map(move |client| {
-                    client.received_word(word, ReturnCode::SUCCESS, uart::Error::None);
-                });
-            }
-            // buffer read request was made
-            else if self.rx.is_some() {
-                self.rx.take().map(|mut rx| {
-                    // read in a byte
-                    if rx.index < rx.length {
-                        let byte = self.read() as u8;
-                        rx.buffer[rx.index] = byte;
-                        rx.index += 1;
-                    }
-
-                    if rx.index == rx.length {
-                        self.rx_client.map(move |client| {
-                            client.received_buffer(
-                                rx.buffer,
-                                rx.index,
-                                ReturnCode::SUCCESS,
-                                uart::Error::None,
-                            );
-                        });
-                    } else {
-                        self.rx.put(rx);
-                    }
-                });
-            }
-            // no current read request
-            else {
-                // read bytes into the void to avoid hardware RX buffer overflow
-                self.read();
-            }
-        }
-
-        self.tx.take().map(|mut tx| {
-            // send out one byte at a time, IRQ when TX FIFO empty will bring us back
-            if self.tx_fifo_not_full() && tx.index < tx.length {
-                self.write(tx.buffer[tx.index] as u32);
-                tx.index += 1;
-            }
-            // request is done
-            if tx.index == tx.length {
-                self.tx_client.map(move |client| {
-                    client.transmitted_buffer(tx.buffer, tx.length, ReturnCode::SUCCESS);
-                });
-            } else {
-                // keep TX buffer as there is more left in request
-                self.tx.put(tx);
-            }
-        });
-    }
-
     pub fn write(&self, c: u32) {
         // Put byte in data register
         self.registers.dr.set(c);
@@ -260,8 +191,76 @@ impl<'a> UART<'a> {
     }
 }
 
+
 impl<'a> uart::Uart<'a> for UART<'a> {}
-impl<'a> uart::UartData<'a> for UART<'a> {}
+impl<'a> uart::UartPeripheral<'a> for UART<'a> {}
+
+impl<'a> uart::InterruptHandler<'a> for UART<'a>{
+    /// Clears all interrupts related to UART.
+    fn handle_interrupt(&self) -> hil::uart::PeripheralState<'a> {
+
+        // default state to return is IDLE
+        let mut ret: hil::uart::PeripheralState<'a> = hil::uart::PeripheralState::new();
+
+        // Clear interrupts
+        self.registers.icr.write(Interrupts::ALL_INTERRUPTS::SET);
+
+        // Hardware RX FIFO is not empty
+        while self.rx_fifo_not_empty() {
+            // word read request was made
+            if self.receiving_word.get() {
+                let word = self.read();
+                self.receiving_word.set(false);
+                ret.rx_state = hil::uart::State::COMPLETE;
+            }
+            // buffer read request was made
+            else if self.rx.is_some() {
+                self.rx.take().map(|mut rx| {
+                    // read in a byte
+                    if rx.index < rx.length {
+                        let byte = self.read() as u8;
+                        rx.buffer[rx.index] = byte;
+                        rx.index += 1;
+                    }
+
+                    if rx.index == rx.length {
+                        ret.rx_state = hil::uart::State::COMPLETE;
+                        ret.rx_ret = Some(rx);
+                    } else {
+                        ret.rx_state = hil::uart::State::BUSY;
+                        self.rx.put(rx);
+                    }
+                });
+            }
+            // no current read request
+            else {
+                // read bytes into the void to avoid hardware RX buffer overflow
+                self.read();
+            }
+        }
+
+        self.tx.take().map(|mut tx| {
+            // send out one byte at a time, IRQ when TX FIFO empty will bring us back
+            if self.tx_fifo_not_full() && tx.index < tx.length {
+                self.write(tx.buffer[tx.index] as u32);
+                tx.index += 1;
+            }
+            // request is done
+            if tx.index == tx.length {
+               ret.tx_state = hil::uart::State::COMPLETE;
+               ret.tx_ret = Some(tx);
+
+            } else {
+                ret.tx_state = hil::uart::State::BUSY;
+                self.tx.put(tx);
+            }
+        });
+
+        ret
+
+    }
+}
+
 
 impl<'a> uart::Configure for UART<'a> {
     fn configure(&self, params: uart::Parameters) -> ReturnCode {
@@ -305,33 +304,19 @@ impl<'a> uart::Configure for UART<'a> {
 }
 
 impl<'a> uart::Transmit<'a> for UART<'a> {
-    fn set_transmit_client(&self, client: &'a uart::TransmitClient) {
-        self.tx_client.set(client);
-    }
 
     fn transmit_buffer(
         &self,
-        buffer: &'static mut [u8],
-        len: usize,
-    ) -> (ReturnCode, Option<&'static mut [u8]>) {
-        // if there is a weird input, don't try to do any transfers
-        if len == 0 || len > buffer.len() {
-            (ReturnCode::ESIZE, Some(buffer))
-        } else if self.tx.is_some() {
-            (ReturnCode::EBUSY, Some(buffer))
-        } else {
-            // we will send one byte, causing EOT interrupt
-            if self.tx_fifo_not_full() {
-                self.write(buffer[0] as u32);
-            }
-            // Transaction will be continued in interrupt bottom half
-            self.tx.put(Transaction {
-                buffer: buffer,
-                length: len,
-                index: 1,
-            });
-            (ReturnCode::SUCCESS, None)
+        request: &'a mut uart::Transaction<'a>
+    ) -> (ReturnCode, Option<&'a mut uart::Transaction<'a>>) {
+        // we will send one byte, causing EOT interrupt
+        if self.tx_fifo_not_full() {
+            self.write(request.buffer[0] as u32);
+            request.index+=1;
         }
+        // Transaction will be continued in interrupt bottom half
+        self.tx.put(request);
+        (ReturnCode::SUCCESS, None)
     }
 
     fn transmit_word(&self, word: u32) -> ReturnCode {
@@ -349,26 +334,15 @@ impl<'a> uart::Transmit<'a> for UART<'a> {
 }
 
 impl<'a> uart::Receive<'a> for UART<'a> {
-    fn set_receive_client(&self, client: &'a uart::ReceiveClient) {
-        self.rx_client.set(client);
-    }
 
     fn receive_buffer(
         &self,
-        buffer: &'static mut [u8],
-        len: usize,
-    ) -> (ReturnCode, Option<&'static mut [u8]>) {
-        if len == 0 || len > buffer.len() {
-            (ReturnCode::ESIZE, Some(buffer))
-        } else if self.rx.is_some() || self.receiving_word.get() {
-            (ReturnCode::EBUSY, Some(buffer))
+        request: &'a mut uart::Transaction<'a>
+    ) -> (ReturnCode, Option<&'a mut uart::Transaction<'a>>) {
+        if self.rx.is_some() || self.receiving_word.get() {
+            (ReturnCode::EBUSY, Some(request))
         } else {
-            self.rx.put(Transaction {
-                buffer: buffer,
-                length: len,
-                index: 0,
-            });
-
+            self.rx.put(request);
             (ReturnCode::SUCCESS, None)
         }
     }

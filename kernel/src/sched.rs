@@ -209,7 +209,7 @@ impl Kernel {
     ) {
         loop {
             unsafe {
-                chip.service_pending_interrupts();
+                chip.service_pending_interrupts(platform);
 
                 for p in self.processes.iter() {
                     p.map(|process| {
