@@ -58,19 +58,59 @@ pub enum Error {
     Aborted,
 }
 
-/// Stores an ongoing TX or RX transaction
-pub struct Transaction<'a> {
-    pub buffer: &'a mut [u8],
-    /// The total amount to transmit
+// Stores an ongoing TX or RX transaction
+pub struct TxTransaction<'a> {
+    pub buffer: &'a [u8],
+    // The total amount to transmit
     pub length: usize,
-    /// The index of the byte currently being sent
+    // The index of the byte currently being sent
     pub index: usize,
 }
 
-impl Transaction<'a> {
-    pub fn new(buffer: &'a mut [u8], length: usize) -> Transaction {
+// Stores an ongoing TX or RX transaction
+pub struct RxTransaction<'a> {
+    pub buffer: &'a mut [u8],
+    // The total amount to transmit
+    pub length: usize,
+    // The index of the byte currently being sent
+    pub index: usize,
+}
+
+impl TxTransaction<'a> {
+
+    pub fn new(buffer: &'a [u8]) -> TxTransaction {
         // throw error if length > buffer.length()
-        Transaction {
+        TxTransaction {
+            length: buffer.len(),
+            buffer,
+            index: 0
+        }
+    }
+
+    pub fn new_set_len(buffer: &'a [u8], length: usize) -> TxTransaction {
+        // throw error if length > buffer.length()
+        TxTransaction {
+            buffer,
+            length,
+            index: 0
+        }
+    }
+}
+
+impl RxTransaction<'a> {
+
+    pub fn new(buffer: &'a mut [u8]) -> RxTransaction {
+        // throw error if length > buffer.length()
+        RxTransaction {
+            length: buffer.len(),
+            buffer,
+            index: 0
+        }
+    }
+
+    pub fn new_set_len(buffer: &'a mut [u8], length: usize) -> RxTransaction {
+        // throw error if length > buffer.length()
+        RxTransaction {
             buffer,
             length,
             index: 0
@@ -81,7 +121,7 @@ impl Transaction<'a> {
 
 pub trait Uart<'a>: Configure + Transmit<'a> + Receive<'a> {}
 pub trait UartData<'a>: Transmit<'a> + Receive<'a> {}
-pub trait UartPeripheral<'a>: Transmit<'a> + Receive<'a> + InterruptHandler<'a> {}
+pub trait UartPeripheral<'a>: Configure + Transmit<'a> + Receive<'a> + InterruptHandler<'a> {}
 
 pub trait UartAdvanced<'a>: Configure + Transmit<'a> + ReceiveAdvanced<'a> {}
 
@@ -93,9 +133,9 @@ pub enum State {
 
 pub struct PeripheralState<'a> {
     pub tx_state: State,
-    pub tx_ret: Option<&'a mut Transaction<'a>>,
+    pub tx_ret: Option<&'a mut TxTransaction<'a>>,
     pub rx_state: State,
-    pub rx_ret: Option<&'a mut Transaction<'a>>,
+    pub rx_ret: Option<&'a mut RxTransaction<'a>>,
 }
 
 impl<'a> PeripheralState<'a>{
@@ -151,8 +191,8 @@ pub trait Transmit<'a> {
     /// `transmit_buffer` or `transmit_word` operation will return EBUSY.
     fn transmit_buffer(
         &self,
-        req: &'a mut Transaction<'a>
-    ) -> (ReturnCode, Option<&'a mut Transaction<'a>>);
+        req: &'a mut TxTransaction<'a>
+    ) -> (ReturnCode, Option<&'a mut TxTransaction<'a>>);
 
     /// Transmit a single word of data asynchronously. The word length is
     /// determined by the UART configuration: it can be 6, 7, 8, or 9 bits long.
@@ -217,8 +257,8 @@ pub trait Receive<'a> {
     /// operation will return EBUSY.
     fn receive_buffer(
         &self,
-        req: &'a mut Transaction<'a>
-    ) -> (ReturnCode, Option<&'a mut Transaction<'a>>);
+        req: &'a mut RxTransaction<'a>
+    ) -> (ReturnCode, Option<&'a mut RxTransaction<'a>>);
 
     /// Receive a single word of data. The word length is determined
     /// by the UART configuration: it can be 6, 7, 8, or 9 bits long.
@@ -284,6 +324,11 @@ pub trait Client<'a> {
     fn has_tx_request(&self) -> bool{
         false
     }
+
+    fn get_tx(&self) -> &TxTransaction<'a>;
+
+    // signal to client that tx is complete and return the buffer
+    fn tx_complete(&mut self, returned_buffer: &TxTransaction<'a>);
 
     fn has_rx_request(&self) -> bool {
         false

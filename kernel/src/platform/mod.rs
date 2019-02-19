@@ -9,7 +9,7 @@ crate mod systick;
 /// Interface for individual boards.
 pub trait Platform {
 
-    fn with_irq(&self, irq_num: usize);
+    fn with_irq(&mut self, irq_num: usize);
 
     /// Platform-specific mapping of syscall numbers to objects that implement
     /// the Driver methods for that syscall
@@ -26,7 +26,7 @@ pub trait Chip {
     type UserspaceKernelBoundary: syscall::UserspaceKernelBoundary;
     type SysTick: systick::SysTick;
 
-    fn service_pending_interrupts<P: Platform>(&self, platform: &P);
+    fn service_pending_interrupts<P: Platform>(&self, platform: &mut P);
     fn has_pending_interrupts(&self) -> bool;
     fn mpu(&self) -> &Self::MPU;
     fn systick(&self) -> &Self::SysTick;

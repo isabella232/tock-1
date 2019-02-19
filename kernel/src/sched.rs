@@ -202,7 +202,7 @@ impl Kernel {
     /// Main loop.
     pub fn kernel_loop<P: Platform, C: Chip>(
         &'static self,
-        platform: &P,
+        platform: &mut P,
         chip: &C,
         ipc: Option<&ipc::IPC>,
         _capability: &capabilities::MainLoopCapability,

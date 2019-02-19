@@ -23,14 +23,14 @@ pub struct App {
 pub struct Uart<'a>{
     uart: &'a hil::uart::UartPeripheral<'a>,
     apps: Grant<App>,
-    tx_in_progress: OptionalCell<AppId>,
-    tx_buffer: hil::uart::Transaction<'a>,
-    rx_in_progress: OptionalCell<AppId>,
-    rx_buffer: hil::uart::Transaction<'a>
+    state: hil::uart::PeripheralState<'a>,
+    current_tx_client: Option<usize>,
+    current_rx_client: Option<usize>,
+    rx: hil::uart::RxTransaction<'a>,
 }
 
 pub struct UartDriver<'a> {
-    uart: &'a [&'a Uart<'a>],
+    pub uart: &'a [&'a Uart<'a>],
 }
 
 
@@ -39,28 +39,68 @@ impl UartDriver<'a> {
         uarts: &'a [&'a Uart<'a>]
     ) -> UartDriver<'a> {
         UartDriver { uart: uarts}
+
     }
 
-    pub fn handle_interrupt(&self, index: usize,  clients: Option<&[&'a hil::uart::Client]>){
-        self.uart[index].handle_interrupt();
+    pub fn handle_interrupt(&self, peripheral_index: usize,  clients: Option<&mut [&'a mut hil::uart::Client<'a>]>){
+        
+        // dispatch the interrupt event to the HIL implementation
+        let status = self.uart[peripheral_index].handle_interrupt();
+
+        // handle Tx complete status
+        if let  hil::uart::State::COMPLETE  = status.tx_state {
+            
+            if let Some(tx) = status.tx_ret {
+                if let Some(client_index) = self.uart[peripheral_index].current_tx_client {
+                    if let Some(clients) = clients {
+                        clients[client_index].tx_complete(tx);
+                    }
+                    else{
+                        panic!("Kernel has not passed reference to clients!");
+                    }
+                }
+                else{
+                    panic!("HIL indicated complete transaction and returned buffer, but no client index. UART Driver cleared index or forgot to set!")
+                }
+            }
+            else {
+                panic!("HIL Implementation indicated complete status, but no buffer returned!")
+            }
+        }
     }
 }
+
+
+static DEFAULT_PARAMS: hil::uart::Parameters  = hil::uart::Parameters {
+    baud_rate: 115200, // baud rate in bit/s
+    width: hil::uart::Width::Eight,
+    parity: hil::uart::Parity::None,
+    stop_bits: hil::uart::StopBits::One,
+    hw_flow_control: false,
+};
 
 impl Uart<'a> {
     pub fn new(
         uart: &'a hil::uart::UartPeripheral<'a>,
-        tx_buffer: &'a mut [u8],
         rx_buffer: &'a mut [u8],
         grant: Grant<App>,
     ) -> Uart<'a> {
+        
+        uart.configure(DEFAULT_PARAMS);
+
         Uart {
             uart: uart,
             apps: grant,
-            tx_in_progress: OptionalCell::empty(),
-            tx_buffer: hil::uart::Transaction::new(tx_buffer, 0),
-            rx_in_progress: OptionalCell::empty(),
-            rx_buffer: hil::uart::Transaction::new(rx_buffer, 0),
+            state: hil::uart::PeripheralState::new(),
+            current_tx_client: None,
+            current_rx_client: None,
+            rx: hil::uart::RxTransaction::new(rx_buffer),
         }
+    }
+
+    // used just to trigger this thing (delete later)
+    pub fn write_buffer(&self, tx: &'a mut hil::uart::TxTransaction<'a>) {
+       self.uart.transmit_buffer(tx);
     }
 
     /// Internal helper function for setting up a new send transaction
@@ -89,8 +129,8 @@ impl Uart<'a> {
         self.uart.receive_abort();
     }
 
-    fn handle_interrupt(&self) {
-        self.uart.handle_interrupt();
+    fn handle_interrupt(&self) -> hil::uart::PeripheralState<'a> {
+        self.uart.handle_interrupt()
     }
 }
 

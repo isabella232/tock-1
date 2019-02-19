@@ -42,11 +42,11 @@ impl kernel::Chip for Cc26X2 {
         &self.userspace_kernel_boundary
     }
 
-    fn service_pending_interrupts<P: kernel::Platform>(&self, platform: &P) {
+    fn service_pending_interrupts<P: kernel::Platform>(&self, platform: &mut P) {
         unsafe {
             while let Some(interrupt) = nvic::next_pending() {
-                let irq = NVIC_IRQ::from_u32(interrupt)
-                    .expect("Pending IRQ flag not enumerated in NVIQ_IRQ");
+                platform.with_irq(interrupt as usize);
+
                 let n = nvic::Nvic::new(interrupt);
                 n.clear_pending();
                 n.enable();

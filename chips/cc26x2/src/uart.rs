@@ -81,8 +81,8 @@ register_bitfields![
 
 pub struct UART<'a> {
     registers: &'a UartRegisters,
-    tx: MapCell<&'a mut uart::Transaction<'a>>,
-    rx: MapCell<&'a mut uart::Transaction<'a>>,
+    tx: MapCell<&'a mut uart::TxTransaction<'a>>,
+    rx: MapCell<&'a mut uart::RxTransaction<'a>>,
     receiving_word: Cell<bool>,
 }
 
@@ -111,6 +111,7 @@ impl<'a> UART<'a> {
             receiving_word: Cell::new(false),
         };
 
+        // initialize power, clock and interrupts so it's usable
         ret.initialize();
 
         ret
@@ -198,7 +199,6 @@ impl<'a> uart::UartPeripheral<'a> for UART<'a> {}
 impl<'a> uart::InterruptHandler<'a> for UART<'a>{
     /// Clears all interrupts related to UART.
     fn handle_interrupt(&self) -> hil::uart::PeripheralState<'a> {
-
         // default state to return is IDLE
         let mut ret: hil::uart::PeripheralState<'a> = hil::uart::PeripheralState::new();
 
@@ -307,12 +307,14 @@ impl<'a> uart::Transmit<'a> for UART<'a> {
 
     fn transmit_buffer(
         &self,
-        request: &'a mut uart::Transaction<'a>
-    ) -> (ReturnCode, Option<&'a mut uart::Transaction<'a>>) {
+        request: &'a mut uart::TxTransaction<'a>
+    ) -> (ReturnCode, Option<&'a mut uart::TxTransaction<'a>>) {
+
         // we will send one byte, causing EOT interrupt
+        // TODO: disable interrupt here
         if self.tx_fifo_not_full() {
             self.write(request.buffer[0] as u32);
-            request.index+=1;
+           request.index+=1;
         }
         // Transaction will be continued in interrupt bottom half
         self.tx.put(request);
@@ -337,8 +339,8 @@ impl<'a> uart::Receive<'a> for UART<'a> {
 
     fn receive_buffer(
         &self,
-        request: &'a mut uart::Transaction<'a>
-    ) -> (ReturnCode, Option<&'a mut uart::Transaction<'a>>) {
+        request: &'a mut uart::RxTransaction<'a>
+    ) -> (ReturnCode, Option<&'a mut uart::RxTransaction<'a>>) {
         if self.rx.is_some() || self.receiving_word.get() {
             (ReturnCode::EBUSY, Some(request))
         } else {
