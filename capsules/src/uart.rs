@@ -42,7 +42,7 @@ impl<'a> UartDriver<'a> {
 
     }
 
-    pub fn handle_interrupt(&self, peripheral_index: usize,  clients: &'a hil::uart::Client<'a>){
+    pub fn handle_interrupt(&self, peripheral_index: usize,  clients: &'a hil::uart::Client<'a>) -> Option(usize) {
         
         // dispatch the interrupt event to the HIL implementation
         let status = self.uart[peripheral_index].handle_interrupt();
@@ -75,11 +75,14 @@ impl<'a> UartDriver<'a> {
         //for client in clients {
             if clients.has_tx_request(){
                 if let Some(request) = clients.get_tx() {
+                    // assure index is set to 0
+                    request.index = 0;
                     self.uart[peripheral_index].write_buffer(request);
                 }
                 
             }
         //}
+        0
 
     }
 }

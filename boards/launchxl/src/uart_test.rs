@@ -1,4 +1,4 @@
-use kernel::common::cells::{TakeCell, MapCell};
+use kernel::common::cells::{MapCell, TakeCell};
 
 
 pub struct TestClient<'a> {
@@ -15,6 +15,7 @@ impl<'a> TestClient<'a> {
             buffer: [0; 14],
             tx: TakeCell::empty(),
         }
+
     }
 }
 
@@ -27,16 +28,11 @@ impl <'a>hil::uart::Client<'a> for TestClient<'a> {
     }
 
     fn get_tx(&self) -> Option<&mut hil::uart::TxTransaction<'a>> {
-        //let bull = hil::uart::TxTransaction::new(b"hello world\r\n");
-        //&bull
         self.tx.take()
     }
 
-    fn tx_complete(&self, returned_buffer: &hil::uart::TxTransaction<'a>) {
-
-
-        //increment state counter
-        self.state.map(|val| *val += 1);
+    fn tx_complete(&self, returned_buffer: &'a mut hil::uart::TxTransaction<'a>) {
+        self.tx.put(Some(returned_buffer));
     }
 }
 
