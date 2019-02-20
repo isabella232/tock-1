@@ -30,11 +30,11 @@ pub struct Uart<'a>{
 }
 
 pub struct UartDriver<'a> {
-    pub uart: &'a [&'a Uart<'a>],
+    pub uart: &'a [&'a Uart<'a>]
 }
 
 
-impl UartDriver<'a> {
+impl<'a> UartDriver<'a> {
     pub fn new(
         uarts: &'a [&'a Uart<'a>]
     ) -> UartDriver<'a> {
@@ -42,7 +42,7 @@ impl UartDriver<'a> {
 
     }
 
-    pub fn handle_interrupt(&self, peripheral_index: usize,  clients: Option<&mut [&'a mut hil::uart::Client<'a>]>){
+    pub fn handle_interrupt(&self, peripheral_index: usize,  clients: &'a hil::uart::Client<'a>){
         
         // dispatch the interrupt event to the HIL implementation
         let status = self.uart[peripheral_index].handle_interrupt();
@@ -51,22 +51,36 @@ impl UartDriver<'a> {
         if let  hil::uart::State::COMPLETE  = status.tx_state {
             
             if let Some(tx) = status.tx_ret {
-                if let Some(client_index) = self.uart[peripheral_index].current_tx_client {
-                    if let Some(clients) = clients {
-                        clients[client_index].tx_complete(tx);
-                    }
-                    else{
-                        panic!("Kernel has not passed reference to clients!");
-                    }
-                }
-                else{
-                    panic!("HIL indicated complete transaction and returned buffer, but no client index. UART Driver cleared index or forgot to set!")
-                }
-            }
-            else {
+                clients.tx_complete(tx);
+
+
+
+                //if let Some(client_index) = self.uart[peripheral_index].current_tx_client {
+
+                    //
+                    //clients[client_index]
+                    // clients[client_index].map_or(
+                    //     // this could turn into some deferred event behavior
+                    //     panic!("Kernel has not passed reference to clients!"),
+                    //     |client| client.tx_complete(tx)
+                    // );
+                //} else{
+                    //panic!("HIL indicated complete transaction and returned buffer, but no client index. UART Driver cleared index or forgot to set!")
+                //}
+            } else {
                 panic!("HIL Implementation indicated complete status, but no buffer returned!")
             }
         }
+
+        //for client in clients {
+            if clients.has_tx_request(){
+                if let Some(request) = clients.get_tx() {
+                    self.uart[peripheral_index].write_buffer(request);
+                }
+                
+            }
+        //}
+
     }
 }
 

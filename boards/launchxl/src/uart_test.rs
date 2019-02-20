@@ -1,45 +1,42 @@
+use kernel::common::cells::{TakeCell, MapCell};
 
-const statement: &[u8] = b"hello world\r\n";
 
-const transaction: hil::uart::TxTransaction = hil::uart::TxTransaction {
-        length: statement.len(),
-        buffer: statement,
-        index: 0
-};
-
-pub struct Client {
-    state: usize,
-
+pub struct TestClient<'a> {
+    state: MapCell<usize>,
+    buffer: [u8; 14],
+    tx: TakeCell<'a, hil::uart::TxTransaction<'a>>,
 }
 
-impl Client{
-    pub fn new()-> Client{
-        Client {
-            state: 0
+impl<'a> TestClient<'a> {
+    pub fn new()-> TestClient<'a> {
+
+        TestClient {
+            state: MapCell::new(0),
+            buffer: [0; 14],
+            tx: TakeCell::empty(),
         }
     }
 }
 
 use kernel::hil;
 
-impl <'a>hil::uart::Client<'a> for Client{
+impl <'a>hil::uart::Client<'a> for TestClient<'a> {
 
     fn has_tx_request(&self)-> bool {
         true
     }
 
-    fn get_tx(&self) -> &hil::uart::TxTransaction<'a>{
+    fn get_tx(&self) -> Option<&mut hil::uart::TxTransaction<'a>> {
         //let bull = hil::uart::TxTransaction::new(b"hello world\r\n");
         //&bull
-        &transaction
+        self.tx.take()
     }
 
-    fn tx_complete(&mut self, _returned_buffer: &hil::uart::TxTransaction<'a>) {
-        
-        // we don't care about our buffers, since they don't take up RAM
+    fn tx_complete(&self, returned_buffer: &hil::uart::TxTransaction<'a>) {
+
 
         //increment state counter
-        self.state += 1;
+        self.state.map(|val| *val += 1);
     }
 }
 

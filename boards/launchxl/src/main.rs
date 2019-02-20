@@ -10,7 +10,7 @@ extern crate enum_primitive;
 
 #[allow(unused_imports)]
 use kernel::{create_capability, debug, debug_gpio, static_init};
-
+use kernel::common::cells::TakeCell;
 
 use cc26x2::aon;
 use cc26x2::prcm;
@@ -55,7 +55,7 @@ pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 
 pub struct Platform<'a> {
     uart_driver: &'a mut capsules::uart::UartDriver<'a>,
-    uart_clients: &'a mut [&'a mut hil::uart::Client<'a>],//&'a mut uart_test::Client,
+    uart_client: &'a hil::uart::Client<'a>,
 }
 
 use cc26x2::peripheral_interrupts::NVIC_IRQ;
@@ -174,12 +174,10 @@ pub unsafe fn reset_handler() {
             board_kernel.create_grant(&memory_allocation_capability)),
     ];
 
-
-
-
     let mut uart_driver = uart::UartDriver::new(&board_uarts);
 
     let mut tx = hil::uart::TxTransaction::new(b"hello world\r\n");
+    
     uart_driver.uart[0].write_buffer(&mut tx);
 
     // // Create a shared UART channel for the console and for kernel debug.
@@ -229,12 +227,12 @@ pub unsafe fn reset_handler() {
     // );
     // kernel::debug::set_debug_writer_wrapper(debug_wrapper);
 
-    let mut test_client = uart_test::Client::new();
-    let mut uart_clients = [&mut test_client as &mut kernel::hil::uart::Client];
+    let mut test_client = uart_test::TestClient::new();
+    //let mut uart_clients =  [&mut test_client as &mut kernel::hil::uart::Client];
 
     let mut launchxl = Platform {
         uart_driver: &mut uart_driver,
-        uart_clients: &mut uart_clients
+        uart_client: &test_client as &hil::uart::Client,
     };
 
     let chip = static_init!(cc26x2::chip::Cc26X2, cc26x2::chip::Cc26X2::new(HFREQ));
@@ -260,6 +258,7 @@ pub unsafe fn reset_handler() {
 }
 
 impl<'a> kernel::Platform for Platform<'a> {
+
     fn with_driver<F, R>(&self, driver_num: usize, f: F) -> R
     where
         F: FnOnce(Option<&kernel::Driver>) -> R,
@@ -280,7 +279,7 @@ impl<'a> kernel::Platform for Platform<'a> {
             NVIC_IRQ::AON_RTC => (),//rtc::RTC.handle_interrupt(),
             NVIC_IRQ::UART0 => {
                 // set client linking
-                self.uart_driver.handle_interrupt(0, Some(self.uart_clients))
+                self.uart_driver.handle_interrupt(0, self.uart_client)
             },
             NVIC_IRQ::I2C0 => (),//i2c::I2C0.handle_interrupt(),
             // We need to ignore JTAG events since some debuggers emit these

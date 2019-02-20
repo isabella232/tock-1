@@ -325,10 +325,10 @@ pub trait Client<'a> {
         false
     }
 
-    fn get_tx(&self) -> &TxTransaction<'a>;
+    fn get_tx(&self) -> Option<&mut TxTransaction<'a>>;
 
     // signal to client that tx is complete and return the buffer
-    fn tx_complete(&mut self, returned_buffer: &TxTransaction<'a>);
+    fn tx_complete(&self, returned_buffer: &TxTransaction<'a>);
 
     fn has_rx_request(&self) -> bool {
         false
