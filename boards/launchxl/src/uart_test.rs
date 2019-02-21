@@ -1,20 +1,26 @@
 use kernel::common::cells::{MapCell, TakeCell};
 
 const MSG1: &'static [u8; 15] = b"Hello, World!\r\n";
-const MSG2: &'static [u8; 16] = b"Hello, World!2\r\n";
+const MSG2: &'static [u8; 22] = b"You can start typing\r\n";
 
+enum State {
+    FIRST_MSG,
+    SECOND_MSG,
+    ECHO
+}
 
 pub struct TestClient<'a> {
-    state: MapCell<usize>,
+    state: MapCell<State>,
     tx: TakeCell<'a, hil::uart::TxRequest<'a>>,
 }
 
 impl<'a> TestClient<'a> {
     pub fn new(space: &'a mut hil::uart::TxRequest<'a>)-> TestClient<'a> {
-        space.set(MSG1);
+
+        space.set_with_const_ref(MSG1);
         
         TestClient {
-            state: MapCell::new(0),
+            state: MapCell::new(State::FIRST_MSG),
             tx: TakeCell::new(space),
         }
     }
@@ -25,18 +31,36 @@ use kernel::hil;
 impl <'a>hil::uart::Client<'a> for TestClient<'a> {
 
     fn has_tx_request(&self)-> bool {
-        true
-        //self.tx.is_some()
+        let mut ret = false;
+        self.tx.take().map( |tx| { 
+            ret = tx.has_some();
+            self.tx.put(Some(tx));
+        });
+        ret
     }
 
     fn get_tx_request(&self) -> Option<&mut hil::uart::TxRequest<'a>> {
         self.tx.take()
     }
 
-    fn tx_request_complete(&self, returned_buffer: &'a mut hil::uart::TxRequest<'a>) {
-        returned_buffer.index = 0;
+    fn tx_request_complete(&self, returned_request: &'a mut hil::uart::TxRequest<'a>) {
+
+        self.state.take().map( |mut state| {
+            match state {
+                State::FIRST_MSG => {
+                    returned_request.set_with_const_ref(MSG2);
+                    state = State::SECOND_MSG;
+                },
+                State::SECOND_MSG => {
+                    state = State::ECHO;
+                },
+                State::ECHO => {},
+            }
+            self.state.put(state);
+        });
+
         //returned_buffer.set(kernel::ikc::TxItems::CONST(Some(msg2)));
-        self.tx.put(Some(returned_buffer));
+        self.tx.put(Some(returned_request));
     }
 }
 

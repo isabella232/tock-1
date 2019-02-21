@@ -2,7 +2,7 @@
 use crate::prcm;
 
 use core::cell::Cell;
-use kernel::common::cells::{MapCell, OptionalCell};
+use kernel::common::cells::{TakeCell, OptionalCell};
 use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
 use kernel::hil;
@@ -87,8 +87,8 @@ register_bitfields![
 
 pub struct UART<'a> {
     registers: &'a UartRegisters,
-    tx: MapCell<&'a mut uart::TxRequest<'a>>,
-    rx: MapCell<&'a mut uart::RxRequest<'a>>,
+    tx: TakeCell<'a, uart::TxRequest<'a>>,
+    rx: TakeCell<'a, uart::RxRequest<'a>>,
     receiving_word: Cell<bool>,
 }
 
@@ -110,8 +110,8 @@ impl<'a> UART<'a> {
 
         let ret = UART {
             registers,
-            tx: MapCell::empty(),
-            rx: MapCell::empty(),
+            tx: TakeCell::empty(),
+            rx: TakeCell::empty(),
 
             receiving_word: Cell::new(false),
         };
@@ -226,7 +226,7 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a>{
                         ret.rx = State::REQUEST_COMPLETE(RX(rx));
                     } else {
                         ret.rx = State::BUSY;
-                        self.rx.put(rx);
+                        self.rx.put(Some(rx));
                     }
                 });
             }
@@ -250,7 +250,7 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a>{
                ret.tx = State::REQUEST_COMPLETE(TX(tx));
             } else {
                 ret.tx = State::BUSY;
-                self.tx.put(tx);
+                self.tx.put(Some(tx));
             }
         });
 
@@ -315,7 +315,7 @@ impl<'a> uart::Transmit<'a> for UART<'a> {
             }
         }
         // Request will be continued in interrupt bottom half
-        self.tx.put(request);
+        self.tx.put(Some(request));
         (ReturnCode::SUCCESS, None)
     }
 
@@ -342,7 +342,7 @@ impl<'a> uart::Receive<'a> for UART<'a> {
         if self.rx.is_some() || self.receiving_word.get() {
             (ReturnCode::EBUSY, Some(request))
         } else {
-            self.rx.put(request);
+            self.rx.put(Some(request));
             (ReturnCode::SUCCESS, None)
         }
     }

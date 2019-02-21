@@ -1,6 +1,7 @@
 //! These are some primitive generics for Intra-Kernel Communication
-pub enum TxItems<'a, T: Copy>{
-    CONST(Option<&'a [T]>),
+pub enum TxItems<'a, T: Copy> {
+    None,
+    CONST(&'a [T]),
     MUT(&'a mut [T])
 }
 
@@ -39,71 +40,74 @@ pub enum DriverState<'a, T: Copy> {
 impl<'a, T: Copy> TxRequest<'a, T> {
     pub fn pop_item(&mut self) -> Option<T> {
         let ret = match &self.items {
-            TxItems::CONST(maybe_s) => {
-                match &maybe_s {
-                    Some(ref s) => Some(s[self.index]),
-                    None => None,
-                }
+            TxItems::CONST(s) => {
+                Some(s[self.index])
             }
             TxItems::MUT(ref s) => Some(s[self.index]),
+            TxItems::None => None
         };
         self.index += 1;
         ret
     }
 
-    pub fn set(&mut self, items: &'a [T]) {
+    pub fn has_some(&self) -> bool {
+        self.index < self.length
+    }
+
+
+    pub fn set_with_const_ref(&mut self, items: &'a [T]) {
         self.length = items.len();
-        self.items = TxItems::CONST(Some(items));
+        self.items = TxItems::CONST(items);
+        self.index = 0;
+    }
+
+    pub fn set_with_mut_ref(&mut self, items: &'a mut [T]) {
+        self.length = items.len();
+        self.items = TxItems::MUT(items);
         self.index = 0;
     }
 
     pub fn new() -> TxRequest<'a,T> {
         TxRequest {
             length: 0,
-            items: TxItems::CONST(None),
+            items: TxItems::None,
             index: 0,
             client_id: 0xFF,
         }
     }
 
-    pub fn new_with_ref(items: TxItems<'a, T>) -> TxRequest<'a,T> {
-        match items {
-            TxItems::CONST(maybe_s) => {
-                match maybe_s {
-                    Some(s) => {
-                        let length = s.len();
-                        Self::new_with_ref_set_len(items, length)
-                    },
-                    None => Self::new(),
-                }
-            },
-            TxItems::MUT(s) => {
-                let length = s.len();
-                Self::new_with_ref_set_len(TxItems::MUT(s), length)
-            }
-        }
+    pub fn new_with_const_ref(items: &'a [T]) -> TxRequest<'a,T> {
+        let length = items.len();
+        Self::new_with_ref_set_len(TxItems::CONST(items), length)
+    }
+
+    pub fn new_with_mut_ref(items: &'a mut [T]) -> TxRequest<'a,T> {
+        let length = items.len();
+        Self::new_with_ref_set_len(TxItems::MUT(items), length)
     }
 
     pub fn new_with_ref_set_len(items: TxItems<'a, T>, length: usize) -> TxRequest<'a,T> {
         match items {
-            TxItems::CONST(maybe_s) => {
-                match maybe_s {
-                    Some(s) => {
-                        TxRequest {
-                            length: length,
-                            items: TxItems::CONST(Some(s)),
-                            index: 0,
-                            client_id: 0xFF,
-                        }
-                    },
-                    None => Self::new(),
+            TxItems::CONST(s) => {
+                TxRequest {
+                    length: length,
+                    items: TxItems::CONST(s),
+                    index: 0,
+                    client_id: 0xFF,
                 }
-                
             },
             TxItems::MUT(s) => {
                 TxRequest {
-                    length: 0,
+                    length: length,
                     items: TxItems::MUT(s),
+                    index: 0,
+                    client_id: 0xFF,
+                }
+            }
+            TxItems::None => {
+                TxRequest {
+                    length: 0,
+                    items: TxItems::None,
                     index: 0,
                     client_id: 0xFF,
                 }
