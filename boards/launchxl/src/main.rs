@@ -170,9 +170,9 @@ pub unsafe fn reset_handler() {
 
     let uart_driver = uart::UartDriver::new(&board_uarts);
 
-    // set up test client
-    let mut space = hil::uart::TxRequest::new();
-    let test_client = uart_test::TestClient::new(&mut space);
+    // Set up test client
+    let mut test_client_space = uart_test::TestClient::space();
+    let test_client = uart_test::TestClient::new(&mut test_client_space);
     let mut launchxl = LaunchXlPlatform {
         uart_driver: &uart_driver,
         test_client: &test_client,
