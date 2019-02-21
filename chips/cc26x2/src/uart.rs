@@ -309,7 +309,6 @@ impl<'a> uart::Transmit<'a> for UART<'a> {
     ) -> (ReturnCode, Option<&'a mut uart::TxRequest<'a>>) {
 
         // we will send one byte, causing EOT interrupt
-        // TODO: disable interrupt here
         if self.tx_fifo_not_full() {
             if let Some(item) = request.pop_item() {
                     self.write(item as u32);

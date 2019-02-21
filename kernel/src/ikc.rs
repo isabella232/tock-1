@@ -51,8 +51,10 @@ impl<'a, T: Copy> TxRequest<'a, T> {
         ret
     }
 
-    pub fn set(&mut self, items: TxItems<'a, T>) {
-        self.items = items;
+    pub fn set(&mut self, items: &'a [T]) {
+        self.length = items.len();
+        self.items = TxItems::CONST(Some(items));
+        self.index = 0;
     }
 
     pub fn new() -> TxRequest<'a,T> {
