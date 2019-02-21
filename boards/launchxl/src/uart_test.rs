@@ -54,8 +54,8 @@ impl<'a> TestClient<'a> {
     }
 }
 
-use kernel::hil;
 
+use kernel::hil;
 impl <'a>hil::uart::Client<'a> for TestClient<'a> {
 
     fn has_tx_request(&self)-> bool {

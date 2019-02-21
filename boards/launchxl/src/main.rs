@@ -57,8 +57,6 @@ pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 use cc26x2::peripheral_interrupts::NVIC_IRQ;
 use enum_primitive::cast::FromPrimitive;
 
-
-
 mod cc1312r;
 mod cc1352p;
 
@@ -198,7 +196,7 @@ pub unsafe fn reset_handler() {
     );
 
     // debug!("alive");
-
+    panic!("WORKS??");
     board_kernel.kernel_loop(&mut launchxl, chip, None, &main_loop_capability);
 }
 

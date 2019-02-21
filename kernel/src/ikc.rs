@@ -1,17 +1,17 @@
 //! These are some primitive generics for Intra-Kernel Communication
-pub enum TxItems<'a, T: Copy> {
+pub enum TxBuf<'a, T: Copy> {
     None,
     CONST(&'a [T]),
     MUT(&'a mut [T])
 }
 
-pub enum RxItems<'a, T: Copy> {
+pub enum RxBuf<'a, T: Copy> {
     None,
     MUT(&'a mut [T])
 }
 
 pub struct TxRequest<'a, T: Copy> {
-    buf: TxItems<'a, T>,
+    buf: TxBuf<'a, T>,
     // The total amount of data written in
     pushed: usize,
     // The total amount of data read out
@@ -24,7 +24,7 @@ pub struct TxRequest<'a, T: Copy> {
 
 // Stores an ongoing TX or RX Request
 pub struct RxRequest<'a, T: Copy> {
-    buf: RxItems<'a, T>,
+    buf: RxBuf<'a, T>,
     // The total amount of data written in
     pushed: usize,
     // The total amount of data read out
@@ -49,11 +49,11 @@ pub enum DriverState<'a, T: Copy> {
 impl<'a, T: Copy> TxRequest<'a, T> {
     pub fn pop(&mut self) -> Option<T> {
         let ret = match &self.buf {
-            TxItems::CONST(s) => {
+            TxBuf::CONST(s) => {
                 Some(s[self.popped])
             }
-            TxItems::MUT(ref s) => Some(s[self.popped]),
-            TxItems::None => None
+            TxBuf::MUT(ref s) => Some(s[self.popped]),
+            TxBuf::None => None
         };
         self.popped += 1;
         ret
@@ -61,11 +61,11 @@ impl<'a, T: Copy> TxRequest<'a, T> {
 
     pub fn push(&mut self, element: T) {
         match &mut self.buf {
-            TxItems::MUT(buf) => {
+            TxBuf::MUT(buf) => {
                 buf[self.pushed] = element;
             },
-            TxItems::CONST(buf) => {},
-            TxItems::None => {},
+            TxBuf::CONST(buf) => {},
+            TxBuf::None => {},
         }
 
         // increment both the pushed and requested amount
@@ -83,9 +83,9 @@ impl<'a, T: Copy> TxRequest<'a, T> {
 
     pub fn has_room(&self) -> bool {
         match &self.buf {
-            TxItems::MUT(buf) => self.pushed < buf.len(),
-            TxItems::CONST(buf) => false,
-            TxItems::None => false,
+            TxBuf::MUT(buf) => self.pushed < buf.len(),
+            TxBuf::CONST(buf) => false,
+            TxBuf::None => false,
         }
     }
 
@@ -99,14 +99,14 @@ impl<'a, T: Copy> TxRequest<'a, T> {
     pub fn set_with_const_ref(&mut self, buf: &'a [T]) {
         self.pushed = buf.len();
         self.requested = buf.len();
-        self.buf = TxItems::CONST(buf);
+        self.buf = TxBuf::CONST(buf);
         self.popped = 0;
     }
 
     // for TxRequest with mutable reference
     // it is assumed empty so client will fill before dispatching
     pub fn set_with_mut_ref(&mut self, buf: &'a mut [T]) {
-        self.buf = TxItems::MUT(buf);
+        self.buf = TxBuf::MUT(buf);
         self.pushed = 0;
         self.popped = 0;
         self.requested = 0;
@@ -115,7 +115,7 @@ impl<'a, T: Copy> TxRequest<'a, T> {
     // initializes space expect for the TxItem, which must be allocated elsewhere
     pub fn new() -> TxRequest<'a,T> {
         TxRequest {
-            buf: TxItems::None,
+            buf: TxBuf::None,
             pushed: 0,
             popped: 0,
             requested: 0,
@@ -125,37 +125,37 @@ impl<'a, T: Copy> TxRequest<'a, T> {
 
     pub fn new_with_const_ref(buf: &'a [T]) -> TxRequest<'a,T> {
         let length = buf.len();
-        Self::new_with_ref_set_len(TxItems::CONST(buf), length)
+        Self::new_with_ref_set_len(TxBuf::CONST(buf), length)
     }
 
     pub fn new_with_mut_ref(buf: &'a mut [T]) -> TxRequest<'a,T> {
         let length = buf.len();
-        Self::new_with_ref_set_len(TxItems::MUT(buf), length)
+        Self::new_with_ref_set_len(TxBuf::MUT(buf), length)
     }
 
-    pub fn new_with_ref_set_len(buf: TxItems<'a, T>, length: usize) -> TxRequest<'a,T> {
+    pub fn new_with_ref_set_len(buf: TxBuf<'a, T>, length: usize) -> TxRequest<'a,T> {
         match buf {
-            TxItems::CONST(b) => {
+            TxBuf::CONST(b) => {
                 TxRequest {
-                    buf: TxItems::CONST(b),
+                    buf: TxBuf::CONST(b),
                     pushed: length,
                     requested: length,
                     popped: 0,
                     client_id: 0xFF,
                 }
             },
-            TxItems::MUT(b) => {
+            TxBuf::MUT(b) => {
                 TxRequest {
-                    buf: TxItems::MUT(b),
+                    buf: TxBuf::MUT(b),
                     pushed: 0,
                     popped: 0,
                     requested: 0,
                     client_id: 0xFF,
                 }
             }
-            TxItems::None => {
+            TxBuf::None => {
                 TxRequest {
-                    buf: TxItems::None,
+                    buf: TxBuf::None,
                     pushed: 0,
                     popped: 0,
                     requested: 0,
@@ -169,7 +169,7 @@ impl<'a, T: Copy> TxRequest<'a, T> {
 impl<'a, T: Copy> RxRequest<'a, T> {
     pub fn new() -> RxRequest<'a,T> {
         RxRequest {
-            buf: RxItems::None,
+            buf: RxBuf::None,
             pushed: 0,
             popped: 0,
             requested: 0,
@@ -180,7 +180,7 @@ impl<'a, T: Copy> RxRequest<'a, T> {
     // RxRequest is assumed empty and we assume client wants host to fill buffer
     pub fn set_buf(&mut self, buf: &'a mut [T]) {
         self.requested = buf.len();
-        self.buf = RxItems::MUT(buf);
+        self.buf = RxBuf::MUT(buf);
         self.pushed = 0;
         self.popped = 0;
     }
@@ -190,8 +190,8 @@ impl<'a, T: Copy> RxRequest<'a, T> {
         self.pushed = 0;
         self.popped = 0;
         match &self.buf {
-            RxItems::MUT(buf) => self.requested = buf.len(),
-            RxItems::None => self.requested = 0,
+            RxBuf::MUT(buf) => self.requested = buf.len(),
+            RxBuf::None => self.requested = 0,
         }
     }
 
@@ -206,27 +206,27 @@ impl<'a, T: Copy> RxRequest<'a, T> {
 
     pub fn has_room(&self) -> bool {
         match &self.buf {
-            RxItems::MUT(buf) => self.pushed < buf.len(),
-            RxItems::None => false,
+            RxBuf::MUT(buf) => self.pushed < buf.len(),
+            RxBuf::None => false,
         }
     }
 
     pub fn push(&mut self, element: T) {
         match &mut self.buf {
-            RxItems::MUT(buf) => {
+            RxBuf::MUT(buf) => {
                 buf[self.pushed] = element;
             },
-            RxItems::None => {},
+            RxBuf::None => {},
         }
         self.pushed += 1;
     }
 
     pub fn pop(&mut self) -> Option<T> {
         let ret = match &self.buf {
-            RxItems::MUT(s) => {
+            RxBuf::MUT(s) => {
                 Some(s[self.popped])
             }
-            RxItems::None => None
+            RxBuf::None => None
         };
         self.popped += 1;
         ret
