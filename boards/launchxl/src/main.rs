@@ -156,24 +156,23 @@ pub unsafe fn reset_handler() {
     configure_pins(pinmap);
 
     // UART
-    let uart0 = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_0);
-    let uart1 = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_1);
+    let uart0_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_0);
+    let uart1_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_1);
 
     let board_uarts = [
         &uart::Uart::new(
-            &uart0,
+            &uart0_hil,
             board_kernel.create_grant(&memory_allocation_capability)),
         &uart::Uart::new(
-            &uart1,
+            &uart1_hil,
             board_kernel.create_grant(&memory_allocation_capability)),
     ];
 
     let uart_driver = uart::UartDriver::new(&board_uarts);
 
     // set up test client
-    let mut space = hil::uart::TxRequest::new(b"Hello, World!\r\n");
+    let mut space = hil::uart::TxRequest::new();
     let test_client = uart_test::TestClient::new(&mut space);
-
     let mut launchxl = LaunchXlPlatform {
         uart_driver: &uart_driver,
         test_client: &test_client,

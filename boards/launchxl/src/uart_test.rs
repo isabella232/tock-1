@@ -1,5 +1,7 @@
 use kernel::common::cells::{MapCell, TakeCell};
 
+const msg: &'static [u8; 15] = b"Hello, World!\r\n";
+
 
 pub struct TestClient<'a> {
     state: MapCell<usize>,

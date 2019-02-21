@@ -103,7 +103,6 @@ impl<'a> UART<'a> {
 
     pub fn new(num: PeripheralNum) -> UART<'a> {
         // a counter tracking if you've given these out would help make this safe
-
         let registers = match num {
             PeripheralNum::_0 => unsafe { &*(UART0_BASE as *const UartRegisters)},
             PeripheralNum::_1 => unsafe { &*(UART1_BASE as *const UartRegisters)},
@@ -241,14 +240,13 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a>{
         self.tx.take().map(|mut tx| {
             // send out one byte at a time, IRQ when TX FIFO empty will bring us back
             if self.tx_fifo_not_full() && tx.index < tx.length {
-                self.write(tx.items[tx.index] as u32);
+                let item = tx.pop_item();
+                self.write(item as u32);
                 tx.index += 1;
             }
             // request is done
             if tx.index == tx.length {
                ret.tx = State::REQUEST_COMPLETE(TX(tx));
-               //ret.tx_ret = Some(tx);
-
             } else {
                 ret.tx = State::BUSY;
                 self.tx.put(tx);
