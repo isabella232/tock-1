@@ -240,9 +240,10 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a>{
         self.tx.take().map(|mut tx| {
             // send out one byte at a time, IRQ when TX FIFO empty will bring us back
             if self.tx_fifo_not_full() && tx.index < tx.length {
-                let item = tx.pop_item();
-                self.write(item as u32);
-                tx.index += 1;
+                if let Some(item) = tx.pop_item() {
+                    self.write(item as u32);
+                }
+                
             }
             // request is done
             if tx.index == tx.length {
@@ -310,8 +311,9 @@ impl<'a> uart::Transmit<'a> for UART<'a> {
         // we will send one byte, causing EOT interrupt
         // TODO: disable interrupt here
         if self.tx_fifo_not_full() {
-            self.write(request.items[0] as u32);
-           request.index+=1;
+            if let Some(item) = request.pop_item() {
+                    self.write(item as u32);
+            }
         }
         // Request will be continued in interrupt bottom half
         self.tx.put(request);

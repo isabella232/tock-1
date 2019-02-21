@@ -1,10 +1,10 @@
 //! These are some primitive generics for Intra-Kernel Communication
-pub enum TxItems<'a, T>{
+pub enum TxItems<'a, T: Copy>{
     CONST(Option<&'a [T]>),
     MUT(&'a mut [T])
 }
 
-pub struct TxRequest<'a, T> {
+pub struct TxRequest<'a, T: Copy> {
     pub items: TxItems<'a, T>,
     // The total amount to transmit
     pub length: usize,
@@ -15,7 +15,7 @@ pub struct TxRequest<'a, T> {
 }
 
 // Stores an ongoing TX or RX Request
-pub struct RxRequest<'a, T> {
+pub struct RxRequest<'a, T: Copy> {
     pub items: &'a mut [T],
     // The total amount to transmit
     pub length: usize,
@@ -25,22 +25,22 @@ pub struct RxRequest<'a, T> {
     pub client_id: usize,
 }
 
-pub enum Request<'a, T> {
+pub enum Request<'a, T: Copy> {
     TX(&'a mut TxRequest<'a, T>),
     RX(&'a mut RxRequest<'a, T>),
 }
 
-pub enum DriverState<'a, T> {
+pub enum DriverState<'a, T: Copy> {
     REQUEST_COMPLETE(Request<'a,T>),
     BUSY,
     IDLE,
 }
 
-impl<'a, T> TxRequest<'a, T> {
+impl<'a, T: Copy> TxRequest<'a, T> {
     pub fn pop_item(&mut self) -> Option<T> {
         let ret = match &self.items {
             TxItems::CONST(maybe_s) => {
-                match maybe_s {
+                match &maybe_s {
                     Some(ref s) => Some(s[self.index]),
                     None => None,
                 }
@@ -49,6 +49,10 @@ impl<'a, T> TxRequest<'a, T> {
         };
         self.index += 1;
         ret
+    }
+
+    pub fn set(&mut self, items: TxItems<'a, T>) {
+        self.items = items;
     }
 
     pub fn new() -> TxRequest<'a,T> {
@@ -106,7 +110,7 @@ impl<'a, T> TxRequest<'a, T> {
     }
 }
 
-impl<'a, T> RxRequest<'a, T> {
+impl<'a, T: Copy> RxRequest<'a, T> {
     pub fn new(items: &'a mut [T]) -> RxRequest<'a,T> {
         // throw error if length > buffer.length()
         RxRequest {
