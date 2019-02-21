@@ -1,8 +1,16 @@
 //! Hardware interface layer (HIL) traits for UART communication.
 //!
 //!
-
 use crate::returncode::ReturnCode;
+use crate::ikc;
+
+use crate::ikc::DriverState::{IDLE, BUSY, REQUEST_COMPLETE};
+use crate::ikc::Request::{TX, RX};
+
+
+pub type TxRequest<'a> = ikc::TxRequest<'a, u8>;
+pub type RxRequest<'a> = ikc::RxRequest<'a, u8>;
+pub type State<'a> = ikc::DriverState<'a, u8>;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum StopBits {
@@ -33,7 +41,7 @@ pub struct Parameters {
     pub hw_flow_control: bool,
 }
 
-/// The type of error encountered during UART transaction.
+/// The type of error encountered during UART Request.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Error {
     /// No error occurred and the command completed successfully
@@ -58,94 +66,22 @@ pub enum Error {
     Aborted,
 }
 
-// Stores an ongoing TX or RX transaction
-pub struct TxTransaction<'a> {
-    pub buffer: &'a [u8],
-    // The total amount to transmit
-    pub length: usize,
-    // The index of the byte currently being sent
-    pub index: usize,
-}
-
-// Stores an ongoing TX or RX transaction
-pub struct RxTransaction<'a> {
-    pub buffer: &'a mut [u8],
-    // The total amount to transmit
-    pub length: usize,
-    // The index of the byte currently being sent
-    pub index: usize,
-}
-
-impl TxTransaction<'a> {
-
-    pub fn new(buffer: &'a [u8]) -> TxTransaction {
-        // throw error if length > buffer.length()
-        TxTransaction {
-            length: buffer.len(),
-            buffer,
-            index: 0
-        }
-    }
-
-    pub fn new_set_len(buffer: &'a [u8], length: usize) -> TxTransaction {
-        // throw error if length > buffer.length()
-        TxTransaction {
-            buffer,
-            length,
-            index: 0
-        }
-    }
-}
-
-impl RxTransaction<'a> {
-
-    pub fn new(buffer: &'a mut [u8]) -> RxTransaction {
-        // throw error if length > buffer.length()
-        RxTransaction {
-            length: buffer.len(),
-            buffer,
-            index: 0
-        }
-    }
-
-    pub fn new_set_len(buffer: &'a mut [u8], length: usize) -> RxTransaction {
-        // throw error if length > buffer.length()
-        RxTransaction {
-            buffer,
-            length,
-            index: 0
-        }
-    }
-
-}
-
-
 pub trait Uart<'a>: Configure + Transmit<'a> + Receive<'a> {}
 pub trait UartData<'a>: Transmit<'a> + Receive<'a> {}
 pub trait UartPeripheral<'a>: Configure + Transmit<'a> + Receive<'a> + InterruptHandler<'a> {}
 
 pub trait UartAdvanced<'a>: Configure + Transmit<'a> + ReceiveAdvanced<'a> {}
 
-pub enum State {
-    COMPLETE,
-    BUSY,
-    IDLE
-}
-
 pub struct PeripheralState<'a> {
-    pub tx_state: State,
-    pub tx_ret: Option<&'a mut TxTransaction<'a>>,
-    pub rx_state: State,
-    pub rx_ret: Option<&'a mut RxTransaction<'a>>,
+    pub tx: State<'a>,
+    pub rx: State<'a>, 
 }
 
 impl<'a> PeripheralState<'a>{
     pub fn new() -> PeripheralState<'a> {
         PeripheralState {
-            tx_state: State::IDLE,
-            tx_ret: None,
-            rx_state: State::IDLE,
-            rx_ret: None,
+            tx: IDLE,
+            rx: IDLE,
         }
     }
 }
@@ -192,8 +128,8 @@ pub trait Transmit<'a> {
     /// `transmit_buffer` or `transmit_word` operation will return EBUSY.
     fn transmit_buffer(
         &self,
-        req: &'a mut TxTransaction<'a>
-    ) -> (ReturnCode, Option<&'a mut TxTransaction<'a>>);
+        req: &'a mut TxRequest<'a>
+    ) -> (ReturnCode, Option<&'a mut TxRequest<'a>>);
 
     /// Transmit a single word of data asynchronously. The word length is
     /// determined by the UART configuration: it can be 6, 7, 8, or 9 bits long.
@@ -258,8 +194,8 @@ pub trait Receive<'a> {
     /// operation will return EBUSY.
     fn receive_buffer(
         &self,
-        req: &'a mut RxTransaction<'a>
-    ) -> (ReturnCode, Option<&'a mut RxTransaction<'a>>);
+        req: &'a mut RxRequest<'a>
+    ) -> (ReturnCode, Option<&'a mut RxRequest<'a>>);
 
     /// Receive a single word of data. The word length is determined
     /// by the UART configuration: it can be 6, 7, 8, or 9 bits long.
@@ -326,10 +262,10 @@ pub trait Client<'a> {
         false
     }
 
-    fn get_tx(&self) -> Option<&mut TxTransaction<'a>>;
+    fn get_tx_request(&self) -> Option<&mut TxRequest<'a>>;
 
     // signal to client that tx is complete and return the buffer
-    fn tx_complete(&self, returned_buffer: &'a mut TxTransaction<'a>);
+    fn tx_request_complete(&self, returned_buffer: &'a mut TxRequest<'a>);
 
     fn has_rx_request(&self) -> bool {
         false

@@ -9,7 +9,7 @@ crate mod systick;
 /// Interface for individual boards.
 pub trait Platform {
 
-    fn with_irq(&mut self, irq_num: usize);
+    fn handle_irq(&mut self, irq_num: usize);
 
     /// Platform-specific mapping of syscall numbers to objects that implement
     /// the Driver methods for that syscall

@@ -7,6 +7,39 @@ use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
 use crate::driver;
 pub const DRIVER_NUM: usize = driver::NUM::CONSOLE as usize;
 
+use kernel::ikc::DriverState::{IDLE, BUSY, REQUEST_COMPLETE};
+use kernel::ikc::Request::{TX, RX};
+
+pub fn handle_irq(uart_num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::uart::Client<'a>]){
+    let state = driver.handle_interrupt(0);
+
+    // if any tx were complete, return them to client
+    match state.tx {
+        REQUEST_COMPLETE(TX(request)) => {
+            let client_id = request.client_id;
+            clients[client_id].tx_request_complete(request);
+            dispatch_next_request(uart_num, driver, clients);
+        },
+        IDLE => {
+            dispatch_next_request(uart_num, driver, clients);
+        },
+        _ => {}
+    }
+}
+
+pub fn dispatch_next_request<'a>(uart_num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::uart::Client<'a>]) {
+    for index in 0..clients.len() {
+        let client = clients[index];
+        if client.has_tx_request() {
+            if let Some(tx) = client.get_tx_request() {
+                tx.client_id = index;
+                driver.handle_tx_request(0, tx);
+            }
+        }
+    }
+}
+
+
 #[derive(Default)]
 pub struct App {
     write_callback: Option<Callback>,
@@ -39,22 +72,18 @@ impl<'a> UartDriver<'a> {
         UartDriver { uart: uarts}
     }
 
-    pub fn with_peripheral<F>(&self, uart_num: usize, f: F) -> &[&'a hil::uart::Client<'a>]
-    where
-        F: FnOnce(&'a Uart<'a>)-> &[&'a hil::uart::Client<'a>]
-    {
-        f(self.uart[uart_num])
-        //match driver_num {
-        //    capsules::uart::DRIVER_NUM => f(Some(self.uart_driver)),
-        //    _ => f(None),
-        //}
+    pub fn handle_tx_request(&self, uart_num: usize, tx: &'a mut hil::uart::TxRequest<'a>) {
+        self.uart[uart_num].uart.transmit_buffer(tx);
     }
 
-    // pub fn handle_interrupt(&self, uart_num: usize, clients: &'a[&'a hil::uart::Client<'a>]) -> &'a[&'a hil::uart::Client<'a>]{
-    //     self.uart[uart_num].handle_interrupt(clients)
-    // }
-}
+    pub fn handle_rx_request(&self, uart_num: usize) {
+        
+    }
 
+    pub fn handle_interrupt(&self, uart_num: usize) -> hil::uart::PeripheralState<'a>{
+        self.uart[uart_num].uart.handle_interrupt()
+    }
+}
 
 static DEFAULT_PARAMS: hil::uart::Parameters  = hil::uart::Parameters {
     baud_rate: 115200, // baud rate in bit/s
@@ -82,7 +111,7 @@ impl<'a, 'b> Uart<'a> {
     }
 
     // used just to trigger this thing (delete later)
-    pub fn write_buffer(&self, tx: &'a mut hil::uart::TxTransaction<'a>) {
+    pub fn write_buffer(&self, tx: &'a mut hil::uart::TxRequest<'a>) {
        self.uart.transmit_buffer(tx);
     }
 
@@ -110,37 +139,6 @@ impl<'a, 'b> Uart<'a> {
 
     fn receive_abort(&self) {
         self.uart.receive_abort();
-    }
-
-    pub fn handle_interrupt(&self, clients: &'b[&'a hil::uart::Client<'a>]) -> &'b[&'a hil::uart::Client<'a>] {
-        // dispatch the interrupt event to the HIL implementation
-        let status = self.uart.handle_interrupt();
-
-        // handle Tx complete status
-        if let  hil::uart::State::COMPLETE  = status.tx_state {
-            
-            if let Some(tx) = status.tx_ret {
-
-                if let Some(client_index) = self.current_tx_client {
-
-                    clients[client_index].tx_complete(tx);
-
-                } else{
-                    //panic!("HIL indicated complete transaction and returned buffer, but no client index. UART Driver cleared index or forgot to set!")
-                }
-            } else {
-                panic!("HIL Implementation indicated complete status, but no buffer returned!")
-            }
-        }
-        for client in clients {
-            if client.has_tx_request(){
-                if let Some(tx) = client.get_tx() {
-                    self.uart.transmit_buffer(tx);
-                }
-                
-            }
-        }
-        clients
     }
 }
 

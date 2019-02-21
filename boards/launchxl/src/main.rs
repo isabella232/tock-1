@@ -2,6 +2,7 @@
 #![no_main]
 #![feature(lang_items, asm)]
 #![feature(const_slice_len)]
+#![feature(type_ascription)] 
 
 extern crate capsules;
 extern crate cc26x2;
@@ -111,6 +112,8 @@ unsafe fn configure_pins(pin: &Pinmap) {
     cc26x2::gpio::PORT[pin.pwm1].enable_pwm(pwm::Timer::GPT0B);
 }
 
+use kernel::platform::Platform;
+
 #[no_mangle]
 pub unsafe fn reset_handler() {
     cc26x2::init();
@@ -165,64 +168,18 @@ pub unsafe fn reset_handler() {
             board_kernel.create_grant(&memory_allocation_capability)),
     ];
 
-    let mut uart_driver = uart::UartDriver::new(&board_uarts);
-    let mut tx = hil::uart::TxTransaction::new(b"hello world\r\n");
-    
-    uart_driver.uart[0].write_buffer(&mut tx);
+    let uart_driver = uart::UartDriver::new(&board_uarts);
 
-    // // Create a shared UART channel for the console and for kernel debug.
-    // let uart_mux = static_init!(
-    //     MuxUart<'static>,
-    //     MuxUart::new(
-    //         &cc26x2::uart::UART0,
-    //         &mut capsules::virtual_uart::RX_BUF,
-    //     )
-    // );
-    // uart_mux.initialize(115200);
-    // hil::uart::Receive::set_receive_client(&cc26x2::uart::UART0, uart_mux);
-    // hil::uart::Transmit::set_transmit_client(&cc26x2::uart::UART0, uart_mux);
+    // set up test client
+    let mut space = hil::uart::TxRequest::new(b"Hello, World!\r\n");
+    let test_client = uart_test::TestClient::new(&mut space);
 
-    // // Create a UartDevice for the console.
-    // let console_uart = static_init!(UartDevice, UartDevice::new(uart_mux, true));
-    // console_uart.setup();
-
-    // let console = static_init!(
-    //     capsules::console::Console<'static>,
-    //     capsules::console::Console::new(
-    //         console_uart,
-    //         &mut capsules::console::WRITE_BUF,
-    //         &mut capsules::console::READ_BUF,
-    //         board_kernel.create_grant(&memory_allocation_capability)
-    //     )
-    // );
-    // kernel::hil::uart::Transmit::set_transmit_client(console_uart, console);
-    // kernel::hil::uart::Receive::set_receive_client(console_uart, console);
-
-    // // Create virtual device for kernel debug.
-    // let debugger_uart = static_init!(UartDevice, UartDevice::new(uart_mux, false));
-    // debugger_uart.setup();
-    // let debugger = static_init!(
-    //     kernel::debug::DebugWriter,
-    //     kernel::debug::DebugWriter::new(
-    //         debugger_uart,
-    //         &mut kernel::debug::OUTPUT_BUF,
-    //         &mut kernel::debug::INTERNAL_BUF,
-    //     )
-    // );
-    // hil::uart::Transmit::set_transmit_client(debugger_uart, debugger);
-
-    // let debug_wrapper = static_init!(
-    //     kernel::debug::DebugWriterWrapper,
-    //     kernel::debug::DebugWriterWrapper::new(debugger)
-    // );
-    // kernel::debug::set_debug_writer_wrapper(debug_wrapper);
-
-    let mut test_client = uart_test::TestClient::new();
-
-    let mut launchxl = Platform {
-        uart_driver: &mut uart_driver,
-        test_client: &mut test_client,
+    let mut launchxl = LaunchXlPlatform {
+        uart_driver: &uart_driver,
+        test_client: &test_client,
     };
+
+    launchxl.handle_irq(NVIC_IRQ::UART0 as usize);
 
     let chip = static_init!(cc26x2::chip::Cc26X2, cc26x2::chip::Cc26X2::new(HFREQ));
 
@@ -246,13 +203,12 @@ pub unsafe fn reset_handler() {
     board_kernel.kernel_loop(&mut launchxl, chip, None, &main_loop_capability);
 }
 
-pub struct Platform<'a> {
-    uart_driver: &'a mut capsules::uart::UartDriver<'a>,
-    test_client: &'a mut uart_test::TestClient<'a>,
+pub struct LaunchXlPlatform<'a> {
+    uart_driver: &'a capsules::uart::UartDriver<'a>,
+    test_client: &'a uart_test::TestClient<'a>,
 }
 
-
-impl<'a> kernel::Platform for Platform<'a> {
+impl<'a> kernel::Platform for LaunchXlPlatform<'a> {
 
     fn with_driver<F, R>(&self, driver_num: usize, f: F) -> R
     where
@@ -264,7 +220,7 @@ impl<'a> kernel::Platform for Platform<'a> {
         }
     }
 
-    fn with_irq(&mut self, irq_num: usize)
+    fn handle_irq(&mut self, irq_num: usize)
     {
         let irq = NVIC_IRQ::from_u32(irq_num as u32)
             .expect("Pending IRQ flag not enumerated in NVIQ_IRQ");
@@ -272,14 +228,8 @@ impl<'a> kernel::Platform for Platform<'a> {
             NVIC_IRQ::GPIO => (),//gpio::PORT.handle_interrupt(),
             NVIC_IRQ::AON_RTC => (),//rtc::RTC.handle_interrupt(),
             NVIC_IRQ::UART0 => {
-                let uart_clients =  [self.test_client as &kernel::hil::uart::Client]; 
-                self.uart_driver.with_peripheral(
-                    0,
-                    |uart| {
-                        uart.handle_interrupt(&uart_clients)
-                    }
-                    
-                );
+                let clients = [self.test_client as &kernel::hil::uart::Client];
+                capsules::uart::handle_irq(0, self.uart_driver, &clients);
             },
             NVIC_IRQ::I2C0 => (),//i2c::I2C0.handle_interrupt(),
             // We need to ignore JTAG events since some debuggers emit these

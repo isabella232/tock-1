@@ -21,6 +21,7 @@ pub mod component;
 pub mod debug;
 pub mod hil;
 pub mod introspection;
+pub mod ikc;
 pub mod ipc;
 pub mod syscall;
 
@@ -29,7 +30,8 @@ mod driver;
 mod grant;
 mod mem;
 mod memop;
-mod platform;
+//TODO: change back
+pub mod platform;
 mod process;
 mod returncode;
 mod sched;

@@ -1,12 +1,18 @@
 //! UART driver, cc26x2 family
 use crate::prcm;
+
 use core::cell::Cell;
 use kernel::common::cells::{MapCell, OptionalCell};
 use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
 use kernel::hil;
 use kernel::hil::uart;
+use kernel::ikc::DriverState as State;
 use kernel::ReturnCode;
+
+//use crate::ikc::DriverState::{IDLE, BUSY, REQUEST_COMPLETE};
+use kernel::ikc::Request::{TX, RX};
+
 
 const MCU_CLOCK: u32 = 48_000_000;
 
@@ -81,8 +87,8 @@ register_bitfields![
 
 pub struct UART<'a> {
     registers: &'a UartRegisters,
-    tx: MapCell<&'a mut uart::TxTransaction<'a>>,
-    rx: MapCell<&'a mut uart::RxTransaction<'a>>,
+    tx: MapCell<&'a mut uart::TxRequest<'a>>,
+    rx: MapCell<&'a mut uart::RxRequest<'a>>,
     receiving_word: Cell<bool>,
 }
 
@@ -207,27 +213,20 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a>{
 
         // Hardware RX FIFO is not empty
         while self.rx_fifo_not_empty() {
-            // word read request was made
-            if self.receiving_word.get() {
-                let word = self.read();
-                self.receiving_word.set(false);
-                ret.rx_state = hil::uart::State::COMPLETE;
-            }
             // buffer read request was made
-            else if self.rx.is_some() {
+            if self.rx.is_some() {
                 self.rx.take().map(|mut rx| {
                     // read in a byte
                     if rx.index < rx.length {
                         let byte = self.read() as u8;
-                        rx.buffer[rx.index] = byte;
+                        rx.items[rx.index] = byte;
                         rx.index += 1;
                     }
 
                     if rx.index == rx.length {
-                        ret.rx_state = hil::uart::State::COMPLETE;
-                        ret.rx_ret = Some(rx);
+                        ret.rx = State::REQUEST_COMPLETE(RX(rx));
                     } else {
-                        ret.rx_state = hil::uart::State::BUSY;
+                        ret.rx = State::BUSY;
                         self.rx.put(rx);
                     }
                 });
@@ -242,16 +241,16 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a>{
         self.tx.take().map(|mut tx| {
             // send out one byte at a time, IRQ when TX FIFO empty will bring us back
             if self.tx_fifo_not_full() && tx.index < tx.length {
-                self.write(tx.buffer[tx.index] as u32);
+                self.write(tx.items[tx.index] as u32);
                 tx.index += 1;
             }
             // request is done
             if tx.index == tx.length {
-               ret.tx_state = hil::uart::State::COMPLETE;
-               ret.tx_ret = Some(tx);
+               ret.tx = State::REQUEST_COMPLETE(TX(tx));
+               //ret.tx_ret = Some(tx);
 
             } else {
-                ret.tx_state = hil::uart::State::BUSY;
+                ret.tx = State::BUSY;
                 self.tx.put(tx);
             }
         });
@@ -307,22 +306,22 @@ impl<'a> uart::Transmit<'a> for UART<'a> {
 
     fn transmit_buffer(
         &self,
-        request: &'a mut uart::TxTransaction<'a>
-    ) -> (ReturnCode, Option<&'a mut uart::TxTransaction<'a>>) {
+        request: &'a mut uart::TxRequest<'a>
+    ) -> (ReturnCode, Option<&'a mut uart::TxRequest<'a>>) {
 
         // we will send one byte, causing EOT interrupt
         // TODO: disable interrupt here
         if self.tx_fifo_not_full() {
-            self.write(request.buffer[0] as u32);
+            self.write(request.items[0] as u32);
            request.index+=1;
         }
-        // Transaction will be continued in interrupt bottom half
+        // Request will be continued in interrupt bottom half
         self.tx.put(request);
         (ReturnCode::SUCCESS, None)
     }
 
     fn transmit_word(&self, word: u32) -> ReturnCode {
-        // if there's room in outgoing FIFO and no buffer transaction
+        // if there's room in outgoing FIFO and no buffer Request
         if self.tx_fifo_not_full() && self.tx.is_none() {
             self.write(word);
             return ReturnCode::SUCCESS;
@@ -339,8 +338,8 @@ impl<'a> uart::Receive<'a> for UART<'a> {
 
     fn receive_buffer(
         &self,
-        request: &'a mut uart::RxTransaction<'a>
-    ) -> (ReturnCode, Option<&'a mut uart::RxTransaction<'a>>) {
+        request: &'a mut uart::RxRequest<'a>
+    ) -> (ReturnCode, Option<&'a mut uart::RxRequest<'a>>) {
         if self.rx.is_some() || self.receiving_word.get() {
             (ReturnCode::EBUSY, Some(request))
         } else {

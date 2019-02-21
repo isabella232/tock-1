@@ -3,17 +3,14 @@ use kernel::common::cells::{MapCell, TakeCell};
 
 pub struct TestClient<'a> {
     state: MapCell<usize>,
-    buffer: [u8; 14],
-    tx: TakeCell<'a, hil::uart::TxTransaction<'a>>,
+    tx: TakeCell<'a, hil::uart::TxRequest<'a>>,
 }
 
 impl<'a> TestClient<'a> {
-    pub fn new()-> TestClient<'a> {
-
+    pub fn new(msg: &'a mut hil::uart::TxRequest<'a>)-> TestClient<'a> {
         TestClient {
             state: MapCell::new(0),
-            buffer: [0; 14],
-            tx: TakeCell::empty(),
+            tx: TakeCell::new(msg),
         }
 
     }
@@ -24,14 +21,15 @@ use kernel::hil;
 impl <'a>hil::uart::Client<'a> for TestClient<'a> {
 
     fn has_tx_request(&self)-> bool {
-        true
+        self.tx.is_some()
     }
 
-    fn get_tx(&self) -> Option<&mut hil::uart::TxTransaction<'a>> {
+    fn get_tx_request(&self) -> Option<&mut hil::uart::TxRequest<'a>> {
         self.tx.take()
     }
 
-    fn tx_complete(&self, returned_buffer: &'a mut hil::uart::TxTransaction<'a>) {
+    fn tx_request_complete(&self, returned_buffer: &'a mut hil::uart::TxRequest<'a>) {
+        returned_buffer.index = 0;
         self.tx.put(Some(returned_buffer));
     }
 }
