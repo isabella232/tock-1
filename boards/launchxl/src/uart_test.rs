@@ -20,7 +20,7 @@ impl<'a> TestClient<'a> {
         ( [0], hil::uart::TxRequest::new(), [0], hil::uart::TxRequest::new())
     }
 
-    pub fn new(space: &'a mut ([u8; 1], kernel::ikc::TxRequest<'a, u8>, [u8; 1], kernel::ikc::TxRequest<'a, u8>))-> TestClient<'a> {
+    pub fn new(space: &'a mut ([u8], kernel::ikc::TxRequest<'a, u8>, [u8], kernel::ikc::TxRequest<'a, u8>))-> TestClient<'a> {
        
         let (tx_request_buffer, tx_request, rx_request_buffer, rx_request) = space;
 
