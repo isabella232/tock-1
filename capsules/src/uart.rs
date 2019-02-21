@@ -13,27 +13,62 @@ use kernel::ikc::Request::{TX, RX};
 pub fn handle_irq(uart_num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::uart::Client<'a>]){
     let state = driver.handle_interrupt(0);
 
+    let mut ready_for_tx = false;
     // if any tx were complete, return them to client
     match state.tx {
         REQUEST_COMPLETE(TX(request)) => {
             let client_id = request.client_id;
             clients[client_id].tx_request_complete(request);
-            dispatch_next_request(uart_num, driver, clients);
+            ready_for_tx = true;
+
         },
         IDLE => {
-            dispatch_next_request(uart_num, driver, clients);
+            ready_for_tx = true;
         },
         _ => {}
     }
+
+    let mut ready_for_rx = false;
+    // if any rx were complete, return them to client
+    match state.rx {
+        REQUEST_COMPLETE(RX(request)) => {
+            let client_id = request.client_id;
+            clients[client_id].rx_request_complete(request);
+            ready_for_rx = true;
+        },
+        IDLE => {
+            ready_for_rx = true;
+        },
+        _ => {}
+    }
+
+    if ready_for_tx {
+        dispatch_next_tx_request(uart_num, driver, clients);
+    }
+    if ready_for_rx {
+        dispatch_next_rx_request(uart_num, driver, clients);
+    }
 }
 
-pub fn dispatch_next_request<'a>(uart_num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::uart::Client<'a>]) {
+pub fn dispatch_next_tx_request<'a>(uart_num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::uart::Client<'a>]) {
     for index in 0..clients.len() {
         let client = clients[index];
         if client.has_tx_request() {
             if let Some(tx) = client.get_tx_request() {
                 tx.client_id = index;
                 driver.handle_tx_request(0, tx);
+            }
+        }
+    }
+}
+
+pub fn dispatch_next_rx_request<'a>(uart_num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::uart::Client<'a>]) {
+    for index in 0..clients.len() {
+        let client = clients[index];
+        if client.has_rx_request() {
+            if let Some(rx) = client.get_rx_request() {
+                rx.client_id = index;
+                driver.handle_rx_request(0, rx);
             }
         }
     }
@@ -76,8 +111,8 @@ impl<'a> UartDriver<'a> {
         self.uart[uart_num].uart.transmit_buffer(tx);
     }
 
-    pub fn handle_rx_request(&self, uart_num: usize) {
-        
+    pub fn handle_rx_request(&self, uart_num: usize, rx: &'a mut hil::uart::RxRequest<'a>) {
+        self.uart[uart_num].uart.receive_buffer(rx);
     }
 
     pub fn handle_interrupt(&self, uart_num: usize) -> hil::uart::PeripheralState<'a>{

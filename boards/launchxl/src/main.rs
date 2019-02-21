@@ -172,7 +172,7 @@ pub unsafe fn reset_handler() {
 
     // Set up test client
     let mut test_client_space = uart_test::TestClient::space();
-    let test_client = uart_test::TestClient::new(&mut test_client_space);
+    let test_client = uart_test::TestClient::new_with_default_space(&mut test_client_space);
     let mut launchxl = LaunchXlPlatform {
         uart_driver: &uart_driver,
         test_client: &test_client,

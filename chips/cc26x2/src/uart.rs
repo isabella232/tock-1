@@ -216,13 +216,12 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a>{
             if self.rx.is_some() {
                 self.rx.take().map(|mut rx| {
                     // read in a byte
-                    if rx.index < rx.length {
+                    if !rx.requested_completed() {
                         let byte = self.read() as u8;
-                        rx.items[rx.index] = byte;
-                        rx.index += 1;
+                        rx.push(byte);
                     }
 
-                    if rx.index == rx.length {
+                    if rx.requested_completed() {
                         ret.rx = State::REQUEST_COMPLETE(RX(rx));
                     } else {
                         ret.rx = State::BUSY;
@@ -230,6 +229,7 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a>{
                     }
                 });
             }
+
             // no current read request
             else {
                 // read bytes into the void to avoid hardware RX buffer overflow
@@ -237,16 +237,16 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a>{
             }
         }
 
+        //if we have a request, handle it
         self.tx.take().map(|mut tx| {
             // send out one byte at a time, IRQ when TX FIFO empty will bring us back
-            if self.tx_fifo_not_full() && tx.index < tx.length {
-                if let Some(item) = tx.pop_item() {
+            if self.tx_fifo_not_full() && !tx.requested_completed() {
+                if let Some(item) = tx.pop() {
                     self.write(item as u32);
                 }
-                
             }
-            // request is done
-            if tx.index == tx.length {
+
+            if tx.requested_completed() {
                ret.tx = State::REQUEST_COMPLETE(TX(tx));
             } else {
                 ret.tx = State::BUSY;
@@ -310,7 +310,7 @@ impl<'a> uart::Transmit<'a> for UART<'a> {
 
         // we will send one byte, causing EOT interrupt
         if self.tx_fifo_not_full() {
-            if let Some(item) = request.pop_item() {
+            if let Some(item) = request.pop() {
                     self.write(item as u32);
             }
         }

@@ -258,16 +258,23 @@ pub trait ReceiveAdvanced<'a>: Receive<'a> {
 
 
 pub trait Client<'a> {
+
     fn has_tx_request(&self) -> bool{
         false
     }
 
-    fn get_tx_request(&self) -> Option<&mut TxRequest<'a>>;
+    fn get_tx_request(&self) -> Option<&mut TxRequest<'a>> {
+        None
+    }
 
-    // signal to client that tx is complete and return the buffer
-    fn tx_request_complete(&self, returned_buffer: &'a mut TxRequest<'a>);
+    fn tx_request_complete(&self, returned_request: &'a mut TxRequest<'a>);
 
     fn has_rx_request(&self) -> bool {
         false
     }
+
+    fn get_rx_request(&self) -> Option<&mut RxRequest<'a>>{
+        None
+    }
+    fn rx_request_complete(&self, returned_request: &'a mut RxRequest<'a>);
 }
