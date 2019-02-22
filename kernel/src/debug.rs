@@ -193,15 +193,6 @@ macro_rules! debug_gpio {
     }};
 }
 
-///////////////////////////////////////////////////////////////////
-// debug! and debug_verbose! support
-
-/// Wrapper type that we need a mutable reference to for the core::fmt::Write
-/// interface.
-pub struct DebugWriterWrapper {
-    dw: MapCell<&'static DebugWriter>,
-}
-
 /// Main type that we need an immutable reference to so we can share it with
 /// the UART provider and this debug module.
 pub struct DebugWriter {
@@ -217,11 +208,11 @@ pub struct DebugWriter {
 
 /// Static variable that holds the kernel's reference to the debug tool. This is
 /// needed so the debug!() macros have a reference to the object to use.
-static mut DEBUG_WRITER: Option<&'static mut DebugWriterWrapper> = None;
+static mut DEBUG_WRITER: Option<&'static mut DebugWriter> = None;
 
 pub static mut BUF: [u8; 1024] = [0; 1024];
 
-pub unsafe fn get_debug_writer() -> &'static mut DebugWriterWrapper {
+pub unsafe fn get_debug_writer() -> &'static mut DebugWriter {
     match ptr::read(&DEBUG_WRITER) {
         Some(x) => x,
         None => panic!("Must call `set_debug_writer_wrapper` in board initialization."),
@@ -229,17 +220,10 @@ pub unsafe fn get_debug_writer() -> &'static mut DebugWriterWrapper {
 }
 
 /// Function used by board main.rs to set a reference to the writer.
-pub unsafe fn set_debug_writer_wrapper(debug_writer: &'static mut DebugWriterWrapper) {
+pub unsafe fn set_debug_writer(debug_writer: &'static mut DebugWriter) {
     DEBUG_WRITER = Some(debug_writer);
 }
 
-impl DebugWriterWrapper {
-    pub fn new(dw: &'static DebugWriter) -> DebugWriterWrapper {
-        DebugWriterWrapper {
-            dw: MapCell::new(dw),
-        }
-    }
-}
 
 impl DebugWriter {
     pub fn new(
@@ -277,7 +261,7 @@ impl DebugWriter {
 
     /// Write as many of the bytes from the internal_buffer to the output
     /// mechanism as possible.
-    fn publish_str<'a>(&self, output: &'a mut hil::uart::TxRequest<'a>) -> &'a mut hil::uart::TxRequest<'a> {
+    pub fn publish_str<'a>(&self, output: &'a mut hil::uart::TxRequest<'a>) -> &'a mut hil::uart::TxRequest<'a> {
         
         // Can only publish if we have the output_buffer. If we don't that is
         // fine, we will do it when the transmit done callback happens.
@@ -346,34 +330,7 @@ impl DebugWriter {
     }
 }
 
-/// Pass through functions.
-impl DebugWriterWrapper {
-    fn increment_count(&self) {
-        self.dw.map(|dw| {
-            dw.increment_count();
-        });
-    }
-
-    fn get_count(&self) -> usize {
-        self.dw.map_or(0, |dw| dw.get_count())
-    }
-
-    pub fn publish_str<'a>(&self, output: &'a mut hil::uart::TxRequest<'a>) -> &'a mut hil::uart::TxRequest<'a> {
-        let mut ret = output;
-        if let Some(dw) = self.dw.take() {
-            ret = dw.publish_str(ret);
-            self.dw.put(dw);
-        }
-        ret
-
-    }
-
-    fn extract(&self) -> Option<(usize, usize, &mut [u8])> {
-        self.dw.map_or(None, |dw| dw.extract())
-    }
-}
-
-impl Write for DebugWriterWrapper {
+impl Write for DebugWriter {
     fn write_str(&mut self, s: &str) -> Result {
         // Circular buffer.
         //
@@ -388,10 +345,10 @@ impl Write for DebugWriterWrapper {
         //  -> head == tail implies buffer is empty
         //  -> there's no "full/empty" bit, so the effective buffer size is -1
 
-        self.dw.map(|dw| {
-            let mut head = dw.head.get();
-            let tail = dw.tail.get();
-            let len = dw.buffer.map_or(0, |buffer| buffer.len());
+        
+            let mut head = self.head.get();
+            let tail = self.tail.get();
+            let len = self.buffer.map_or(0, |buffer| buffer.len());
 
             let remaining_bytes = if head >= tail {
                 let bytes = s.as_bytes();
@@ -407,7 +364,7 @@ impl Write for DebugWriterWrapper {
                 let written = if backside_len != 0 {
                     let start = head;
                     let end = head + backside_len;
-                    dw.write_buffer(start, end, bytes);
+                    self.write_buffer(start, end, bytes);
                     min(end - start, bytes.len())
                 } else {
                     0
@@ -433,7 +390,7 @@ impl Write for DebugWriterWrapper {
                 let start = head;
                 let end = tail;
                 if (tail == 0) && (head == len - 1) {
-                    let active = dw.active_len.get();
+                    let active = self.active_len.get();
                     panic!(
                         "Debug buffer full. Head {} tail {} len {} active {} remaining {}",
                         head,
@@ -444,7 +401,7 @@ impl Write for DebugWriterWrapper {
                     );
                 }
                 if remaining_bytes.len() > end - start {
-                    let active = dw.active_len.get();
+                    let active = self.active_len.get();
                     panic!(
                         "Debug buffer out of room. Head {} tail {} len {} active {} remaining {}",
                         head,
@@ -454,15 +411,14 @@ impl Write for DebugWriterWrapper {
                         remaining_bytes.len()
                     );
                 }
-                dw.write_buffer(start, end, remaining_bytes);
+                self.write_buffer(start, end, remaining_bytes);
                 let written = min(end - start, remaining_bytes.len());
 
                 // head cannot wrap here
                 head += written;
             }
 
-            dw.head.set(head);
-        });
+            self.head.set(head);
 
         Ok(())
     }

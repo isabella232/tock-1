@@ -153,20 +153,15 @@ pub unsafe fn reset_handler() {
 
     configure_pins(pinmap);
 
-    // Create virtual device for kernel debug.
-    let debugger = static_init!(
+    // setup static debug writer
+    let debug_writer = static_init!(
         kernel::debug::DebugWriter,
         kernel::debug::DebugWriter::new(
             &mut kernel::debug::BUF,
         )
     );
-
-    let debug_wrapper = static_init!(
-        kernel::debug::DebugWriterWrapper,
-        kernel::debug::DebugWriterWrapper::new(debugger)
-    );
-    kernel::debug::set_debug_writer_wrapper(debug_wrapper);
-
+    kernel::debug::set_debug_writer(debug_writer);
+    // setup uart client for debug on stack
     let mut debug_client_space = debug::DebugClient::space();
     let debug_client = debug::DebugClient::new_with_default_space(&mut debug_client_space);
 
