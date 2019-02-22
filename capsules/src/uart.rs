@@ -14,8 +14,8 @@ pub fn handle_irq(uart_num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::
     let state = driver.handle_interrupt(0);
 
     let mut ready_for_tx = false;
-    // if any tx were complete, return them to client
     match state.tx {
+        // if request complete, return it to client
         REQUEST_COMPLETE(TX(request)) => {
             let client_id = request.client_id;
             clients[client_id].tx_request_complete(request);
@@ -29,8 +29,8 @@ pub fn handle_irq(uart_num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::
     }
 
     let mut ready_for_rx = false;
-    // if any rx were complete, return them to client
     match state.rx {
+        // if request complete, return it to client
         REQUEST_COMPLETE(RX(request)) => {
             let client_id = request.client_id;
             clients[client_id].rx_request_complete(request);
@@ -57,6 +57,7 @@ pub fn dispatch_next_tx_request<'a>(uart_num: usize, driver: &UartDriver<'a>, cl
             if let Some(tx) = client.get_tx_request() {
                 tx.client_id = index;
                 driver.handle_tx_request(0, tx);
+                return;
             }
         }
     }

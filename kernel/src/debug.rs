@@ -198,17 +198,15 @@ macro_rules! debug_gpio {
 
 /// Wrapper type that we need a mutable reference to for the core::fmt::Write
 /// interface.
-pub struct DebugWriterWrapper<'a> {
-    dw: MapCell<&'a DebugWriter<'a>>,
+pub struct DebugWriterWrapper {
+    dw: MapCell<&'static DebugWriter>,
 }
 
 /// Main type that we need an immutable reference to so we can share it with
 /// the UART provider and this debug module.
-pub struct DebugWriter<'a> {
-    // The buffer that is passed to the writing mechanism.
-    output_buffer: TakeCell<'a, [u8]>,
+pub struct DebugWriter {
     // An internal buffer that is used to hold debug!() calls as they come in.
-    internal_buffer: TakeCell<'a, [u8]>,
+    buffer: TakeCell<'static, [u8]>,
     head: Cell<usize>,
     tail: Cell<usize>,
     // How many bytes are being written on the current publish_str call.
@@ -221,10 +219,9 @@ pub struct DebugWriter<'a> {
 /// needed so the debug!() macros have a reference to the object to use.
 static mut DEBUG_WRITER: Option<&'static mut DebugWriterWrapper> = None;
 
-pub static mut OUTPUT_BUF: [u8; 64] = [0; 64];
-pub static mut INTERNAL_BUF: [u8; 1024] = [0; 1024];
+pub static mut BUF: [u8; 1024] = [0; 1024];
 
-pub unsafe fn get_debug_writer ()-> &'static mut DebugWriterWrapper{
+pub unsafe fn get_debug_writer() -> &'static mut DebugWriterWrapper {
     match ptr::read(&DEBUG_WRITER) {
         Some(x) => x,
         None => panic!("Must call `set_debug_writer_wrapper` in board initialization."),
@@ -244,15 +241,12 @@ impl DebugWriterWrapper {
     }
 }
 
-impl<'a> DebugWriter<'a> {
+impl DebugWriter {
     pub fn new(
-        uart: &'a hil::uart::Transmit,
-        out_buffer: &'a mut [u8],
-        internal_buffer: &'a mut [u8],
-    ) -> DebugWriter<'a> {
+        buffer: &'static mut [u8],
+    ) -> DebugWriter {
         DebugWriter {
-            output_buffer: TakeCell::new(out_buffer),
-            internal_buffer: TakeCell::new(internal_buffer),
+            buffer: TakeCell::new(buffer),
             head: Cell::new(0),       // first valid index in output_buffer
             tail: Cell::new(0),       // one past last valid index (wraps to 0)
             active_len: Cell::new(0), // how big is the current transaction?
@@ -274,8 +268,8 @@ impl<'a> DebugWriter<'a> {
         if end < start {
             panic!("wb bounds: start {} end {} bytes {:?}", start, end, bytes);
         }
-        self.internal_buffer.map(|in_buffer| {
-            for (dst, src) in in_buffer[start..end].iter_mut().zip(bytes.iter()) {
+        self.buffer.map(|buf| {
+            for (dst, src) in buf[start..end].iter_mut().zip(bytes.iter()) {
                 *dst = *src;
             }
         });
@@ -283,124 +277,117 @@ impl<'a> DebugWriter<'a> {
 
     /// Write as many of the bytes from the internal_buffer to the output
     /// mechanism as possible.
-    fn publish_str(&self) {
+    fn publish_str<'a>(&self, output: &'a mut hil::uart::TxRequest<'a>) -> &'a mut hil::uart::TxRequest<'a> {
+        
         // Can only publish if we have the output_buffer. If we don't that is
         // fine, we will do it when the transmit done callback happens.
-        self.output_buffer.take().map(|out_buffer| {
-            let head = self.head.get();
-            let tail = self.tail.get();
-            let len = self
-                .internal_buffer
-                .map_or(0, |internal_buffer| internal_buffer.len());
+        let mut head = self.head.get();
+        let mut tail = self.tail.get();
+        let len = self
+            .buffer
+            .map_or(0, |buffer| buffer.len());
 
-            // Want to write everything from tail inclusive to head
-            // exclusive
-            let (start, end) = if tail > head {
-                // Need to pass subscribe a contiguous buffer, so first
-                // write from tail to end of buffer. The completion
-                // callback will see that the buffer's not empty and
-                // call again to write the rest (tail will be 0)
-                let start = tail;
-                let end = len;
-                (start, end)
-            } else if tail < head {
-                let start = tail;
-                let end = head;
-                (start, end)
-            } else {
-                panic!("Consistency error: publish empty buffer?")
-            };
+        // Want to write everything from tail inclusive to head
+        // exclusive
+        let (start, end) = if tail > head {
+            // Need to pass subscribe a contiguous buffer, so first
+            // write from tail to end of buffer. The completion
+            // callback will see that the buffer's not empty and
+            // call again to write the rest (tail will be 0)
+            let start = tail;
+            let end = len;
+            (start, end)
+        } else if tail < head {
+            let start = tail;
+            let end = head;
+            (start, end)
+        } else {
+            return output; //panic!("Consistency error: publish empty buffer?")
+        };
 
-            // Check that we aren't writing a segment larger than the output
-            // buffer.
-            let real_end = start + cmp::min(end - start, out_buffer.len());
+        // Check that we aren't writing a segment larger than the output
+        // buffer.
+        let tx_len = cmp::min(end - start, output.room_available());
+        let real_end = start + tx_len;
 
-            self.internal_buffer.map(|internal_buffer| {
-                for (dst, src) in out_buffer
-                    .iter_mut()
-                    .zip(internal_buffer[start..real_end].iter())
-                {
-                    *dst = *src;
-                }
-            });
 
-            // Transmit the data in the output buffer.
-            let out_len = real_end - start;
-            let (rval, opt) = self.uart.transmit_buffer(out_buffer, out_len);
-            match rval {
-                ReturnCode::SUCCESS => {
-                    // Set the outgoing length
-                    self.active_len.set(out_len);
-                }
-                _ => {
-                    self.output_buffer.replace(opt.unwrap());
-                }
+
+        self.buffer.map(|buffer| {
+            //panic!("writing {} characters", real_end - start);
+            for el in buffer[start..real_end].iter() {
+                output.push(*el);
             }
         });
+
+        // Increment the tail with how many bytes were written to the output
+        // mechanism, and wrap if needed.
+        tail += tx_len;
+        if tail > len {
+            tail = tail - len;
+        }
+
+        if head == tail {
+            // Empty. As an optimization, reset the head and tail pointers to 0
+            // to maximize the buffer length available before fragmentation
+            self.head.set(0);
+            self.tail.set(0);
+        } else {
+            // Buffer not empty, go around again
+            self.tail.set(tail);
+        }
+
+        output
     }
 
     fn extract(&self) -> Option<(usize, usize, &mut [u8])> {
-        self.internal_buffer
+        self.buffer
             .take()
             .map(|buf| (self.head.get(), self.tail.get(), buf))
     }
 }
 
-impl <'a>hil::uart::Client<'a> for DebugWriter<'a> {
-    fn has_tx_request(&self)-> bool {
+// impl hil::uart::TransmitClient for DebugWriter {
+//     fn transmitted_buffer(&self, buffer: &'static mut [u8], tx_len: usize, _rcode: ReturnCode) {
+//         // Replace this buffer since we are done with it.
+//         self.output_buffer.replace(buffer);
 
-    }
+//         // Mark how many bytes outstanding so we don't overwrite buffer
+//         // in transmit calls.
+//         let goal_length = self.active_len.get();
+//         let remainder = goal_length - tx_len;
+//         self.active_len.set(remainder);
 
-    fn get_tx_request(&self) -> Option<&mut hil::uart::TxRequest<'a>> {
-  
-    }
+//         let len = self
+//             .internal_buffer
+//             .map_or(0, |internal_buffer| internal_buffer.len());
+//         let head = self.head.get();
+//         let mut tail = self.tail.get();
 
-    fn tx_request_complete(&self, returned_request: &'a mut hil::uart::TxRequest<'a>) {
+//         //panic!("Tail: {}, head: {}, tx_len: {}, rcode: {:?}", tail, head, tx_len, _rcode);
 
-    }
+//         // Increment the tail with how many bytes were written to the output
+//         // mechanism, and wrap if needed.
+//         tail += tx_len;
+//         if tail > len {
+//             tail = tail - len;
+//         }
 
-    fn rx_request_complete(&self, returned_request: &'a mut hil::uart::RxRequest<'a>) {}
-
-    // fn transmitted_buffer(&self, buffer: &'static mut [u8], tx_len: usize, _rcode: ReturnCode) {
-    //     // Replace this buffer since we are done with it.
-    //     self.output_buffer.replace(buffer);
-
-    //     // Mark how many bytes outstanding so we don't overwrite buffer
-    //     // in transmit calls.
-    //     let goal_length = self.active_len.get();
-    //     let remainder = goal_length - tx_len;
-    //     self.active_len.set(remainder);
-
-    //     let len = self
-    //         .internal_buffer
-    //         .map_or(0, |internal_buffer| internal_buffer.len());
-    //     let head = self.head.get();
-    //     let mut tail = self.tail.get();
-
-    //     //panic!("Tail: {}, head: {}, tx_len: {}, rcode: {:?}", tail, head, tx_len, _rcode);
-
-    //     // Increment the tail with how many bytes were written to the output
-    //     // mechanism, and wrap if needed.
-    //     tail += tx_len;
-    //     if tail > len {
-    //         tail = tail - len;
-    //     }
-
-    //     if head == tail {
-    //         // Empty. As an optimization, reset the head and tail pointers to 0
-    //         // to maximize the buffer length available before fragmentation
-    //         self.head.set(0);
-    //         self.tail.set(0);
-    //     } else {
-    //         // Buffer not empty, go around again
-    //         self.tail.set(tail);
-    //         self.publish_str();
-    //     }
-    // }
-}
+//         if head == tail {
+//             // Empty. As an optimization, reset the head and tail pointers to 0
+//             // to maximize the buffer length available before fragmentation
+//             self.head.set(0);
+//             self.tail.set(0);
+//         } else {
+//             // Buffer not empty, go around again
+//             self.tail.set(tail);
+//             self.publish_str();
+//         }
+//     }
+//     fn transmitted_word(&self, _rcode: ReturnCode) {}
+// }
 
 /// Pass through functions.
-impl<'a> DebugWriterWrapper<'a> {
+impl DebugWriterWrapper {
     fn increment_count(&self) {
         self.dw.map(|dw| {
             dw.increment_count();
@@ -411,10 +398,14 @@ impl<'a> DebugWriterWrapper<'a> {
         self.dw.map_or(0, |dw| dw.get_count())
     }
 
-    fn publish_str(&self) {
-        self.dw.map(|dw| {
-            dw.publish_str();
-        });
+    pub fn publish_str<'a>(&self, output: &'a mut hil::uart::TxRequest<'a>) -> &'a mut hil::uart::TxRequest<'a> {
+        let mut ret = output;
+        if let Some(dw) = self.dw.take() {
+            ret = dw.publish_str(ret);
+            self.dw.put(dw);
+        }
+        ret
+
     }
 
     fn extract(&self) -> Option<(usize, usize, &mut [u8])> {
@@ -422,7 +413,7 @@ impl<'a> DebugWriterWrapper<'a> {
     }
 }
 
-impl Write for DebugWriterWrapper<'a> {
+impl Write for DebugWriterWrapper {
     fn write_str(&mut self, s: &str) -> Result {
         // Circular buffer.
         //
@@ -440,7 +431,7 @@ impl Write for DebugWriterWrapper<'a> {
         self.dw.map(|dw| {
             let mut head = dw.head.get();
             let tail = dw.tail.get();
-            let len = dw.internal_buffer.map_or(0, |buffer| buffer.len());
+            let len = dw.buffer.map_or(0, |buffer| buffer.len());
 
             let remaining_bytes = if head >= tail {
                 let bytes = s.as_bytes();
@@ -522,7 +513,6 @@ pub fn begin_debug_fmt(args: Arguments) {
         let writer = get_debug_writer();
         let _ = write(writer, args);
         let _ = writer.write_str("\r\n");
-        writer.publish_str();
     }
 }
 
@@ -537,7 +527,6 @@ pub fn begin_debug_verbose_fmt(args: Arguments, file_line: &(&'static str, u32))
         let _ = writer.write_fmt(format_args!("TOCK_DEBUG({}): {}:{}: ", count, file, line));
         let _ = write(writer, args);
         let _ = writer.write_str("\r\n");
-        writer.publish_str();
     }
 }
 
@@ -619,4 +608,72 @@ pub unsafe fn flush<W: Write>(writer: &mut W) {
             }
         }
     }
+}
+
+
+pub struct DebugClient<'a> {
+    tx_request_buffer: TakeCell<'a, [u8]>,
+    tx_request: TakeCell<'a, hil::uart::TxRequest<'a>>,
+}
+
+impl<'a> DebugClient<'a> {
+
+    pub fn space() -> ([u8; 1024], hil::uart::TxRequest<'a>) {
+        ( [0; 1024], hil::uart::TxRequest::new())
+    }
+
+    pub fn new_with_default_space(space: &'a mut ([u8; 1024], hil::uart::TxRequest<'a>))
+        -> DebugClient<'a>
+    {
+        let (tx_request_buffer, tx_request) = space;
+        Self::new(tx_request_buffer, tx_request)
+    }
+
+    pub fn with_buffer<F>(&self, f: F)
+    where F: Fn(&'a mut hil::uart::TxRequest<'a>) -> &'a mut hil::uart::TxRequest<'a>
+    {
+        self.tx_request.take().map( |mut tx| {
+            tx = f(tx);
+            self.tx_request.put(Some(tx));
+        });
+    }
+
+    pub fn new(
+        tx_request_buffer: &'a mut [u8],
+        tx_request: &'a mut hil::uart::TxRequest<'a>, 
+        )-> DebugClient<'a> {
+       
+        tx_request.set_with_mut_ref(tx_request_buffer);
+
+        DebugClient {
+            tx_request_buffer: TakeCell::empty(),
+            tx_request: TakeCell::new(tx_request),
+        }
+    }
+}
+
+impl <'a>hil::uart::Client<'a> for DebugClient<'a> {
+
+    fn has_tx_request(&self)-> bool {
+        let mut ret = false;
+        self.tx_request.take().map( |tx| { 
+          ret = tx.has_some();
+          self.tx_request.put(Some(tx));
+        });
+        ret
+    }
+
+    fn get_tx_request(&self) -> Option<&mut hil::uart::TxRequest<'a>> {
+        self.tx_request.take()
+    }
+
+    fn tx_request_complete(&self, returned_request: &'a mut hil::uart::TxRequest<'a>) {
+        returned_request.reset();
+        self.tx_request.put(Some(returned_request));
+    }
+
+
+    fn rx_request_complete(&self, returned_request: &'a mut hil::uart::RxRequest<'a>) {}
+
+
 }

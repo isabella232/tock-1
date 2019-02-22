@@ -153,6 +153,26 @@ pub unsafe fn reset_handler() {
 
     configure_pins(pinmap);
 
+    // Create virtual device for kernel debug.
+    let debugger = static_init!(
+        kernel::debug::DebugWriter,
+        kernel::debug::DebugWriter::new(
+            &mut kernel::debug::BUF,
+        )
+    );
+
+    let debug_wrapper = static_init!(
+        kernel::debug::DebugWriterWrapper,
+        kernel::debug::DebugWriterWrapper::new(debugger)
+    );
+    kernel::debug::set_debug_writer_wrapper(debug_wrapper);
+
+    let mut debug_client_space = debug::DebugClient::space();
+    let debug_client = debug::DebugClient::new_with_default_space(&mut debug_client_space);
+
+    debug!("hello??");
+
+
     // UART
     let uart0_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_0);
     let uart1_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_1);
@@ -171,10 +191,18 @@ pub unsafe fn reset_handler() {
     // Set up test client
     let mut test_client_space = uart_test::TestClient::space();
     let test_client = uart_test::TestClient::new_with_default_space(&mut test_client_space);
+
+    // Set up debug client
+
+
+
     let mut launchxl = LaunchXlPlatform {
         uart_driver: &uart_driver,
+        debug_client: &debug_client,
         test_client: &test_client,
     };
+
+
 
     launchxl.handle_irq(NVIC_IRQ::UART0 as usize);
 
@@ -195,13 +223,12 @@ pub unsafe fn reset_handler() {
         &process_management_capability,
     );
 
-    // debug!("alive");
-    panic!("WORKS??");
     board_kernel.kernel_loop(&mut launchxl, chip, None, &main_loop_capability);
 }
 
 pub struct LaunchXlPlatform<'a> {
     uart_driver: &'a capsules::uart::UartDriver<'a>,
+    debug_client: &'a debug::DebugClient<'a>,
     test_client: &'a uart_test::TestClient<'a>,
 }
 
@@ -225,7 +252,13 @@ impl<'a> kernel::Platform for LaunchXlPlatform<'a> {
             NVIC_IRQ::GPIO => (),//gpio::PORT.handle_interrupt(),
             NVIC_IRQ::AON_RTC => (),//rtc::RTC.handle_interrupt(),
             NVIC_IRQ::UART0 => {
-                let clients = [self.test_client as &kernel::hil::uart::Client];
+                unsafe {
+                    self.debug_client.with_buffer( |buf| debug::get_debug_writer().publish_str(buf));
+                }
+                let clients = [
+                    self.debug_client as &kernel::hil::uart::Client,
+                    self.test_client as &kernel::hil::uart::Client
+                ];
                 capsules::uart::handle_irq(0, self.uart_driver, &clients);
             },
             NVIC_IRQ::I2C0 => (),//i2c::I2C0.handle_interrupt(),

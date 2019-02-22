@@ -89,6 +89,14 @@ impl<'a, T: Copy> TxRequest<'a, T> {
         }
     }
 
+    pub fn room_available(&self) -> usize {
+        match &self.buf {
+            TxBuf::MUT(buf) => buf.len() - self.pushed,
+            TxBuf::CONST(buf) => 0,
+            TxBuf::None => 0,
+        }
+    }
+
     pub fn reset(&mut self) {
         self.pushed = 0;
         self.popped = 0;
