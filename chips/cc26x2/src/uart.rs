@@ -2,7 +2,7 @@
 use crate::prcm;
 
 use core::cell::Cell;
-use kernel::common::cells::{TakeCell, OptionalCell};
+use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
 use kernel::hil;
@@ -11,8 +11,7 @@ use kernel::ikc::DriverState as State;
 use kernel::ReturnCode;
 
 //use crate::ikc::DriverState::{IDLE, BUSY, REQUEST_COMPLETE};
-use kernel::ikc::Request::{TX, RX};
-
+use kernel::ikc::Request::{RX, TX};
 
 const MCU_CLOCK: u32 = 48_000_000;
 
@@ -92,20 +91,19 @@ pub struct UART<'a> {
     receiving_word: Cell<bool>,
 }
 
-pub enum PeripheralNum{
+pub enum PeripheralNum {
     _0,
-    _1
+    _1,
 }
 
 use crate::memory_map::{UART0_BASE, UART1_BASE};
 
 impl<'a> UART<'a> {
-
     pub fn new(num: PeripheralNum) -> UART<'a> {
         // a counter tracking if you've given these out would help make this safe
         let registers = match num {
-            PeripheralNum::_0 => unsafe { &*(UART0_BASE as *const UartRegisters)},
-            PeripheralNum::_1 => unsafe { &*(UART1_BASE as *const UartRegisters)},
+            PeripheralNum::_0 => unsafe { &*(UART0_BASE as *const UartRegisters) },
+            PeripheralNum::_1 => unsafe { &*(UART1_BASE as *const UartRegisters) },
         };
 
         let ret = UART {
@@ -120,7 +118,6 @@ impl<'a> UART<'a> {
         ret.initialize();
 
         ret
-
     }
 
     /// Initialize the UART hardware.
@@ -197,11 +194,10 @@ impl<'a> UART<'a> {
     }
 }
 
-
 impl<'a> uart::Uart<'a> for UART<'a> {}
 impl<'a> uart::UartPeripheral<'a> for UART<'a> {}
 
-impl<'a> uart::InterruptHandler<'a> for UART<'a>{
+impl<'a> uart::InterruptHandler<'a> for UART<'a> {
     /// Clears all interrupts related to UART.
     fn handle_interrupt(&self) -> hil::uart::PeripheralState<'a> {
         // default state to return is IDLE
@@ -229,7 +225,6 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a>{
                     }
                 });
             }
-
             // no current read request
             else {
                 // read bytes into the void to avoid hardware RX buffer overflow
@@ -247,7 +242,7 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a>{
             }
 
             if tx.requested_completed() {
-               ret.tx = State::REQUEST_COMPLETE(TX(tx));
+                ret.tx = State::REQUEST_COMPLETE(TX(tx));
             } else {
                 ret.tx = State::BUSY;
                 self.tx.put(Some(tx));
@@ -255,10 +250,8 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a>{
         });
 
         ret
-
     }
 }
-
 
 impl<'a> uart::Configure for UART<'a> {
     fn configure(&self, params: uart::Parameters) -> ReturnCode {
@@ -302,16 +295,14 @@ impl<'a> uart::Configure for UART<'a> {
 }
 
 impl<'a> uart::Transmit<'a> for UART<'a> {
-
     fn transmit_buffer(
         &self,
-        request: &'a mut uart::TxRequest<'a>
+        request: &'a mut uart::TxRequest<'a>,
     ) -> (ReturnCode, Option<&'a mut uart::TxRequest<'a>>) {
-
         // we will send one byte, causing EOT interrupt
         if self.tx_fifo_not_full() {
             if let Some(item) = request.pop() {
-                    self.write(item as u32);
+                self.write(item as u32);
             }
         }
         // Request will be continued in interrupt bottom half
@@ -334,10 +325,9 @@ impl<'a> uart::Transmit<'a> for UART<'a> {
 }
 
 impl<'a> uart::Receive<'a> for UART<'a> {
-
     fn receive_buffer(
         &self,
-        request: &'a mut uart::RxRequest<'a>
+        request: &'a mut uart::RxRequest<'a>,
     ) -> (ReturnCode, Option<&'a mut uart::RxRequest<'a>>) {
         if self.rx.is_some() || self.receiving_word.get() {
             (ReturnCode::EBUSY, Some(request))

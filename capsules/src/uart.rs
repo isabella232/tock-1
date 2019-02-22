@@ -7,10 +7,10 @@ use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
 use crate::driver;
 pub const DRIVER_NUM: usize = driver::NUM::CONSOLE as usize;
 
-use kernel::ikc::DriverState::{IDLE, BUSY, REQUEST_COMPLETE};
-use kernel::ikc::Request::{TX, RX};
+use kernel::ikc::DriverState::{BUSY, IDLE, REQUEST_COMPLETE};
+use kernel::ikc::Request::{RX, TX};
 
-pub fn handle_irq(uart_num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::uart::Client<'a>]){
+pub fn handle_irq(uart_num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::uart::Client<'a>]) {
     let state = driver.handle_interrupt(0);
 
     let mut ready_for_tx = false;
@@ -20,11 +20,10 @@ pub fn handle_irq(uart_num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::
             let client_id = request.client_id;
             clients[client_id].tx_request_complete(request);
             ready_for_tx = true;
-
-        },
+        }
         IDLE => {
             ready_for_tx = true;
-        },
+        }
         _ => {}
     }
 
@@ -35,10 +34,10 @@ pub fn handle_irq(uart_num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::
             let client_id = request.client_id;
             clients[client_id].rx_request_complete(request);
             ready_for_rx = true;
-        },
+        }
         IDLE => {
             ready_for_rx = true;
-        },
+        }
         _ => {}
     }
 
@@ -50,7 +49,11 @@ pub fn handle_irq(uart_num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::
     }
 }
 
-pub fn dispatch_next_tx_request<'a>(uart_num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::uart::Client<'a>]) {
+pub fn dispatch_next_tx_request<'a>(
+    uart_num: usize,
+    driver: &UartDriver<'a>,
+    clients: &[&'a hil::uart::Client<'a>],
+) {
     for index in 0..clients.len() {
         let client = clients[index];
         if client.has_tx_request() {
@@ -63,7 +66,11 @@ pub fn dispatch_next_tx_request<'a>(uart_num: usize, driver: &UartDriver<'a>, cl
     }
 }
 
-pub fn dispatch_next_rx_request<'a>(uart_num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::uart::Client<'a>]) {
+pub fn dispatch_next_rx_request<'a>(
+    uart_num: usize,
+    driver: &UartDriver<'a>,
+    clients: &[&'a hil::uart::Client<'a>],
+) {
     for index in 0..clients.len() {
         let client = clients[index];
         if client.has_rx_request() {
@@ -74,7 +81,6 @@ pub fn dispatch_next_rx_request<'a>(uart_num: usize, driver: &UartDriver<'a>, cl
         }
     }
 }
-
 
 #[derive(Default)]
 pub struct App {
@@ -89,23 +95,21 @@ pub struct App {
     read_len: usize,
 }
 
-pub struct Uart<'a>{
+pub struct Uart<'a> {
     uart: &'a hil::uart::UartPeripheral<'a>,
     apps: Grant<App>,
     state: hil::uart::PeripheralState<'a>,
     current_tx_client: Option<usize>,
-    current_rx_client: Option<usize>
+    current_rx_client: Option<usize>,
 }
 
-pub struct UartDriver<'a>{
-    pub uart: &'a [&'a Uart<'a>]
+pub struct UartDriver<'a> {
+    pub uart: &'a [&'a Uart<'a>],
 }
 
 impl<'a> UartDriver<'a> {
-    pub fn new(
-        uarts: &'a [&'a Uart<'a>]
-    ) -> UartDriver<'a> {
-        UartDriver { uart: uarts}
+    pub fn new(uarts: &'a [&'a Uart<'a>]) -> UartDriver<'a> {
+        UartDriver { uart: uarts }
     }
 
     pub fn handle_tx_request(&self, uart_num: usize, tx: &'a mut hil::uart::TxRequest<'a>) {
@@ -116,12 +120,12 @@ impl<'a> UartDriver<'a> {
         self.uart[uart_num].uart.receive_buffer(rx);
     }
 
-    pub fn handle_interrupt(&self, uart_num: usize) -> hil::uart::PeripheralState<'a>{
+    pub fn handle_interrupt(&self, uart_num: usize) -> hil::uart::PeripheralState<'a> {
         self.uart[uart_num].uart.handle_interrupt()
     }
 }
 
-static DEFAULT_PARAMS: hil::uart::Parameters  = hil::uart::Parameters {
+static DEFAULT_PARAMS: hil::uart::Parameters = hil::uart::Parameters {
     baud_rate: 115200, // baud rate in bit/s
     width: hil::uart::Width::Eight,
     parity: hil::uart::Parity::None,
@@ -130,11 +134,7 @@ static DEFAULT_PARAMS: hil::uart::Parameters  = hil::uart::Parameters {
 };
 
 impl<'a, 'b> Uart<'a> {
-    pub fn new(
-        uart: &'a hil::uart::UartPeripheral<'a>,
-        grant: Grant<App>,
-    ) -> Uart<'a> {
-        
+    pub fn new(uart: &'a hil::uart::UartPeripheral<'a>, grant: Grant<App>) -> Uart<'a> {
         uart.configure(DEFAULT_PARAMS);
 
         Uart {
@@ -142,31 +142,29 @@ impl<'a, 'b> Uart<'a> {
             apps: grant,
             state: hil::uart::PeripheralState::new(),
             current_tx_client: Some(0),
-            current_rx_client: None
+            current_rx_client: None,
         }
     }
 
     // used just to trigger this thing (delete later)
     pub fn write_buffer(&self, tx: &'a mut hil::uart::TxRequest<'a>) {
-       self.uart.transmit_buffer(tx);
+        self.uart.transmit_buffer(tx);
     }
 
     /// Internal helper function for setting up a new send transaction
     fn send_new(&self, app_id: AppId, app: &mut App, len: usize) -> ReturnCode {
-       ReturnCode::ENOSUPPORT
+        ReturnCode::ENOSUPPORT
     }
 
     /// Internal helper function for continuing a previously set up transaction
     /// Returns true if this send is still active, or false if it has completed
     fn send_continue(&self, app_id: AppId, app: &mut App) -> Result<bool, ReturnCode> {
-       Ok(false)
+        Ok(false)
     }
 
     /// Internal helper function for sending data for an existing transaction.
     /// Cannot fail. If can't send now, it will schedule for sending later.
-    fn send(&self, app_id: AppId, app: &mut App, slice: AppSlice<Shared, u8>) {
-
-    }
+    fn send(&self, app_id: AppId, app: &mut App, slice: AppSlice<Shared, u8>) {}
 
     /// Internal helper function for starting a receive operation
     fn receive_new(&self, app_id: AppId, app: &mut App, len: usize) -> ReturnCode {

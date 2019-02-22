@@ -7,11 +7,10 @@ const MSG2: &'static [u8; 22] = b"You can start typing\r\n";
 enum State {
     FirstMsg,
     SecondMsg,
-    Echo
+    Echo,
 }
 
 pub struct TestClient<'a> {
-    
     state: MapCell<State>,
 
     tx_request_buffer: TakeCell<'a, [u8]>,
@@ -21,14 +20,28 @@ pub struct TestClient<'a> {
 }
 
 impl<'a> TestClient<'a> {
-
-    pub fn space() -> ([u8; 2], hil::uart::TxRequest<'a>, [u8; 1], hil::uart::RxRequest<'a>) {
-        ( [0; 2], hil::uart::TxRequest::new(), [0], hil::uart::RxRequest::new())
+    pub fn space() -> (
+        [u8; 2],
+        hil::uart::TxRequest<'a>,
+        [u8; 1],
+        hil::uart::RxRequest<'a>,
+    ) {
+        (
+            [0; 2],
+            hil::uart::TxRequest::new(),
+            [0],
+            hil::uart::RxRequest::new(),
+        )
     }
 
-    pub fn new_with_default_space(space: &'a mut ([u8; 2], hil::uart::TxRequest<'a>, [u8; 1], hil::uart::RxRequest<'a>))
-        -> TestClient<'a>
-    {
+    pub fn new_with_default_space(
+        space: &'a mut (
+            [u8; 2],
+            hil::uart::TxRequest<'a>,
+            [u8; 1],
+            hil::uart::RxRequest<'a>,
+        ),
+    ) -> TestClient<'a> {
         let (tx_request_buffer, tx_request, rx_request_buffer, rx_request) = space;
 
         Self::new(tx_request_buffer, tx_request, rx_request_buffer, rx_request)
@@ -36,14 +49,12 @@ impl<'a> TestClient<'a> {
 
     pub fn new(
         tx_request_buffer: &'a mut [u8],
-        tx_request: &'a mut kernel::ikc::TxRequest<'a, u8>, 
+        tx_request: &'a mut kernel::ikc::TxRequest<'a, u8>,
         rx_request_buffer: &'a mut [u8],
-        rx_request: &'a mut kernel::ikc::RxRequest<'a, u8>
-        )-> TestClient<'a> {
-       
+        rx_request: &'a mut kernel::ikc::RxRequest<'a, u8>,
+    ) -> TestClient<'a> {
         tx_request.set_with_const_ref(MSG1);
         rx_request.set_buf(rx_request_buffer);
-
 
         TestClient {
             state: MapCell::new(State::FirstMsg),
@@ -55,15 +66,13 @@ impl<'a> TestClient<'a> {
     }
 }
 
-
 use kernel::hil;
-impl <'a>hil::uart::Client<'a> for TestClient<'a> {
-
-    fn has_tx_request(&self)-> bool {
+impl<'a> hil::uart::Client<'a> for TestClient<'a> {
+    fn has_tx_request(&self) -> bool {
         let mut ret = false;
-        self.tx_request.take().map( |tx| { 
-          ret = tx.has_some();
-          self.tx_request.put(Some(tx));
+        self.tx_request.take().map(|tx| {
+            ret = tx.has_some();
+            self.tx_request.put(Some(tx));
         });
         ret
     }
@@ -73,30 +82,30 @@ impl <'a>hil::uart::Client<'a> for TestClient<'a> {
     }
 
     fn tx_request_complete(&self, returned_request: &'a mut hil::uart::TxRequest<'a>) {
-        self.state.take().map( |mut state| {
+        self.state.take().map(|mut state| {
             match state {
                 State::FirstMsg => {
                     // update tx_requested with new const string
                     returned_request.set_with_const_ref(MSG2);
                     state = State::SecondMsg;
-                },
+                }
                 State::SecondMsg => {
                     // switch tx_request to mutable buffer
-                    if let Some(buf) = self.tx_request_buffer.take(){
-                       returned_request.set_with_mut_ref(buf);
+                    if let Some(buf) = self.tx_request_buffer.take() {
+                        returned_request.set_with_mut_ref(buf);
                     };
                     state = State::Echo;
-                },
+                }
                 State::Echo => {
                     returned_request.reset();
-                },
+                }
             }
             self.state.put(state);
         });
         self.tx_request.put(Some(returned_request));
     }
 
-    fn has_rx_request(&self)-> bool {
+    fn has_rx_request(&self) -> bool {
         self.rx_request.is_some()
     }
 
@@ -105,26 +114,24 @@ impl <'a>hil::uart::Client<'a> for TestClient<'a> {
     }
 
     fn rx_request_complete(&self, returned_request: &'a mut hil::uart::RxRequest<'a>) {
-
-
-        self.state.take().map( |mut state| {
+        self.state.take().map(|mut state| {
             match state {
                 State::Echo => {
                     // if there is a byte of data
                     if let Some(data) = returned_request.pop() {
                         //copy it into the tx_request to echo
-                        self.tx_request.take().map( |tx| {
+                        self.tx_request.take().map(|tx| {
                             tx.push(data);
                             if data == b'\r' {
                                 debug!("ENTER");
                                 tx.push(b'\n')
                             }
-                           self.tx_request.put(Some(tx));
+                            self.tx_request.put(Some(tx));
                         });
-                   }
-                },
+                    }
+                }
                 // no behavior in other states
-                _ => {},
+                _ => {}
             }
             self.state.put(state);
         });
@@ -133,7 +140,4 @@ impl <'a>hil::uart::Client<'a> for TestClient<'a> {
         returned_request.reset();
         self.rx_request.put(Some(returned_request));
     }
-
-
 }
-

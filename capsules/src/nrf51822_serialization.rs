@@ -119,46 +119,46 @@ pub static mut READ_BUF: [u8; 600] = [0; 600];
 //         }
 //     }
 
-    // Register a callback to the Nrf51822Serialization driver.
-    //
-    // The callback will be called when a TX finishes and when
-    // RX data is available.
-    //
-    // ### `subscribe_num`
-    //
-    // - `0`: Set callback.
-    // fn subscribe(
-    //     &self,
-    //     subscribe_type: usize,
-    //     callback: Option<Callback>,
-    //     _app_id: AppId,
-    // ) -> ReturnCode {
-    //     match subscribe_type {
-    //         // Add a callback
-    //         0 => {
-    //             // work-around because `MapCell` don't provide `map_or_else`
-    //             if self.app.map(|app| app.callback = callback).is_none() == true {
-    //                 return ReturnCode::FAIL;
-    //             }
+// Register a callback to the Nrf51822Serialization driver.
+//
+// The callback will be called when a TX finishes and when
+// RX data is available.
+//
+// ### `subscribe_num`
+//
+// - `0`: Set callback.
+// fn subscribe(
+//     &self,
+//     subscribe_type: usize,
+//     callback: Option<Callback>,
+//     _app_id: AppId,
+// ) -> ReturnCode {
+//     match subscribe_type {
+//         // Add a callback
+//         0 => {
+//             // work-around because `MapCell` don't provide `map_or_else`
+//             if self.app.map(|app| app.callback = callback).is_none() == true {
+//                 return ReturnCode::FAIL;
+//             }
 
-    //             // Start the receive now that we have a callback.
-    //             self.rx_buffer.take().map_or(ReturnCode::FAIL, |buffer| {
-    //                 let len = buffer.len();
-    //                 self.uart.receive_automatic(buffer, len, 250);
-    //                 ReturnCode::SUCCESS
-    //             })
-    //         }
-    //         _ => ReturnCode::ENOSUPPORT,
-    //     }
-    // }
+//             // Start the receive now that we have a callback.
+//             self.rx_buffer.take().map_or(ReturnCode::FAIL, |buffer| {
+//                 let len = buffer.len();
+//                 self.uart.receive_automatic(buffer, len, 250);
+//                 ReturnCode::SUCCESS
+//             })
+//         }
+//         _ => ReturnCode::ENOSUPPORT,
+//     }
+// }
 
-    // Issue a command to the Nrf51822Serialization driver.
-    //
-    // ### `command_type`
-    //
-    // - `0`: Driver check.
-    // - `1`: Send the allowed buffer to the nRF.
-    // - `2`: Reset the nRF51822.
+// Issue a command to the Nrf51822Serialization driver.
+//
+// ### `command_type`
+//
+// - `0`: Driver check.
+// - `1`: Send the allowed buffer to the nRF.
+// - `2`: Reset the nRF51822.
 //     fn command(&self, command_type: usize, _: usize, _: usize, _: AppId) -> ReturnCode {
 //         match command_type {
 //             0 /* check if present */ => ReturnCode::SUCCESS,

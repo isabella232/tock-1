@@ -2,16 +2,16 @@
 #![no_main]
 #![feature(lang_items, asm)]
 #![feature(const_slice_len)]
-#![feature(type_ascription)] 
+#![feature(type_ascription)]
 
 extern crate capsules;
 extern crate cc26x2;
 extern crate cortexm4;
 extern crate enum_primitive;
 
+use kernel::common::cells::TakeCell;
 #[allow(unused_imports)]
 use kernel::{create_capability, debug, debug_gpio, static_init};
-use kernel::common::cells::TakeCell;
 
 use cc26x2::aon;
 use cc26x2::prcm;
@@ -21,7 +21,6 @@ use kernel::capabilities;
 use kernel::hil;
 
 use core::mem;
-
 
 use capsules::uart;
 
@@ -156,9 +155,7 @@ pub unsafe fn reset_handler() {
     // setup static debug writer
     let debug_writer = static_init!(
         kernel::debug::DebugWriter,
-        kernel::debug::DebugWriter::new(
-            &mut kernel::debug::BUF,
-        )
+        kernel::debug::DebugWriter::new(&mut kernel::debug::BUF,)
     );
     kernel::debug::set_debug_writer(debug_writer);
     // setup uart client for debug on stack
@@ -167,7 +164,6 @@ pub unsafe fn reset_handler() {
 
     debug!("hello??");
 
-
     // UART
     let uart0_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_0);
     let uart1_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_1);
@@ -175,10 +171,12 @@ pub unsafe fn reset_handler() {
     let board_uarts = [
         &uart::Uart::new(
             &uart0_hil,
-            board_kernel.create_grant(&memory_allocation_capability)),
+            board_kernel.create_grant(&memory_allocation_capability),
+        ),
         &uart::Uart::new(
             &uart1_hil,
-            board_kernel.create_grant(&memory_allocation_capability)),
+            board_kernel.create_grant(&memory_allocation_capability),
+        ),
     ];
 
     let uart_driver = uart::UartDriver::new(&board_uarts);
@@ -189,15 +187,11 @@ pub unsafe fn reset_handler() {
 
     // Set up debug client
 
-
-
     let mut launchxl = LaunchXlPlatform {
         uart_driver: &uart_driver,
         debug_client: &debug_client,
         test_client: &test_client,
     };
-
-
 
     launchxl.handle_irq(NVIC_IRQ::UART0 as usize);
 
@@ -228,7 +222,6 @@ pub struct LaunchXlPlatform<'a> {
 }
 
 impl<'a> kernel::Platform for LaunchXlPlatform<'a> {
-
     fn with_driver<F, R>(&self, driver_num: usize, f: F) -> R
     where
         F: FnOnce(Option<&kernel::Driver>) -> R,
@@ -239,8 +232,7 @@ impl<'a> kernel::Platform for LaunchXlPlatform<'a> {
         }
     }
 
-    fn handle_irq(&mut self, irq_num: usize)
-    {
+    fn handle_irq(&mut self, irq_num: usize) {
         let irq = NVIC_IRQ::from_u32(irq_num as u32)
             .expect("Pending IRQ flag not enumerated in NVIQ_IRQ");
         match irq {

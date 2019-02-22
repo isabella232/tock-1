@@ -224,11 +224,8 @@ pub unsafe fn set_debug_writer(debug_writer: &'static mut DebugWriter) {
     DEBUG_WRITER = Some(debug_writer);
 }
 
-
 impl DebugWriter {
-    pub fn new(
-        buffer: &'static mut [u8],
-    ) -> DebugWriter {
+    pub fn new(buffer: &'static mut [u8]) -> DebugWriter {
         DebugWriter {
             buffer: TakeCell::new(buffer),
             head: Cell::new(0),       // first valid index in output_buffer
@@ -261,15 +258,15 @@ impl DebugWriter {
 
     /// Write as many of the bytes from the internal_buffer to the output
     /// mechanism as possible.
-    pub fn publish_str<'a>(&self, output: &'a mut hil::uart::TxRequest<'a>) -> &'a mut hil::uart::TxRequest<'a> {
-        
+    pub fn publish_str<'a>(
+        &self,
+        output: &'a mut hil::uart::TxRequest<'a>,
+    ) -> &'a mut hil::uart::TxRequest<'a> {
         // Can only publish if we have the output_buffer. If we don't that is
         // fine, we will do it when the transmit done callback happens.
         let mut head = self.head.get();
         let mut tail = self.tail.get();
-        let len = self
-            .buffer
-            .map_or(0, |buffer| buffer.len());
+        let len = self.buffer.map_or(0, |buffer| buffer.len());
 
         // Want to write everything from tail inclusive to head
         // exclusive
@@ -293,8 +290,6 @@ impl DebugWriter {
         // buffer.
         let tx_len = cmp::min(end - start, output.room_available());
         let real_end = start + tx_len;
-
-
 
         self.buffer.map(|buffer| {
             //panic!("writing {} characters", real_end - start);
@@ -345,80 +340,79 @@ impl Write for DebugWriter {
         //  -> head == tail implies buffer is empty
         //  -> there's no "full/empty" bit, so the effective buffer size is -1
 
-        
-            let mut head = self.head.get();
-            let tail = self.tail.get();
-            let len = self.buffer.map_or(0, |buffer| buffer.len());
+        let mut head = self.head.get();
+        let tail = self.tail.get();
+        let len = self.buffer.map_or(0, |buffer| buffer.len());
 
-            let remaining_bytes = if head >= tail {
-                let bytes = s.as_bytes();
+        let remaining_bytes = if head >= tail {
+            let bytes = s.as_bytes();
 
-                // First write from current head to end of buffer in memory
-                let mut backside_len = len - head;
-                if tail == 0 {
-                    // Handle special case where tail has just wrapped to 0,
-                    // so we can't let the head point to 0 as well
-                    backside_len -= 1;
-                }
-
-                let written = if backside_len != 0 {
-                    let start = head;
-                    let end = head + backside_len;
-                    self.write_buffer(start, end, bytes);
-                    min(end - start, bytes.len())
-                } else {
-                    0
-                };
-
-                // Advance and possibly wrap the head
-                head += written;
-                if head == len {
-                    head = 0;
-                }
-                &bytes[written..]
-            } else {
-                s.as_bytes()
-            };
-
-            // At this point, either
-            //  o head < tail
-            //  o head = len-1, tail = 0 (buffer full edge case)
-            //  o there are no more bytes to write
-
-            if remaining_bytes.len() != 0 {
-                // Now write from the head up to tail
-                let start = head;
-                let end = tail;
-                if (tail == 0) && (head == len - 1) {
-                    let active = self.active_len.get();
-                    panic!(
-                        "Debug buffer full. Head {} tail {} len {} active {} remaining {}",
-                        head,
-                        tail,
-                        len,
-                        active,
-                        remaining_bytes.len()
-                    );
-                }
-                if remaining_bytes.len() > end - start {
-                    let active = self.active_len.get();
-                    panic!(
-                        "Debug buffer out of room. Head {} tail {} len {} active {} remaining {}",
-                        head,
-                        tail,
-                        len,
-                        active,
-                        remaining_bytes.len()
-                    );
-                }
-                self.write_buffer(start, end, remaining_bytes);
-                let written = min(end - start, remaining_bytes.len());
-
-                // head cannot wrap here
-                head += written;
+            // First write from current head to end of buffer in memory
+            let mut backside_len = len - head;
+            if tail == 0 {
+                // Handle special case where tail has just wrapped to 0,
+                // so we can't let the head point to 0 as well
+                backside_len -= 1;
             }
 
-            self.head.set(head);
+            let written = if backside_len != 0 {
+                let start = head;
+                let end = head + backside_len;
+                self.write_buffer(start, end, bytes);
+                min(end - start, bytes.len())
+            } else {
+                0
+            };
+
+            // Advance and possibly wrap the head
+            head += written;
+            if head == len {
+                head = 0;
+            }
+            &bytes[written..]
+        } else {
+            s.as_bytes()
+        };
+
+        // At this point, either
+        //  o head < tail
+        //  o head = len-1, tail = 0 (buffer full edge case)
+        //  o there are no more bytes to write
+
+        if remaining_bytes.len() != 0 {
+            // Now write from the head up to tail
+            let start = head;
+            let end = tail;
+            if (tail == 0) && (head == len - 1) {
+                let active = self.active_len.get();
+                panic!(
+                    "Debug buffer full. Head {} tail {} len {} active {} remaining {}",
+                    head,
+                    tail,
+                    len,
+                    active,
+                    remaining_bytes.len()
+                );
+            }
+            if remaining_bytes.len() > end - start {
+                let active = self.active_len.get();
+                panic!(
+                    "Debug buffer out of room. Head {} tail {} len {} active {} remaining {}",
+                    head,
+                    tail,
+                    len,
+                    active,
+                    remaining_bytes.len()
+                );
+            }
+            self.write_buffer(start, end, remaining_bytes);
+            let written = min(end - start, remaining_bytes.len());
+
+            // head cannot wrap here
+            head += written;
+        }
+
+        self.head.set(head);
 
         Ok(())
     }
@@ -526,29 +520,28 @@ pub unsafe fn flush<W: Write>(writer: &mut W) {
     }
 }
 
-
 pub struct DebugClient<'a> {
     tx_request_buffer: TakeCell<'a, [u8]>,
     tx_request: TakeCell<'a, hil::uart::TxRequest<'a>>,
 }
 
 impl<'a> DebugClient<'a> {
-
     pub fn space() -> ([u8; 1024], hil::uart::TxRequest<'a>) {
-        ( [0; 1024], hil::uart::TxRequest::new())
+        ([0; 1024], hil::uart::TxRequest::new())
     }
 
-    pub fn new_with_default_space(space: &'a mut ([u8; 1024], hil::uart::TxRequest<'a>))
-        -> DebugClient<'a>
-    {
+    pub fn new_with_default_space(
+        space: &'a mut ([u8; 1024], hil::uart::TxRequest<'a>),
+    ) -> DebugClient<'a> {
         let (tx_request_buffer, tx_request) = space;
         Self::new(tx_request_buffer, tx_request)
     }
 
     pub fn with_buffer<F>(&self, f: F)
-    where F: Fn(&'a mut hil::uart::TxRequest<'a>) -> &'a mut hil::uart::TxRequest<'a>
+    where
+        F: Fn(&'a mut hil::uart::TxRequest<'a>) -> &'a mut hil::uart::TxRequest<'a>,
     {
-        self.tx_request.take().map( |mut tx| {
+        self.tx_request.take().map(|mut tx| {
             tx = f(tx);
             self.tx_request.put(Some(tx));
         });
@@ -556,9 +549,8 @@ impl<'a> DebugClient<'a> {
 
     pub fn new(
         tx_request_buffer: &'a mut [u8],
-        tx_request: &'a mut hil::uart::TxRequest<'a>, 
-        )-> DebugClient<'a> {
-       
+        tx_request: &'a mut hil::uart::TxRequest<'a>,
+    ) -> DebugClient<'a> {
         tx_request.set_with_mut_ref(tx_request_buffer);
 
         DebugClient {
@@ -568,13 +560,12 @@ impl<'a> DebugClient<'a> {
     }
 }
 
-impl <'a>hil::uart::Client<'a> for DebugClient<'a> {
-
-    fn has_tx_request(&self)-> bool {
+impl<'a> hil::uart::Client<'a> for DebugClient<'a> {
+    fn has_tx_request(&self) -> bool {
         let mut ret = false;
-        self.tx_request.take().map( |tx| { 
-          ret = tx.has_some();
-          self.tx_request.put(Some(tx));
+        self.tx_request.take().map(|tx| {
+            ret = tx.has_some();
+            self.tx_request.put(Some(tx));
         });
         ret
     }
@@ -588,8 +579,5 @@ impl <'a>hil::uart::Client<'a> for DebugClient<'a> {
         self.tx_request.put(Some(returned_request));
     }
 
-
     fn rx_request_complete(&self, returned_request: &'a mut hil::uart::RxRequest<'a>) {}
-
-
 }

@@ -1,12 +1,11 @@
 //! Hardware interface layer (HIL) traits for UART communication.
 //!
 //!
-use crate::returncode::ReturnCode;
 use crate::ikc;
+use crate::returncode::ReturnCode;
 
-use crate::ikc::DriverState::{IDLE, BUSY, REQUEST_COMPLETE};
-use crate::ikc::Request::{TX, RX};
-
+use crate::ikc::DriverState::{BUSY, IDLE, REQUEST_COMPLETE};
+use crate::ikc::Request::{RX, TX};
 
 pub type TxRequest<'a> = ikc::TxRequest<'a, u8>;
 pub type RxRequest<'a> = ikc::RxRequest<'a, u8>;
@@ -68,21 +67,21 @@ pub enum Error {
 
 pub trait Uart<'a>: Configure + Transmit<'a> + Receive<'a> {}
 pub trait UartData<'a>: Transmit<'a> + Receive<'a> {}
-pub trait UartPeripheral<'a>: Configure + Transmit<'a> + Receive<'a> + InterruptHandler<'a> {}
+pub trait UartPeripheral<'a>:
+    Configure + Transmit<'a> + Receive<'a> + InterruptHandler<'a>
+{
+}
 
 pub trait UartAdvanced<'a>: Configure + Transmit<'a> + ReceiveAdvanced<'a> {}
 
 pub struct PeripheralState<'a> {
     pub tx: State<'a>,
-    pub rx: State<'a>, 
+    pub rx: State<'a>,
 }
 
-impl<'a> PeripheralState<'a>{
+impl<'a> PeripheralState<'a> {
     pub fn new() -> PeripheralState<'a> {
-        PeripheralState {
-            tx: IDLE,
-            rx: IDLE,
-        }
+        PeripheralState { tx: IDLE, rx: IDLE }
     }
 }
 
@@ -128,7 +127,7 @@ pub trait Transmit<'a> {
     /// `transmit_buffer` or `transmit_word` operation will return EBUSY.
     fn transmit_buffer(
         &self,
-        req: &'a mut TxRequest<'a>
+        req: &'a mut TxRequest<'a>,
     ) -> (ReturnCode, Option<&'a mut TxRequest<'a>>);
 
     /// Transmit a single word of data asynchronously. The word length is
@@ -194,7 +193,7 @@ pub trait Receive<'a> {
     /// operation will return EBUSY.
     fn receive_buffer(
         &self,
-        req: &'a mut RxRequest<'a>
+        req: &'a mut RxRequest<'a>,
     ) -> (ReturnCode, Option<&'a mut RxRequest<'a>>);
 
     /// Receive a single word of data. The word length is determined
@@ -256,10 +255,8 @@ pub trait ReceiveAdvanced<'a>: Receive<'a> {
     ) -> (ReturnCode, Option<&'a mut [u8]>);
 }
 
-
 pub trait Client<'a> {
-
-    fn has_tx_request(&self) -> bool{
+    fn has_tx_request(&self) -> bool {
         false
     }
 
@@ -273,7 +270,7 @@ pub trait Client<'a> {
         false
     }
 
-    fn get_rx_request(&self) -> Option<&mut RxRequest<'a>>{
+    fn get_rx_request(&self) -> Option<&mut RxRequest<'a>> {
         None
     }
     fn rx_request_complete(&self, returned_request: &'a mut RxRequest<'a>);

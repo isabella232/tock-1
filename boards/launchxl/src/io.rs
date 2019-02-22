@@ -14,7 +14,6 @@ struct Writer {
 static mut WRITER: Writer = Writer { initialized: false };
 
 impl Write for Writer {
-
     fn write_str(&mut self, s: &str) -> ::core::fmt::Result {
         let uart = &mut cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_0);
         if !self.initialized {

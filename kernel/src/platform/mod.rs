@@ -8,7 +8,6 @@ crate mod systick;
 
 /// Interface for individual boards.
 pub trait Platform {
-
     fn handle_irq(&mut self, irq_num: usize);
 
     /// Platform-specific mapping of syscall numbers to objects that implement
@@ -16,8 +15,6 @@ pub trait Platform {
     fn with_driver<F, R>(&self, driver_num: usize, f: F) -> R
     where
         F: FnOnce(Option<&Driver>) -> R;
-
-
 }
 
 /// Interface for individual MCUs.
