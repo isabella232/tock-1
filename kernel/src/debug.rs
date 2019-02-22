@@ -346,46 +346,6 @@ impl DebugWriter {
     }
 }
 
-// impl hil::uart::TransmitClient for DebugWriter {
-//     fn transmitted_buffer(&self, buffer: &'static mut [u8], tx_len: usize, _rcode: ReturnCode) {
-//         // Replace this buffer since we are done with it.
-//         self.output_buffer.replace(buffer);
-
-//         // Mark how many bytes outstanding so we don't overwrite buffer
-//         // in transmit calls.
-//         let goal_length = self.active_len.get();
-//         let remainder = goal_length - tx_len;
-//         self.active_len.set(remainder);
-
-//         let len = self
-//             .internal_buffer
-//             .map_or(0, |internal_buffer| internal_buffer.len());
-//         let head = self.head.get();
-//         let mut tail = self.tail.get();
-
-//         //panic!("Tail: {}, head: {}, tx_len: {}, rcode: {:?}", tail, head, tx_len, _rcode);
-
-//         // Increment the tail with how many bytes were written to the output
-//         // mechanism, and wrap if needed.
-//         tail += tx_len;
-//         if tail > len {
-//             tail = tail - len;
-//         }
-
-//         if head == tail {
-//             // Empty. As an optimization, reset the head and tail pointers to 0
-//             // to maximize the buffer length available before fragmentation
-//             self.head.set(0);
-//             self.tail.set(0);
-//         } else {
-//             // Buffer not empty, go around again
-//             self.tail.set(tail);
-//             self.publish_str();
-//         }
-//     }
-//     fn transmitted_word(&self, _rcode: ReturnCode) {}
-// }
-
 /// Pass through functions.
 impl DebugWriterWrapper {
     fn increment_count(&self) {
