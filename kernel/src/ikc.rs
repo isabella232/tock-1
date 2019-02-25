@@ -22,9 +22,8 @@ pub struct TxRequest<'a, T: Copy> {
     pub client_id: usize,
 }
 
-// Stores an ongoing TX or RX Request
 pub struct RxRequest<'a, T: Copy> {
-    buf: RxBuf<'a, T>,
+    pub buf: RxBuf<'a, T>,
     // The total amount of data written in
     pushed: usize,
     // The total amount of data read out
@@ -75,7 +74,12 @@ impl<'a, T: Copy> TxRequest<'a, T> {
         self.popped < self.requested
     }
 
-    pub fn requested_completed(&self) -> bool {
+    pub fn remaining_request(&self) -> usize {
+        self.requested - self.popped
+    }
+
+
+    pub fn request_completed(&self) -> bool {
         self.popped >= self.requested
     }
 
@@ -195,9 +199,18 @@ impl<'a, T: Copy> RxRequest<'a, T> {
         }
     }
 
-    // Host has pushed enough data to fill the buffer
-    pub fn requested_completed(&self) -> bool {
+    // Host has pushed enough data to fulfill the request
+    pub fn request_completed(&self) -> bool {
         self.pushed >= self.requested
+    }
+
+    // Host has pushed enough data to fill the buffer
+    pub fn items_pushed(&self) -> usize {
+        self.pushed
+    }
+
+    pub fn request_remaining(&self) -> usize {
+        self.requested - self.pushed
     }
 
     pub fn set_requested_len(&mut self, buf: &'a mut [T]) {

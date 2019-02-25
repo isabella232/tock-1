@@ -574,10 +574,10 @@ impl<'a> hil::uart::Client<'a> for DebugClient<'a> {
         self.tx_request.take()
     }
 
-    fn tx_request_complete(&self, returned_request: &'a mut hil::uart::TxRequest<'a>) {
+    fn tx_request_complete(&self, _uart_num: usize, returned_request: &'a mut hil::uart::TxRequest<'a>) {
         returned_request.reset();
         self.tx_request.put(Some(returned_request));
     }
 
-    fn rx_request_complete(&self, returned_request: &'a mut hil::uart::RxRequest<'a>) {}
+    fn rx_request_complete(&self, _uart_num: usize, returned_request: &'a mut hil::uart::RxRequest<'a>) {}
 }

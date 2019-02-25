@@ -168,7 +168,7 @@ pub trait Transmit<'a> {
     ///  - FAIL if the outstanding call to either transmit operation could
     ///    not be synchronously cancelled. A callback will be made on the
     ///    client indicating whether the call was successfully cancelled.
-    fn transmit_abort(&self) -> ReturnCode;
+    fn transmit_abort(&self) -> Option<&'a mut TxRequest<'a>>;
 }
 
 pub trait Receive<'a> {
@@ -221,7 +221,7 @@ pub trait Receive<'a> {
     /// of `ECANCEL`.  If there was a reception outstanding, which is
     /// not cancelled successfully, then `FAIL` will be returned and
     /// there will be a later callback.
-    fn receive_abort(&self) -> ReturnCode;
+    fn receive_abort(&self) -> Option<&'a mut RxRequest<'a>>;
 }
 
 /// Trait that isn't required for basic UART operation, but provides useful
@@ -259,12 +259,12 @@ pub trait Client<'a> {
     fn has_tx_request(&self) -> bool {
         false
     }
-
     fn get_tx_request(&self) -> Option<&mut TxRequest<'a>> {
         None
     }
-
-    fn tx_request_complete(&self, returned_request: &'a mut TxRequest<'a>);
+    // uart_num allows client to identify which uart this tx_request_complete call is originating from 
+    // for the case where it is client of multiple UARTS
+    fn tx_request_complete(&self, uart_num: usize, returned_request: &'a mut TxRequest<'a>) {}
 
     fn has_rx_request(&self) -> bool {
         false
@@ -273,5 +273,7 @@ pub trait Client<'a> {
     fn get_rx_request(&self) -> Option<&mut RxRequest<'a>> {
         None
     }
-    fn rx_request_complete(&self, returned_request: &'a mut RxRequest<'a>);
+    // uart_num allows client to identify which uart this rx_request_complete call is originating from 
+    // for the case where it is client of multiple UARTS
+    fn rx_request_complete(&self, uart_num: usize, returned_request: &'a mut RxRequest<'a>) {}
 }

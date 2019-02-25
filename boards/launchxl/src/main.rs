@@ -155,26 +155,29 @@ pub unsafe fn reset_handler() {
     // setup static debug writer
     let debug_writer = static_init!(
         kernel::debug::DebugWriter,
-        kernel::debug::DebugWriter::new(&mut kernel::debug::BUF,)
+        kernel::debug::DebugWriter::new(&mut kernel::debug::BUF)
     );
     kernel::debug::set_debug_writer(debug_writer);
     // setup uart client for debug on stack
     let mut debug_client_space = debug::DebugClient::space();
     let debug_client = debug::DebugClient::new_with_default_space(&mut debug_client_space);
 
-    debug!("hello??");
-
     // UART
     let uart0_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_0);
+    // for each client for the driver, provide an empty TakeCell
+    let uart0_clients: [TakeCell<hil::uart::RxRequest>; 2] = [TakeCell::empty(), TakeCell::empty()];
+
     let uart1_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_1);
 
     let board_uarts = [
         &uart::Uart::new(
             &uart0_hil,
+            Some(&uart0_clients),
             board_kernel.create_grant(&memory_allocation_capability),
         ),
         &uart::Uart::new(
             &uart1_hil,
+            None,
             board_kernel.create_grant(&memory_allocation_capability),
         ),
     ];
@@ -186,13 +189,13 @@ pub unsafe fn reset_handler() {
     let test_client = uart_test::TestClient::new_with_default_space(&mut test_client_space);
 
     // Set up debug client
-
     let mut launchxl = LaunchXlPlatform {
         uart_driver: &uart_driver,
         debug_client: &debug_client,
         test_client: &test_client,
     };
 
+    // prime the pump with this interaction
     launchxl.handle_irq(NVIC_IRQ::UART0 as usize);
 
     let chip = static_init!(cc26x2::chip::Cc26X2, cc26x2::chip::Cc26X2::new(HFREQ));
@@ -239,9 +242,11 @@ impl<'a> kernel::Platform for LaunchXlPlatform<'a> {
             NVIC_IRQ::GPIO => (),//gpio::PORT.handle_interrupt(),
             NVIC_IRQ::AON_RTC => (),//rtc::RTC.handle_interrupt(),
             NVIC_IRQ::UART0 => {
+                // pass data from static debug writer to the debug uart client
                 unsafe {
                     self.debug_client.with_buffer( |buf| debug::get_debug_writer().publish_str(buf));
                 }
+                
                 let clients = [
                     self.debug_client as &kernel::hil::uart::Client,
                     self.test_client as &kernel::hil::uart::Client

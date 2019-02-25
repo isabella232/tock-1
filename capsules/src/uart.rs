@@ -1,6 +1,7 @@
 use core::cmp;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil;
+use kernel::hil::uart::InterruptHandler;
 use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
 
 /// Syscall driver number.
@@ -9,16 +10,18 @@ pub const DRIVER_NUM: usize = driver::NUM::CONSOLE as usize;
 
 use kernel::ikc::DriverState::{BUSY, IDLE, REQUEST_COMPLETE};
 use kernel::ikc::Request::{RX, TX};
+use kernel::ikc;
 
-pub fn handle_irq(uart_num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::uart::Client<'a>]) {
-    let state = driver.handle_interrupt(0);
+pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::uart::Client<'a>]) {
+
+    let state = driver.uart[num].handle_interrupt();
 
     let mut ready_for_tx = false;
     match state.tx {
         // if request complete, return it to client
         REQUEST_COMPLETE(TX(request)) => {
             let client_id = request.client_id;
-            clients[client_id].tx_request_complete(request);
+            clients[client_id].tx_request_complete(num, request);
             ready_for_tx = true;
         }
         IDLE => {
@@ -27,30 +30,46 @@ pub fn handle_irq(uart_num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::
         _ => {}
     }
 
-    let mut ready_for_rx = false;
+    let mut ready_for_new_rx = false;
     match state.rx {
         // if request complete, return it to client
         REQUEST_COMPLETE(RX(request)) => {
+            // give the transaction to the driver level for muxing out received bytes to other buffers
+            let request = driver.uart[num].mux_completed_tx_to_others(request);
+
+            // return the originally completed rx
             let client_id = request.client_id;
-            clients[client_id].rx_request_complete(request);
-            ready_for_rx = true;
-        }
+            clients[client_id].rx_request_complete(num, request);
+
+            while let Some(next_request) = driver.uart[num].get_other_completed_rx() {
+                let client_id = next_request.client_id;
+                clients[client_id].rx_request_complete(num, next_request);
+            }
+
+            ready_for_new_rx = true;
+        },
         IDLE => {
-            ready_for_rx = true;
+            ready_for_new_rx = true;
         }
         _ => {}
     }
 
+    // // Dispatch new requests only after both TX/RX interrupt have been handled
+    // TX'es are dispatched one by one, so only take it if we are ready for another one
     if ready_for_tx {
-        dispatch_next_tx_request(uart_num, driver, clients);
+        dispatch_next_tx_request(num, driver, clients);
     }
-    if ready_for_rx {
-        dispatch_next_rx_request(uart_num, driver, clients);
+    // Each client can have one (and only one) pending RX concurrently with other clients
+    // so take any new ones that have occured this go-around
+    take_new_tx_requests(num, driver, clients);
+    // If a request completed, dispatch the shortest pending request (if there is one)
+    if ready_for_new_rx {
+        driver.uart[num].dispatch_shortest_tx_request();
     }
 }
 
-pub fn dispatch_next_tx_request<'a>(
-    uart_num: usize,
+fn dispatch_next_tx_request<'a>(
+    num: usize,
     driver: &UartDriver<'a>,
     clients: &[&'a hil::uart::Client<'a>],
 ) {
@@ -59,15 +78,15 @@ pub fn dispatch_next_tx_request<'a>(
         if client.has_tx_request() {
             if let Some(tx) = client.get_tx_request() {
                 tx.client_id = index;
-                driver.handle_tx_request(0, tx);
+                driver.handle_tx_request(num, tx);
                 return;
             }
         }
     }
 }
 
-pub fn dispatch_next_rx_request<'a>(
-    uart_num: usize,
+fn take_new_tx_requests<'a>(
+    num: usize,
     driver: &UartDriver<'a>,
     clients: &[&'a hil::uart::Client<'a>],
 ) {
@@ -76,7 +95,7 @@ pub fn dispatch_next_rx_request<'a>(
         if client.has_rx_request() {
             if let Some(rx) = client.get_rx_request() {
                 rx.client_id = index;
-                driver.handle_rx_request(0, rx);
+                driver.uart[num].stash_rx_request(rx);
             }
         }
     }
@@ -96,11 +115,12 @@ pub struct App {
 }
 
 pub struct Uart<'a> {
+    // uart peripheral that this item is responsible for
     uart: &'a hil::uart::UartPeripheral<'a>,
+    // slots of each intrakernel client
+    rx_requests: Option<&'a [TakeCell<'a, hil::uart::RxRequest<'a>>]>,
+    // app grant providing space fo app clients
     apps: Grant<App>,
-    state: hil::uart::PeripheralState<'a>,
-    current_tx_client: Option<usize>,
-    current_rx_client: Option<usize>,
 }
 
 pub struct UartDriver<'a> {
@@ -115,14 +135,6 @@ impl<'a> UartDriver<'a> {
     pub fn handle_tx_request(&self, uart_num: usize, tx: &'a mut hil::uart::TxRequest<'a>) {
         self.uart[uart_num].uart.transmit_buffer(tx);
     }
-
-    pub fn handle_rx_request(&self, uart_num: usize, rx: &'a mut hil::uart::RxRequest<'a>) {
-        self.uart[uart_num].uart.receive_buffer(rx);
-    }
-
-    pub fn handle_interrupt(&self, uart_num: usize) -> hil::uart::PeripheralState<'a> {
-        self.uart[uart_num].uart.handle_interrupt()
-    }
 }
 
 static DEFAULT_PARAMS: hil::uart::Parameters = hil::uart::Parameters {
@@ -133,22 +145,126 @@ static DEFAULT_PARAMS: hil::uart::Parameters = hil::uart::Parameters {
     hw_flow_control: false,
 };
 
-impl<'a, 'b> Uart<'a> {
-    pub fn new(uart: &'a hil::uart::UartPeripheral<'a>, grant: Grant<App>) -> Uart<'a> {
+impl<'a> Uart<'a> {
+    pub fn new(
+        uart: &'a hil::uart::UartPeripheral<'a>,
+        rx_requests: Option<&'a [TakeCell<'a, hil::uart::RxRequest<'a>>]>,
+        grant: Grant<App>) -> Uart<'a> {
+
         uart.configure(DEFAULT_PARAMS);
 
         Uart {
-            uart: uart,
+            uart,
+            rx_requests: rx_requests,
             apps: grant,
-            state: hil::uart::PeripheralState::new(),
-            current_tx_client: Some(0),
-            current_rx_client: None,
         }
     }
 
-    // used just to trigger this thing (delete later)
-    pub fn write_buffer(&self, tx: &'a mut hil::uart::TxRequest<'a>) {
-        self.uart.transmit_buffer(tx);
+    fn handle_interrupt(&self) -> hil::uart::PeripheralState<'a>{
+        self.uart.handle_interrupt()
+    }
+
+    fn stash_rx_request(&self, rx: &'a mut hil::uart::RxRequest<'a>){
+        let index = rx.client_id;
+        if let Some(requests_stash) = self.rx_requests {
+            if let Some(existing_request) = requests_stash[index].take() {
+                panic!("Client #{} should not be making new request when request is already pending!", index)
+            }
+            else {
+                requests_stash[index].put(Some(rx));
+            }
+        }
+        else {
+            panic!("UART has not been provisioned with space to store any client requests!")
+        }
+    }
+
+    fn mux_completed_tx_to_others(&self, completed_rx: &'a mut hil::uart::RxRequest<'a>) -> &'a mut hil::uart::RxRequest<'a> {
+
+        let mut other_request_completed = false;
+
+        if let Some(requests_stash) = self.rx_requests {
+            match &completed_rx.buf {
+                ikc::RxBuf::MUT(buf) => {
+                    // for every item in the compeleted_rx
+                    for i in 0..completed_rx.items_pushed(){
+                        let item = buf[i];
+
+                        // copy it into any existing requests in the requests_stash
+                        for j in 0..requests_stash.len() {
+                            if let Some(request) = requests_stash[j].take() {
+                                if request.has_room(){
+                                    request.push(item);
+                                }
+                                requests_stash[j].put(Some(request));
+                            }
+                        }
+                    }
+                },
+                _ => panic!("A null buffer has become a completed request? It should have never been dispatched in the first place! Shame on console/uart.rs"),
+            }
+        } 
+        else {
+            panic!("UART has not been provisioned with space to store any client requests!")
+        }
+        completed_rx
+    }
+
+    fn get_other_completed_rx(&self) -> Option<&'a mut hil::uart::RxRequest<'a>> {
+        if let Some(requests_stash) = self.rx_requests {
+            for i in 0..requests_stash.len() {
+                if let Some(request) = requests_stash[i].take() {
+                    if request.request_completed(){
+                        return Some(request)
+                    }
+                    else{
+                        requests_stash[i].put(Some(request));
+                    }
+                }
+            }
+        }
+        // no more completed rx
+        None
+    }
+
+    fn dispatch_shortest_tx_request(&self) {
+        if let Some(requests_stash) = self.rx_requests {
+
+            let mut min: Option<usize> = None;
+            let mut index: usize = 0;
+
+            for i in 0..requests_stash.len() {
+                if let Some(request) = requests_stash[i].take() {
+
+                    let request_remaining = request.request_remaining();
+
+                    // if there is a minimum already, compare to see if this is shorter
+                    if let Some(mut min) = min {
+                        if request_remaining <  min {
+                            min = request_remaining;
+                            index  = i;
+                        }
+                    }
+                    // otherwise, this is the min so far
+                    else{
+                        min = Some(request_remaining);
+                        index  = i;
+                    }
+                    requests_stash[index].put(Some(request));
+                }
+            }
+
+            // if there was a request found,dispatch it
+            if let Some(_min) = min {
+                if let Some(request) = requests_stash[index].take() {
+                    self.uart.receive_buffer(request);
+                }
+            }
+
+        }
+        else {
+            panic!("UART has not been provisioned with space to store any client requests!")
+        }
     }
 
     /// Internal helper function for setting up a new send transaction
