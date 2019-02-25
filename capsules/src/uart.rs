@@ -41,6 +41,7 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::uart:
             let client_id = request.client_id;
             clients[client_id].rx_request_complete(num, request);
 
+            // if the muxing out completed any other rx'es, return them as well
             while let Some(next_request) = driver.uart[num].get_other_completed_rx() {
                 let client_id = next_request.client_id;
                 clients[client_id].rx_request_complete(num, next_request);
@@ -54,7 +55,7 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::uart:
         _ => {}
     }
 
-    // // Dispatch new requests only after both TX/RX interrupt have been handled
+    // // Dispatch new requests only after both TX/RX completed have been handled
     // TX'es are dispatched one by one, so only take it if we are ready for another one
     if ready_for_tx {
         dispatch_next_tx_request(num, driver, clients);
