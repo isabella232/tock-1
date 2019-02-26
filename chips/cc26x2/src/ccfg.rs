@@ -1,7 +1,7 @@
-use kernel::common::registers::{ReadOnly, ReadWrite};
+use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 
-use memory_map::CCFG_BASE;
+use crate::memory_map::CCFG_BASE;
 
 pub const OFFSET: usize = 0x1FA8;
 

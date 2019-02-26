@@ -104,11 +104,11 @@
 // A00h FRZSEL0 Output Selection for FRZ Subscriber Section 5.7.1.2.99
 // F00h SWEV Set or Clear Software Events Section 5.7.1.2.100
 
-use kernel::common::registers::ReadWrite;
+use kernel::common::registers::{register_bitfields, ReadWrite};
 use kernel::common::StaticRef;
 
-use event;
-use memory_map::EVENT_BASE;
+use crate::event;
+use crate::memory_map::EVENT_BASE;
 
 pub const REG: StaticRef<Register> =
     unsafe { StaticRef::new((EVENT_BASE + 0x200) as *const Register) };

@@ -1,10 +1,11 @@
 use super::Pinmap;
 use enum_primitive::cast::FromPrimitive;
+use enum_primitive::enum_from_primitive;
 
 #[allow(dead_code)]
 pub const CHIP_ID: u32 = 0x20828000;
 
-enum_from_primitive!{
+enum_from_primitive! {
 pub enum PIN_FN {
     UART0_RX = 2,
     UART0_TX = 3,

@@ -58,8 +58,10 @@ impl App {
                         let (result, rbuf) = virtual_radio.radio.transmit(ktx, app_data_len);
                         rbuf.map(|r| virtual_radio.kernel_tx.replace(r));
                         result
-                    }).unwrap_or(ReturnCode::FAIL)
-            }).unwrap_or(ReturnCode::FAIL)
+                    })
+                    .unwrap_or(ReturnCode::FAIL)
+            })
+            .unwrap_or(ReturnCode::FAIL)
     }
 }
 

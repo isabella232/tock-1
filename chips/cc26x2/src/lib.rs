@@ -1,4 +1,4 @@
-#![feature(const_fn, untagged_unions, used, asm, naked_functions)]
+#![feature(const_fn, untagged_unions, asm, naked_functions)]
 #![no_std]
 #![crate_name = "cc26x2"]
 #![crate_type = "rlib"]
@@ -40,4 +40,5 @@ pub mod rtc;
 pub mod setup;
 pub mod trng;
 pub mod uart;
-pub use crt1::init;
+
+pub use crate::crt1::init;

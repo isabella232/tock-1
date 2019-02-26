@@ -1,7 +1,7 @@
-use kernel::common::registers::{ReadOnly, ReadWrite};
+use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 
-use memory_map::AUX_ANAIF_BASE;
+use crate::memory_map::AUX_ANAIF_BASE;
 
 pub const REG: StaticRef<Registers> = unsafe { StaticRef::new(AUX_ANAIF_BASE as *const Registers) };
 
