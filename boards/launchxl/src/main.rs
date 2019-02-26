@@ -279,6 +279,7 @@ pub unsafe fn reset_handler() {
     }
 
     // UART
+    cc26x2::uart::UART0.initialize();
 
     // Create a shared UART channel for the uart and for kernel debug.
     let uart0_mux = static_init!(
@@ -289,6 +290,7 @@ pub unsafe fn reset_handler() {
             115200
         )
     );
+    uart0_mux.initialize();
     hil::uart::Receive::set_receive_client(&cc26x2::uart::UART0, uart0_mux);
     hil::uart::Transmit::set_transmit_client(&cc26x2::uart::UART0, uart0_mux);
 
@@ -317,8 +319,6 @@ pub unsafe fn reset_handler() {
     kernel::hil::uart::Transmit::set_transmit_client(uart0_device, &DRIVER_UART0);
     kernel::hil::uart::Receive::set_receive_client(uart0_device, &DRIVER_UART0);
 
-    cc26x2::uart::UART0.initialize();
-
     // the debug uart should be initialized by hand
     cc26x2::uart::UART0.configure(hil::uart::Parameters {
         baud_rate: 115200,
@@ -328,6 +328,7 @@ pub unsafe fn reset_handler() {
         hw_flow_control: false,
     });
 
+    cc26x2::uart::UART1.initialize();
     // Create a UART channel for the additional UART
     let uart1_mux = static_init!(
         MuxUart<'static>,
@@ -337,7 +338,7 @@ pub unsafe fn reset_handler() {
             115200
         )
     );
-
+    uart1_mux.initialize();
     hil::uart::Receive::set_receive_client(&cc26x2::uart::UART1, uart1_mux);
     hil::uart::Transmit::set_transmit_client(&cc26x2::uart::UART1, uart1_mux);
 
@@ -345,10 +346,8 @@ pub unsafe fn reset_handler() {
     let uart1_device = static_init!(UartDevice, UartDevice::new(uart1_mux, true));
     uart1_device.setup();
 
-    kernel::hil::uart::Transmit::set_transmit_client(uart0_device, &DRIVER_UART1);
-    kernel::hil::uart::Receive::set_receive_client(uart0_device, &DRIVER_UART1);
-
-    cc26x2::uart::UART1.initialize();
+    kernel::hil::uart::Transmit::set_transmit_client(uart1_device, &DRIVER_UART1);
+    kernel::hil::uart::Receive::set_receive_client(uart1_device, &DRIVER_UART1);
 
     // the debug uart should be initialized by hand
     cc26x2::uart::UART1.configure(hil::uart::Parameters {
@@ -382,6 +381,7 @@ pub unsafe fn reset_handler() {
         &mut capsules::uart::READ_BUF0,
         uart,
     );
+
     DRIVER_UART1.initialize(
         uart1_device,
         &mut capsules::uart::WRITE_BUF1,

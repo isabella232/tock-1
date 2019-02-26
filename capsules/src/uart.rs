@@ -438,90 +438,11 @@ impl<'a, U: 'static + hil::uart::UartData<'a>> Driver for UartDriver<'a, U> {
     }
 }
 
-/*
-impl<U: hil::uart::UART> hil::uart::Client for Uart<'a, U> {
-    fn transmit_complete(&self, buffer: &'static mut [u8], error: hil::uart::Error) {
-        if let Some(parent) = self.parent {
-            parent.transmit_complete(self.index, buffer, error);
-        }
-    }
-
-    fn receive_complete(&self, buffer: &'static mut [u8], rx_len: usize, error: hil::uart::Error) {
-        if let Some(parent) = self.parent {
-            parent.receive_complete(self.index, buffer, rx_len, error);
-        }
-    }
-}
-*/
-//impl<'a, U: 'static + hil::uart::UartData<'a>> hil::uart::Client for Uart<'a, U> {}
-
 impl<'a, U: 'static + hil::uart::UartData<'a>> hil::uart::TransmitClient for Uart<'a, U> {
     fn transmitted_buffer(&self, buffer: &'static mut [u8], _tx_len: usize, _rcode: ReturnCode) {
         if let Some(parent) = self.parent {
             parent.transmit_complete(self.index, buffer, hil::uart::Error::None);
         }
-        /*
-        // Either print more from the AppSlice or send a callback to the
-        // application.
-        self.tx_buffer.replace(buffer);
-        self.tx_in_progress.take().map(|appid| {
-            self.apps.enter(appid, |app, _| {
-                match self.send_continue(appid, app) {
-                    Ok(more_to_send) => {
-                        if !more_to_send {
-                            // Go ahead and signal the application
-                            let written = app.write_len;
-                            app.write_len = 0;
-                            app.write_callback.map(|mut cb| {
-                                cb.schedule(written, 0, 0);
-                            });
-                        }
-                    }
-                    Err(return_code) => {
-                        // XXX This shouldn't ever happen?
-                        app.write_len = 0;
-                        app.write_remaining = 0;
-                        app.pending_write = false;
-                        let r0 = isize::from(return_code) as usize;
-                        app.write_callback.map(|mut cb| {
-                            cb.schedule(r0, 0, 0);
-                        });
-                    }
-                }
-            })
-        });
-
-        // If we are not printing more from the current AppSlice,
-        // see if any other applications have pending messages.
-        if self.tx_in_progress.is_none() {
-            for cntr in self.apps.iter() {
-                let started_tx = cntr.enter(|app, _| {
-                    if app.pending_write {
-                        app.pending_write = false;
-                        match self.send_continue(app.appid(), app) {
-                            Ok(more_to_send) => more_to_send,
-                            Err(return_code) => {
-                                // XXX This shouldn't ever happen?
-                                app.write_len = 0;
-                                app.write_remaining = 0;
-                                app.pending_write = false;
-                                let r0 = isize::from(return_code) as usize;
-                                app.write_callback.map(|mut cb| {
-                                    cb.schedule(r0, 0, 0);
-                                });
-                                false
-                            }
-                        }
-                    } else {
-                        false
-                    }
-                });
-                if started_tx {
-                    break;
-                }
-            }
-        }
-        */
     }
 }
 
@@ -536,42 +457,5 @@ impl<'a, U: hil::uart::UartData<'a>> hil::uart::ReceiveClient for Uart<'a, U> {
         if let Some(parent) = self.parent {
             parent.receive_complete(self.index, buffer, rx_len, error);
         }
-        /*
-        self.rx_in_progress
-            .take()
-            .map(|appid| {
-                self.apps
-                    .enter(appid, |app, _| {
-                        app.read_callback.map(|mut cb| {
-                            // An iterator over the returned buffer yielding only the first `rx_len`
-                            // bytes
-                            let rx_buffer = buffer.iter().take(rx_len);
-                            match error {
-                                uart::Error::None | uart::Error::Aborted => {
-                                    // Receive some bytes, signal error type and return bytes to process buffer
-                                    if let Some(mut app_buffer) = app.read_buffer.take() {
-                                        for (a, b) in app_buffer.iter_mut().zip(rx_buffer) {
-                                            *a = *b;
-                                        }
-                                        cb.schedule(From::from(rcode), rx_len, 0);
-                                    } else {
-                                        // Oops, no app buffer
-                                        cb.schedule(From::from(ReturnCode::EINVAL), 0, 0);
-                                    }
-                                }
-                                _ => {
-                                    // Some UART error occurred
-                                    cb.schedule(From::from(ReturnCode::FAIL), 0, 0);
-                                }
-                            }
-                        });
-                    })
-                    .unwrap_or_default();
-            })
-            .unwrap_or_default();
-
-        // Whatever happens, we want to make sure to replace the rx_buffer for future transactions
-        self.rx_buffer.replace(buffer);
-        */
     }
 }
