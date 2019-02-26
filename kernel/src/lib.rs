@@ -31,6 +31,7 @@ mod mem;
 mod memop;
 mod platform;
 mod process;
+mod pthreads;
 mod returncode;
 mod sched;
 mod tbfheader;
