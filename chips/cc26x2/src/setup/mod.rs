@@ -33,9 +33,11 @@ use crate::aon;
 use crate::aux;
 use crate::ccfg;
 use crate::gpio;
+use crate::memory_map;
 use crate::osc;
 use crate::prcm;
 use crate::rtc;
+use core::ptr;
 use kernel::common::StaticRef;
 
 pub fn perform() {
@@ -110,12 +112,15 @@ pub unsafe extern "C" fn SetupTrimDevice() {
         *((0x40090000i32 + 0x28i32) as (*mut usize)) = (ui32AonSysResetctl | 0x20000u32) as (usize);
         *((0x40090000i32 + 0x28i32) as (*mut usize)) = ui32AonSysResetctl as (usize);
     }
-    /*
+
     while *(((0x40034000i32 + 0x0i32) as (usize) & 0xf0000000usize
-            | 0x2000000usize
-            | ((0x40034000i32 + 0x0i32) as (usize) & 0xfffffusize) << 5i32
-            | (3i32 << 2i32) as (usize)) as (*mut usize)) != 0 {}
-    */
+        | 0x2000000usize
+        | ((0x40034000i32 + 0x0i32) as (usize) & 0xfffffusize) << 5i32
+        | (3i32 << 2i32) as (usize)) as (*mut usize))
+        != 0
+    {}
+
+    /*
     'loop9: loop {
         if *(((0x40034000i32 + 0x0i32) as (usize) & 0xf0000000usize
             | 0x2000000usize
@@ -126,6 +131,7 @@ pub unsafe extern "C" fn SetupTrimDevice() {
             break;
         }
     }
+    */
 }
 
 unsafe extern "C" fn Step_RCOSCHF_CTRIM(mut toCode: u32) {
@@ -178,9 +184,15 @@ unsafe extern "C" fn TrimAfterColdResetWakeupFromShutDown(mut ui32Fcfg1Revision:
     let mut ccfg_ModeConfReg: u32;
 
     // Check in CCFG for alternative DCDC setting
-    if *((0x50003000i32 + 0x1fb0i32) as (*mut usize)) & 0x2usize == 0usize {
-        *((0x40086200i32 + 0x40i32 + 0xbi32 * 2i32) as (*mut u8)) =
-            (0xf0usize | *((0x50003000i32 + 0x1faci32) as (*mut usize)) >> 16i32) as (u8);
+    let mut adi2_mask = memory_map::ADI2_BASE + 0x4d;
+    let mut ccfg_mode_conf = memory_map::CCFG_BASE + 0x1fac;
+    if (ccfg::REG.size_and_dis_flags.get() & 0x2) == 0 {
+        let p_dst = &mut adi2_mask as *mut usize;
+        let p_val = &mut ccfg_mode_conf as *mut usize;
+        let dst = ptr::read(p_dst);
+        let val = ptr::read(p_val);
+
+        ptr::write(p_dst, (val | 0xf0) >> 16 as u8)
     }
 
     // read the MODE_CONF register in CCFG
@@ -189,67 +201,86 @@ unsafe extern "C" fn TrimAfterColdResetWakeupFromShutDown(mut ui32Fcfg1Revision:
     SetupAfterColdResetWakeupFromShutDownCfg1(ccfg_ModeConfReg);
     SetupAfterColdResetWakeupFromShutDownCfg2(ui32Fcfg1Revision, ccfg_ModeConfReg);
 
-    let mut ui32EfuseData: u32;
     let mut orgResetCtl: u32;
+    let mut EfuseData = ptr::read(0x500013f8 as *mut usize) as u32; //p_EfuseData) as u32;
 
     // Get VTRIM_COARSE and VTRIM_DIG from EFUSE shadow register OSC_BIAS_LDO_TRIM
-    ui32EfuseData = *((0x50001000i32 + 0x3f8i32) as (*mut usize)) as (u32);
-    Step_RCOSCHF_CTRIM((ui32EfuseData & 0xffu32) >> 0i32);
+    Step_RCOSCHF_CTRIM((EfuseData & 0xffu32) >> 0i32);
 
     // Write to register SOCLDO_0_1 (addr offset 3) bits[7:4] (VTRIM_COARSE) and
     // bits[3:0] (VTRIM_DIG) in ADI_2_REFSYS. Direct write can be used since
     // all register bit fields are trimmed.
-    *((0x40086000i32 + 0x0i32 + 0x3i32) as (*mut u8)) = ((ui32EfuseData & 0xf00u32) >> 8i32 << 4i32
-        | (ui32EfuseData & 0xf000u32) >> 12i32 << 0i32)
-        as (u8);
+
+    let mut soc_ldo_0_1 = memory_map::ADI2_BASE + 0x3;
+    let p_soc_ldo_1 = &mut soc_ldo_0_1 as *mut usize;
+    ptr::write(
+        p_soc_ldo_1 as *mut u8,
+        ((EfuseData & 0xf00) >> 8 << 4 | (EfuseData & 0xf000) >> 12 << 0) as u8,
+    );
+
     // Write to register CTLSOCREFSYS0 (addr offset 0) bits[4:0] (TRIMIREF) in
     // ADI_2_REFSYS. Avoid using masked write access since bit field spans
     // nibble boundary. Direct write can be used since this is the only defined
     // bit field in this register.
-    *((0x40086000i32 + 0x0i32 + 0x0i32) as (*mut u8)) =
-        ((ui32EfuseData & 0x7c0000u32) >> 18i32 << 0i32) as (u8);
+
+    let mut adi2_dir03 = memory_map::ADI2_BASE;
+    let p_adi2_dir03 = &mut adi2_dir03 as *mut usize;
+    ptr::write(
+        p_adi2_dir03 as *mut u8,
+        ((EfuseData & 0x7c0000u32) >> 18i32) as u8,
+    );
 
     // Write to register CTLSOCREFSYS2 (addr offset 4) bits[7:4] (TRIMMAG) in
     // ADI_3_REFSYS
-    *((0x40086200i32 + 0x60i32 + (0x4i32 << 1i32)) as (*mut u16)) =
-        ((0xf0i32 << 8i32) as (u32) | (ui32EfuseData & 0x7800000u32) >> 23i32 << 4i32) as (u16);
+
+    let mut adi3_refsys = memory_map::ADI3_BASE + 0x60 + (0x4 << 1);
+    let p_adi3_refsys = &mut adi3_refsys as *mut usize;
+    ptr::write(
+        p_adi3_refsys as *mut u16,
+        ((0xf0i32 << 8i32) as (u32) | (EfuseData & 0x7800000u32) >> 23i32 << 4i32) as u16,
+    );
 
     // Get TRIMBOD_EXTMODE or TRIMBOD_INTMODE from EFUSE shadow register in FCFG1
-    ui32EfuseData = *((0x50001000i32 + 0x3fci32) as (*mut usize)) as (u32);
-    orgResetCtl = (*((0x40090000i32 + 0x28i32) as (*mut usize)) & !0x10i32 as (usize)) as (u32);
-    *((0x40090000i32 + 0x28i32) as (*mut usize)) =
-        (orgResetCtl & !(0x20i32 | 0x40i32 | 0x80i32 | 0x100i32) as (u32)) as (usize);
+    EfuseData = ptr::read(0x500013fc as *mut usize) as u32;
 
+    orgResetCtl = ptr::read(0x40090028 as *mut u32) & !0x10;
+    ptr::write(
+        0x40090028 as *mut u32,
+        orgResetCtl & !(0x20i32 | 0x40i32 | 0x80i32 | 0x100i32) as u32,
+    );
     // Wait for xxx_LOSS_EN setting to propagate
     rtc::RTC.sync();
 
     // The VDDS_BOD trim and the VDDR trim is already stepped up to max/HH if "CC1352 boost mode" is requested.
-    // See function SetupAfterColdResetWakeupFromShutDownCfg1() in setup_rom.c for details.
     if ccfg_ModeConfReg & 0x2000000u32 != 0u32 || ccfg_ModeConfReg & 0x1000000u32 == 0u32 {
-        if *((0x40090000i32 + 0x10i32) as (*mut usize)) & 0x2usize != 0 {
+        let aon_pmctl = ptr::read(0x40090010 as *mut u32);
+        if aon_pmctl & 0x2 != 0 {
             // Apply VDDS BOD trim value
             // Write to register CTLSOCREFSYS1 (addr offset 3) bit[7:3] (TRIMBOD)
             // in ADI_3_REFSYS
-            *((0x40086200i32 + 0x60i32 + (0x3i32 << 1i32)) as (*mut u16)) =
-                ((0xf8i32 << 8i32) as (u32) | (ui32EfuseData & 0x7c0u32) >> 6i32 << 3i32) as (u16);
+            ptr::write(
+                0x40086266 as *mut u16,
+                ((0xf8i32 << 8i32) as (u32) | (EfuseData & 0x7c0u32) >> 6i32 << 3i32) as u16,
+            );
         } else {
             // Apply VDDS BOD trim value
             // Write to register CTLSOCREFSYS1 (addr offset 3) bit[7:3] (TRIMBOD)
             // in ADI_3_REFSYS
-            *((0x40086200i32 + 0x60i32 + (0x3i32 << 1i32)) as (*mut u16)) =
-                ((0xf8i32 << 8i32) as (u32) | (ui32EfuseData & 0xf800u32) >> 11i32 << 3i32)
-                    as (u16);
+            ptr::write(
+                0x40086266 as *mut u16,
+                ((0xf8i32 << 8i32) as u32 | (EfuseData & 0xf800u32) >> 11i32 << 3i32) as u16,
+            );
         }
-        SetupStepVddrTrimTo((ui32EfuseData & 0x1f0000u32) >> 16i32);
+        SetupStepVddrTrimTo((EfuseData & 0x1f0000u32) >> 16i32);
     }
 
     // VBG (ANA_TRIM[5:0]=TRIMTEMP --> ADI_3_REFSYS:REFSYSCTL3.TRIM_VBG)
-    Step_VBG((ui32EfuseData << 32i32 - 6i32 - 0i32) as (i32) >> 32i32 - 6i32);
+    Step_VBG((EfuseData << 32i32 - 6i32 - 0i32) as (i32) >> 32i32 - 6i32);
 
     // Wait two more LF edges before restoring xxx_LOSS_EN settings
     rtc::RTC.synclf();
     rtc::RTC.synclf();
-    // aon::AON.reset_ctl_set(orgResetCtl as u32);
+    //aon::AON.reset_ctl_set((orgResetCtl as usize) as u32);
     // Issue replacing unsafe write with aon set call here
     *((0x40090000i32 + 0x28i32) as (*mut usize)) = orgResetCtl as (usize);
 
@@ -285,12 +316,12 @@ unsafe extern "C" fn TrimAfterColdResetWakeupFromShutDown(mut ui32Fcfg1Revision:
 unsafe extern "C" fn TrimAfterColdReset() {}
 
 #[allow(unused_variables, unused_mut)]
-pub fn SetupSignExtendVddrTrimValue(mut ui32VddrTrimVal: u32) -> i32 {
-    let mut i32SignedVddrVal: i32 = ui32VddrTrimVal as (i32);
-    if i32SignedVddrVal > 0x15i32 {
-        i32SignedVddrVal = i32SignedVddrVal - 0x20i32;
+pub fn SetupSignExtendVddrTrimValue(mut VddrTrimVal: u32) -> i32 {
+    let mut SignedVddrVal: i32 = VddrTrimVal as (i32);
+    if SignedVddrVal > 0x15i32 {
+        SignedVddrVal = SignedVddrVal - 0x20i32;
     }
-    i32SignedVddrVal
+    SignedVddrVal
 }
 
 pub unsafe extern "C" fn SetupStepVddrTrimTo(mut toCode: u32) {

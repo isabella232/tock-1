@@ -34,13 +34,12 @@
 //! the driver. Successive writes must call `allow` each time a buffer is to be
 //! written.
 
+use crate::driver;
 use core::cmp;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil;
 use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
-
-/// Syscall driver number.
-pub const DRIVER_NUM: usize = 0x0000ABCD;
+pub const DRIVER_NUM: usize = driver::NUM::UART as usize;
 
 #[derive(Default)]
 pub struct App {
