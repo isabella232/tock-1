@@ -80,6 +80,7 @@ impl<'a> hil::uart::Client<'a> for TestClient<'a> {
     fn get_tx_request(&self) -> Option<&mut hil::uart::TxRequest<'a>> {
         self.tx_request.take()
     }
+
     fn tx_request_complete(&self, _uart_num: usize, returned_request: &'a mut hil::uart::TxRequest<'a>) {
         self.state.take().map(|mut state| {
             match state {
@@ -116,17 +117,19 @@ impl<'a> hil::uart::Client<'a> for TestClient<'a> {
         self.state.take().map(|state| {
             match state {
                 State::Echo => {
-                    // if there is a byte of data
-                    if let Some(data) = returned_request.pop() {
-                        //copy it into the tx_request to echo
-                        self.tx_request.take().map(|tx| {
-                            tx.push(data);
-                            if data == b'\r' {
-                                debug!("ENTER");
-                                tx.push(b'\n')
-                            }
-                            self.tx_request.put(Some(tx));
-                        });
+                    // if there is data
+                    for _i in 0..returned_request.items_pushed() {
+                            if let Some(data) = returned_request.pop() {
+                            //copy it into the tx_request to echo
+                            self.tx_request.take().map(|tx| {
+                                tx.push(data);
+                                if data == b'\r' {
+                                    debug!("ENTER");
+                                    tx.push(b'\n')
+                                }
+                                self.tx_request.put(Some(tx));
+                            });
+                        }
                     }
                 }
                 // no behavior in other states

@@ -6,6 +6,8 @@ use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
 use kernel::hil;
+use kernel::debug;
+
 use kernel::hil::uart;
 use kernel::ikc::DriverState as State;
 use kernel::ReturnCode;
@@ -203,6 +205,10 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
         // default state to return is IDLE
         let mut ret: hil::uart::PeripheralState<'a> = hil::uart::PeripheralState::new();
 
+        if self.rx.is_some() {
+            ret.rx = State::BUSY;
+        }
+
         // Clear interrupts
         self.registers.icr.write(Interrupts::ALL_INTERRUPTS::SET);
 
@@ -210,7 +216,12 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
         while self.rx_fifo_not_empty() {
             // buffer read request was made
             if self.rx.is_some() {
+                // always let client know that there is a pending rx
+                ret.rx = State::BUSY;
+
                 self.rx.take().map(|mut rx| {
+                    debug!("Taking");
+
                     // read in a byte
                     if !rx.request_completed() {
                         let byte = self.read() as u8;
@@ -220,7 +231,8 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
                     if rx.request_completed() {
                         ret.rx = State::REQUEST_COMPLETE(RX(rx));
                     } else {
-                        ret.rx = State::BUSY;
+                        debug!("Putting request");
+
                         self.rx.put(Some(rx));
                     }
                 });
@@ -234,6 +246,9 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
 
         //if we have a request, handle it
         self.tx.take().map(|mut tx| {
+            // always let client know that there is a pending tx
+            ret.tx = State::BUSY;
+
             // send out one byte at a time, IRQ when TX FIFO empty will bring us back
             if self.tx_fifo_not_full() && !tx.request_completed() {
                 if let Some(item) = tx.pop() {
@@ -244,7 +259,6 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
             if tx.request_completed() {
                 ret.tx = State::REQUEST_COMPLETE(TX(tx));
             } else {
-                ret.tx = State::BUSY;
                 self.tx.put(Some(tx));
             }
         });
@@ -330,8 +344,10 @@ impl<'a> uart::Receive<'a> for UART<'a> {
         request: &'a mut uart::RxRequest<'a>,
     ) -> (ReturnCode, Option<&'a mut uart::RxRequest<'a>>) {
         if self.rx.is_some() || self.receiving_word.get() {
+            debug!("NONONONO!!");
             (ReturnCode::EBUSY, Some(request))
         } else {
+            debug!("Putting request");
             self.rx.put(Some(request));
             (ReturnCode::SUCCESS, None)
         }

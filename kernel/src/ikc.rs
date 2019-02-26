@@ -71,13 +71,12 @@ impl<'a, T: Copy> TxRequest<'a, T> {
     }
 
     pub fn has_some(&self) -> bool {
-        self.popped < self.requested
+       self.popped < self.pushed
     }
 
     pub fn remaining_request(&self) -> usize {
         self.requested - self.popped
     }
-
 
     pub fn request_completed(&self) -> bool {
         self.popped >= self.requested
@@ -102,7 +101,11 @@ impl<'a, T: Copy> TxRequest<'a, T> {
     pub fn reset(&mut self) {
         self.pushed = 0;
         self.popped = 0;
-        self.requested = 0;
+        match &self.buf { 
+            TxBuf::MUT(buf) => self.requested = 0,
+            TxBuf::CONST(buf) => self.requested = buf.len(),
+            TxBuf::None => {},
+        }
     }
 
     // for TxRequest with const reference, pushed = requested = buffer length
@@ -204,7 +207,7 @@ impl<'a, T: Copy> RxRequest<'a, T> {
         self.pushed >= self.requested
     }
 
-    // Host has pushed enough data to fill the buffer
+    // How much data has been pushed
     pub fn items_pushed(&self) -> usize {
         self.pushed
     }

@@ -1,5 +1,7 @@
 use core::cmp;
 use kernel::common::cells::{OptionalCell, TakeCell};
+use kernel::debug;
+
 use kernel::hil;
 use kernel::hil::uart::InterruptHandler;
 use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
@@ -20,7 +22,11 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::uart:
     match state.tx {
         // if request complete, return it to client
         REQUEST_COMPLETE(TX(request)) => {
+
             let client_id = request.client_id;
+            if client_id!=0 {
+                //debug!("TxRequest complete from client #{}", client_id);
+            }
             clients[client_id].tx_request_complete(num, request);
             ready_for_tx = true;
         }
@@ -37,21 +43,30 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::uart:
             // give the transaction to the driver level for muxing out received bytes to other buffers
             let request = driver.uart[num].mux_completed_tx_to_others(request);
 
+            debug!("Got one completed rx from {} with id {}", num, request.client_id);
+
+
             // return the originally completed rx
             let client_id = request.client_id;
+
+            if client_id!=0 {
+               //debug!("RxRequest complete from client #{}", client_id);
+            }
+
             clients[client_id].rx_request_complete(num, request);
 
             // if the muxing out completed any other rx'es, return them as well
             while let Some(next_request) = driver.uart[num].get_other_completed_rx() {
+                debug!("Got more than one completed rx");
                 let client_id = next_request.client_id;
                 clients[client_id].rx_request_complete(num, next_request);
             }
-
             ready_for_new_rx = true;
         },
         IDLE => {
+            //debug!("IDLE????");
             ready_for_new_rx = true;
-        }
+        },
         _ => {}
     }
 
@@ -62,10 +77,10 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::uart:
     }
     // Each client can have one (and only one) pending RX concurrently with other clients
     // so take any new ones that have occured this go-around
-    take_new_tx_requests(num, driver, clients);
+    take_new_rx_requests(num, driver, clients);
     // If a request completed, dispatch the shortest pending request (if there is one)
     if ready_for_new_rx {
-        driver.uart[num].dispatch_shortest_tx_request();
+        driver.uart[num].dispatch_shortest_rx_request();
     }
 }
 
@@ -77,6 +92,11 @@ fn dispatch_next_tx_request<'a>(
     for index in 0..clients.len() {
         let client = clients[index];
         if client.has_tx_request() {
+
+            if index!=0 {
+                //debug!("Dispatching TxRequest from client #{}", index);
+            }
+
             if let Some(tx) = client.get_tx_request() {
                 tx.client_id = index;
                 driver.handle_tx_request(num, tx);
@@ -86,7 +106,7 @@ fn dispatch_next_tx_request<'a>(
     }
 }
 
-fn take_new_tx_requests<'a>(
+fn take_new_rx_requests<'a>(
     num: usize,
     driver: &UartDriver<'a>,
     clients: &[&'a hil::uart::Client<'a>],
@@ -172,6 +192,7 @@ impl<'a> Uart<'a> {
                 panic!("Client #{} should not be making new request when request is already pending!", index)
             }
             else {
+                debug!("Stashing request from {}", index);
                 requests_stash[index].put(Some(rx));
             }
         }
@@ -182,18 +203,16 @@ impl<'a> Uart<'a> {
 
     fn mux_completed_tx_to_others(&self, completed_rx: &'a mut hil::uart::RxRequest<'a>) -> &'a mut hil::uart::RxRequest<'a> {
 
-        let mut other_request_completed = false;
-
         if let Some(requests_stash) = self.rx_requests {
             match &completed_rx.buf {
                 ikc::RxBuf::MUT(buf) => {
                     // for every item in the compeleted_rx
-                    for i in 0..completed_rx.items_pushed(){
+                    for i in 0..completed_rx.items_pushed() {
                         let item = buf[i];
-
                         // copy it into any existing requests in the requests_stash
                         for j in 0..requests_stash.len() {
                             if let Some(request) = requests_stash[j].take() {
+                                debug!("Copy from {} into {}", completed_rx.client_id, j);
                                 if request.has_room(){
                                     request.push(item);
                                 }
@@ -215,6 +234,7 @@ impl<'a> Uart<'a> {
         if let Some(requests_stash) = self.rx_requests {
             for i in 0..requests_stash.len() {
                 if let Some(request) = requests_stash[i].take() {
+                    debug!(" get_other_completed_rx Took from {}", i);
                     if request.request_completed(){
                         return Some(request)
                     }
@@ -222,42 +242,46 @@ impl<'a> Uart<'a> {
                         requests_stash[i].put(Some(request));
                     }
                 }
+                else {
+                    debug!(" get_other_completed_rx nothing to take from {}", i);
+
+                }
             }
         }
         // no more completed rx
         None
     }
 
-    fn dispatch_shortest_tx_request(&self) {
+    fn dispatch_shortest_rx_request(&self) {
         if let Some(requests_stash) = self.rx_requests {
 
             let mut min: Option<usize> = None;
-            let mut index: usize = 0;
+            let mut min_index: usize = 0;
 
             for i in 0..requests_stash.len() {
                 if let Some(request) = requests_stash[i].take() {
-
                     let request_remaining = request.request_remaining();
 
                     // if there is a minimum already, compare to see if this is shorter
                     if let Some(mut min) = min {
                         if request_remaining <  min {
                             min = request_remaining;
-                            index  = i;
+                            min_index  = i;
                         }
                     }
                     // otherwise, this is the min so far
                     else{
                         min = Some(request_remaining);
-                        index  = i;
+                        min_index  = i;
                     }
-                    requests_stash[index].put(Some(request));
+                    requests_stash[i].put(Some(request));
                 }
             }
 
             // if there was a request found,dispatch it
             if let Some(_min) = min {
-                if let Some(request) = requests_stash[index].take() {
+                if let Some(request) = requests_stash[min_index].take() {
+                    debug!("dispatch_shortest_rx_request dispatched {} from {}", request.client_id, min_index);
                     self.uart.receive_buffer(request);
                 }
             }

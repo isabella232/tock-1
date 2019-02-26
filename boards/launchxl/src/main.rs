@@ -165,7 +165,7 @@ pub unsafe fn reset_handler() {
     // UART
     let uart0_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_0);
     // for each client for the driver, provide an empty TakeCell
-    let uart0_clients: [TakeCell<hil::uart::RxRequest>; 2] = [TakeCell::empty(), TakeCell::empty()];
+    let uart0_clients: [TakeCell<hil::uart::RxRequest>; 3] = [TakeCell::empty(), TakeCell::empty(), TakeCell::empty()];
 
     let uart1_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_1);
 
@@ -185,6 +185,20 @@ pub unsafe fn reset_handler() {
     let uart_driver = uart::UartDriver::new(&board_uarts);
 
     // Set up test client
+    let mut client2_tx_buf: [u8; 3] = [0; 3];
+    let mut client2_tx_req = hil::uart::TxRequest::new();
+    let mut client2_rx_buf: [u8; 2] = [0; 2];
+    let mut client2_rx_req = hil::uart::RxRequest::new();
+
+    let test_client2 = uart_test::TestClient::new(
+        &mut client2_tx_buf, 
+        &mut client2_tx_req,
+        &mut client2_rx_buf, 
+        &mut client2_rx_req
+    );
+
+
+
     let mut test_client_space = uart_test::TestClient::space();
     let test_client = uart_test::TestClient::new_with_default_space(&mut test_client_space);
 
@@ -193,6 +207,7 @@ pub unsafe fn reset_handler() {
         uart_driver: &uart_driver,
         debug_client: &debug_client,
         test_client: &test_client,
+        test_client2: &test_client2,
     };
 
     // prime the pump with this interaction
@@ -222,6 +237,8 @@ pub struct LaunchXlPlatform<'a> {
     uart_driver: &'a capsules::uart::UartDriver<'a>,
     debug_client: &'a debug::DebugClient<'a>,
     test_client: &'a uart_test::TestClient<'a>,
+    test_client2: &'a uart_test::TestClient<'a>,
+
 }
 
 impl<'a> kernel::Platform for LaunchXlPlatform<'a> {
@@ -249,7 +266,8 @@ impl<'a> kernel::Platform for LaunchXlPlatform<'a> {
                 
                 let clients = [
                     self.debug_client as &kernel::hil::uart::Client,
-                    self.test_client as &kernel::hil::uart::Client
+                    self.test_client as &kernel::hil::uart::Client,
+                    self.test_client2 as &kernel::hil::uart::Client,
                 ];
                 capsules::uart::handle_irq(0, self.uart_driver, &clients);
             },
