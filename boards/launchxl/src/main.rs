@@ -252,7 +252,6 @@ impl<'a> kernel::Platform for LaunchXlPlatform<'a> {
     where
         F: FnOnce(Option<&kernel::Driver>) -> R,
     {
-        debug!("With driver");
         match driver_num {
             capsules::uart::DRIVER_NUM => f(Some(self.uart_driver)),
             _ => f(None),

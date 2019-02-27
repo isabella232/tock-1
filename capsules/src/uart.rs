@@ -16,6 +16,7 @@ use kernel::ikc;
 pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil::uart::Client<'a>]>) {
     driver.uart[num].state.map( |state| {
         // pass a copy of state to the HIL's handle interrupt routine
+        // it will return completed requests if there are any
         let (tx_complete, rx_complete) = driver.uart[num].handle_interrupt(*state);
 
         // if we have receive a completed transmit, then we need to handle it
@@ -62,7 +63,11 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil
                     state.tx = BUSY;
                 }
             }
-            
+        }
+
+        // if no kernel clients needed to use UART, check for pending application requests
+        if state.tx == IDLE {
+
         }
 
         if let Some(clients) = clients {
@@ -417,8 +422,6 @@ impl Driver for UartDriver<'a> {
         let uart_num =  (arg1 >> 16) as usize;
         match subscribe_num {
             1 /* putstr/write_done */ => {
-                debug!("Received TX Request Susbscribe from App");
-
                 self.uart[uart_num].apps.enter(app_id, |app, _| {
                     app.tx_callback = callback;
                     ReturnCode::SUCCESS
@@ -451,7 +454,6 @@ impl Driver for UartDriver<'a> {
         match cmd_num {
             0 /* check if present */ => ReturnCode::SUCCESS,
             1 /* transmit request */ => { 
-                debug!("Received TX Request from App");
                 // update the request with length
                 self.uart[uart_num].apps.enter(appid, |app, _| {
                     let len = arg1;
@@ -461,13 +463,13 @@ impl Driver for UartDriver<'a> {
                 self.uart[uart_num].state.map_or(ReturnCode::ENOSUPPORT, 
                     |state| {
                     if state.tx == IDLE {
-                            self.transmit_app_request(uart_num, appid)
-                        }
-                        else {
-                            ReturnCode::SUCCESS
-                        }
+                        self.transmit_app_request(uart_num, appid)
                     }
-                )
+                    else {
+                        debug!("BUSY!");
+                        ReturnCode::SUCCESS
+                    }
+                })
 
             },
             2 /* getnstr */ => { 
