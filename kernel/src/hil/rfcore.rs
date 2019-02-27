@@ -9,6 +9,13 @@
 
 use crate::returncode::ReturnCode;
 
+#[derive(Copy, Clone)]
+pub enum PaType {
+    None,
+    Internal,
+    Skyworks,
+}
+
 pub trait PowerClient {
     fn power_mode_changed(&self, changed: bool);
 }

@@ -27,6 +27,7 @@ use kernel::hil::gpio::InterruptMode;
 use kernel::hil::gpio::Pin;
 use kernel::hil::gpio::PinCtl;
 use kernel::hil::i2c::I2CMaster;
+use kernel::hil::rfcore::PaType;
 use kernel::hil::rng::Rng;
 use kernel::hil::uart::Configure;
 
@@ -468,6 +469,9 @@ pub unsafe fn reset_handler() {
         helium::virtual_rfcore::VirtualRadio<'static, cc26x2::radio::multimode::Radio>,
         helium::virtual_rfcore::VirtualRadio::new(&cc26x2::radio::MULTIMODE_RADIO)
     );
+    // Set PA option in radio based on board
+    &cc26x2::radio::MULTIMODE_RADIO.pa_type.set(PaType::Internal);
+
     // Set mode client in hil
     kernel::hil::rfcore::RadioDriver::set_transmit_client(&radio::MULTIMODE_RADIO, radio);
     kernel::hil::rfcore::RadioDriver::set_receive_client(
@@ -608,7 +612,7 @@ pub unsafe fn reset_handler() {
 
     adc::ADC.configure(adc::Source::NominalVdds, adc::SampleCycle::_170_us);
 
-    // debug!("Loading processes");
+    debug!("Loading processes");
 
     kernel::procs::load_processes(
         board_kernel,

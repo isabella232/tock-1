@@ -10,6 +10,7 @@ use core::cell::Cell;
 use core::slice;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::rfcore;
+use kernel::hil::rfcore::PaType;
 use kernel::ReturnCode;
 
 // Fields for testing
@@ -42,6 +43,7 @@ pub struct Radio {
     tx_buf: TakeCell<'static, [u8]>,
     rx_buf: TakeCell<'static, [u8]>,
     tx_power: Cell<u16>,
+    pub pa_type: Cell<PaType>,
 }
 
 impl Radio {
@@ -55,7 +57,8 @@ impl Radio {
             schedule_powerdown: Cell::new(false),
             tx_buf: TakeCell::empty(),
             rx_buf: TakeCell::empty(),
-            tx_power: Cell::new(0x9F3F),
+            tx_power: Cell::new(0xFFFF),
+            pa_type: Cell::new(PaType::None),
         }
     }
 
@@ -75,13 +78,14 @@ impl Radio {
 
         osc::OSC.switch_to_hf_xosc();
 
+        self.set_pa_restriction();
         // Need to match on patches here but for now, just default to genfsk patches
         unsafe {
             let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
-            self.rfc.setup(reg_overrides, 0xFFFF);
+            self.rfc.setup(reg_overrides, self.tx_power.get());
         }
 
-        self.test_radio_fs();
+        self.set_radio_fs();
         self.power_client
             .map(|client| client.power_mode_changed(true));
     }
@@ -228,12 +232,14 @@ impl Radio {
 
         osc::OSC.switch_to_hf_xosc();
 
+        self.set_pa_restriction();
+
         unsafe {
             let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
-            self.rfc.setup(reg_overrides, 0xFFFF);
+            self.rfc.setup(reg_overrides, self.tx_power.get());
         }
 
-        self.test_radio_fs();
+        self.set_radio_fs();
 
         if let Some(t) = TestType::from_u8(test) {
             match t {
@@ -362,7 +368,7 @@ impl Radio {
         }
     }
 
-    fn test_radio_fs(&self) {
+    fn set_radio_fs(&self) {
         let mut cmd_fs = prop::CommandFS {
             command_no: 0x0803,
             status: 0,
@@ -393,6 +399,20 @@ impl Radio {
             .send_sync(&cmd_fs)
             .and_then(|_| self.rfc.wait(&cmd_fs))
             .ok();
+    }
+
+    fn set_pa_restriction(&self) {
+        let tx_power = self.tx_power.get();
+        let pa = self.pa_type.get();
+        match pa {
+            PaType::None => (),
+            PaType::Internal => (),
+            PaType::Skyworks => {
+                if tx_power > 0x504D {
+                    self.tx_power.set(0x504D);
+                }
+            }
+        }
     }
 }
 
@@ -621,7 +641,8 @@ impl rfcore::RadioConfig for Radio {
         // Send direct command for TX power change
         // TODO put some guards around the possible range for TX power
         self.tx_power.set(power);
-        let command = DirectCommand::new(0x0010, power);
+        self.set_pa_restriction();
+        let command = DirectCommand::new(0x0010, self.tx_power.get());
         if self.rfc.send_direct(&command).is_ok() {
             return ReturnCode::SUCCESS;
         } else {
