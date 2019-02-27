@@ -165,26 +165,26 @@ pub unsafe fn reset_handler() {
 
     // UART
     let uart0_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_0);
-    let mut uart0_driver_app_space = uart::AppRequests::space();
+    let mut uart0_driver_app_space = uart::AppRequestsInProgress::space();
 
     // for each client for the driver, provide an empty TakeCell
     let uart0_clients: [TakeCell<hil::uart::RxRequest>; 3] = [TakeCell::empty(), TakeCell::empty(), TakeCell::empty()];
 
     let uart1_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_1);
-    let mut uart1_driver_app_space = uart::AppRequests::space();
+    let mut uart1_driver_app_space = uart::AppRequestsInProgress::space();
 
 
     let board_uarts = [
         &uart::Uart::new(
             &uart0_hil,
             Some(&uart0_clients),
-            uart::AppRequests::new_with_default_space(&mut uart0_driver_app_space),
+            uart::AppRequestsInProgress::new_with_default_space(&mut uart0_driver_app_space),
             board_kernel.create_grant(&memory_allocation_capability),
         ),
         &uart::Uart::new(
             &uart1_hil,
             None,
-            uart::AppRequests::new_with_default_space(&mut uart1_driver_app_space),
+            uart::AppRequestsInProgress::new_with_default_space(&mut uart1_driver_app_space),
             board_kernel.create_grant(&memory_allocation_capability),
         ),
     ];

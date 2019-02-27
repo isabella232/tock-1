@@ -1,19 +1,39 @@
 //! These are some primitive generics for Intra-Kernel Communication
-use super::{AppSlice, Shared};
+use super::{AppSlice, Shared, Callback};
 use core::cmp;
 
+#[derive(Default)]
+pub struct AppRequest <T> {
+    pub slice: Option<AppSlice<Shared, T>>,
+    pub callback: Option<Callback>,
+    length: usize ,
+    pub remaining: usize,
+}
+
+impl<T> AppRequest <T> {
+    pub fn set_len(&mut self, len: usize){
+        let mut length = len;
+        if let Some(ref buf) = self.slice {
+            length = cmp::min(length, buf.len())
+        }
+        self.length = length;
+        self.remaining = length;
+    }
+
+    pub fn len(&self) -> usize {
+        self.length
+    }
+}
 
 pub enum TxBuf<'a, T: Copy> {
     None,
     CONST(&'a [T]),
     MUT(&'a mut [T]),
-    APP_SLICE(AppSlice<Shared, T>),
 }
 
 pub enum RxBuf<'a, T: Copy> {
     None,
     MUT(&'a mut [T]),
-    //APP_SLICE(AppSlice<Shared, T>),
 }
 
 impl<'a, T: Copy> Default for RxBuf<'a, T> {
@@ -66,7 +86,6 @@ impl<'a, T: Copy> TxRequest<'a, T> {
         let ret = match &self.buf {
             TxBuf::CONST(s) => Some(s[self.popped]),
             TxBuf::MUT(ref s) => Some(s[self.popped]),
-            TxBuf::APP_SLICE(ref s) => Some( s.as_ref()[self.popped]),
             TxBuf::None => None,
         };
         self.popped += 1;
@@ -81,7 +100,6 @@ impl<'a, T: Copy> TxRequest<'a, T> {
                 buf[self.pushed] = element;
             }
             TxBuf::CONST(_buf) => panic!("Should not be pushing data into constant TxRequest!"),
-            TxBuf::APP_SLICE(_s) => panic!("Should not be pushing data into AppSlice TxRequest!"),
             TxBuf::None => panic!("Should not be pushing data into TxRequest with no TxBuf!")
         }
 
@@ -90,18 +108,22 @@ impl<'a, T: Copy> TxRequest<'a, T> {
         self.requested += 1;
     }
 
-    pub fn copy_from_app_slice(&mut self, input: &mut TxRequest<'a, T>) {
+    pub fn copy_from_app_request(&mut self, app_request: &mut AppRequest<T>) {
         match &mut self.buf {
             TxBuf::MUT(ref mut buf) => {
-                match &input.buf{
-                    TxBuf::APP_SLICE(s) => {
-                        let num_elements = cmp::min(buf.len(), input.requested - input.popped);
-                        for i in 0..num_elements {
-                            buf[i] = s.as_ref()[i + input.popped];
-                        }
-                        input.popped += num_elements;
+                let num_elements = cmp::min(buf.len(), app_request.remaining);
+                let offset = app_request.length - app_request.remaining;
+
+                if let Some(ref slice) = app_request.slice {
+                    for i in 0..num_elements {
+                        buf[i] = slice.as_ref()[i + offset];
                     }
-                    _ => panic!("Can only copy_from_app_slice if input is TxBuf::APP_SLICE!")
+                    self.popped = 0;
+                    self.pushed = num_elements;
+                    self.requested = num_elements;
+                    app_request.remaining -= num_elements;
+                } else {
+                    app_request.remaining = 0;
                 }
             },
             _ => panic!("Can only copy_from_app_slice if self is TxBuf::MUT"),
@@ -113,13 +135,16 @@ impl<'a, T: Copy> TxRequest<'a, T> {
        self.popped < self.pushed
     }
 
-
     pub fn requested_length(&self) -> usize {
         self.requested
     }
 
     pub fn remaining_request(&self) -> usize {
         self.requested - self.popped
+    }
+
+    pub fn has_request_remaining(&self) -> bool {
+        self.popped < self.requested
     }
 
     pub fn request_completed(&self) -> bool {
@@ -146,7 +171,6 @@ impl<'a, T: Copy> TxRequest<'a, T> {
         match &self.buf { 
             TxBuf::MUT(buf) => self.requested = 0,
             TxBuf::CONST(buf) => self.requested = buf.len(),
-            TxBuf::APP_SLICE(s) => self.requested = s.len(),
             TxBuf::None => {},
         }
     }
@@ -166,16 +190,6 @@ impl<'a, T: Copy> TxRequest<'a, T> {
         self.pushed = 0;
         self.popped = 0;
         self.requested = 0;
-    }
-
-    // for TxRequest with mutable reference
-    // it is assumed empty so client will fill before dispatching
-    pub fn set_with_app_slice(&mut self, slice: AppSlice<Shared, T>) {
-        let default_request_length  = slice.len();
-        self.buf = TxBuf::APP_SLICE(slice);
-        self.pushed = 0;
-        self.popped = 0;
-        self.requested = default_request_length;
     }
 
     // initializes space expect for the TxItem, which must be allocated elsewhere
@@ -204,7 +218,6 @@ impl<'a, T: Copy> TxRequest<'a, T> {
         match &self.buf { 
             TxBuf::MUT(buf) => self.requested = cmp::min(length, buf.len()),
             TxBuf::CONST(buf) => self.requested = cmp::min(length, buf.len()),
-            TxBuf::APP_SLICE(s) => self.requested = cmp::min(length, s.len()),
             TxBuf::None => {},
         }
     }
@@ -225,13 +238,6 @@ impl<'a, T: Copy> TxRequest<'a, T> {
                 requested: 0,
                 client_id: 0xFF,
             },
-            TxBuf::APP_SLICE(s) => TxRequest {
-                buf: TxBuf::APP_SLICE(s),
-                pushed: 0,
-                popped: 0,
-                requested: length,
-                client_id: 0xFF,
-            },
             TxBuf::None => TxRequest {
                 buf: TxBuf::None,
                 pushed: 0,
@@ -241,6 +247,7 @@ impl<'a, T: Copy> TxRequest<'a, T> {
             },
         }
     }
+
 }
 
 impl<'a, T: Copy> RxRequest<'a, T> {

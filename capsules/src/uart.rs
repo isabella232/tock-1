@@ -13,6 +13,8 @@ use kernel::ikc::DriverState::{BUSY, IDLE};
 use kernel::ikc::Request::{RX, TX};
 use kernel::ikc;
 
+pub type AppRequest = ikc::AppRequest<u8>;
+
 pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil::uart::Client<'a>]>) {
     driver.uart[num].state.map( |state| {
         // pass a copy of state to the HIL's handle interrupt routine
@@ -23,11 +25,14 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil
         if let Some(request) = tx_complete {
 
             // if we are handling an app_tx and it is complete, we need to setup the callback
-            if let Some(app_id) = driver.uart[num].app_tx_in_progress.take() {
+            if let Some(app_id) = driver.uart[num].app_requests.tx_in_progress.take() {
                 driver.uart[num].app_tx_update(app_id);
-            } else if let Some(clients) = clients {
+                // put the app_request.tx buffer back
+                driver.uart[num].app_requests.tx.put(request);
+            }
+            // otherwise, it is a kernel client request who needs to be called back
+            else if let Some(clients) = clients {
                 let client_id = request.client_id;
-
                 clients[client_id].tx_request_complete(num, request);
             }
             state.tx = IDLE;
@@ -38,7 +43,6 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil
 
             // give the transaction to the driver level for muxing out received bytes to other buffers
             let request = driver.uart[num].mux_completed_tx_to_others(request);
-
 
             // return the originally completed rx
             if let Some(clients) = clients {
@@ -67,7 +71,10 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil
 
         // if no kernel clients needed to use UART, check for pending application requests
         if state.tx == IDLE {
-
+            if let Some(appid) = driver.pending_app_tx_request(num){
+                driver.transmit_app_tx_request(num, appid);
+                state.tx = BUSY;
+            }
         }
 
         if let Some(clients) = clients {
@@ -122,11 +129,9 @@ fn take_new_rx_requests<'a>(
 }
 
 #[derive(Default)]
-pub struct App<'a> {
-    tx_request: hil::uart::TxRequest<'a>,
-    tx_callback: Option<Callback>,
-    rx_request: hil::uart::RxRequest<'a>,
-    rx_callback: Option<Callback>,
+pub struct App {
+    tx: AppRequest,
+    rx: AppRequest,
 }
 
 pub struct Uart<'a> {
@@ -135,20 +140,20 @@ pub struct Uart<'a> {
     state: MapCell<hil::uart::PeripheralState>,
     // slots of each intrakernel client
     rx_requests: Option<&'a [TakeCell<'a, hil::uart::RxRequest<'a>>]>,
-    app_tx_in_progress: OptionalCell<AppId>,
-    app_rx_in_progress: OptionalCell<AppId>,
     // space for copying requests from Apps before dispatching to UART HIL
-    app_requests: AppRequests<'a>,
+    app_requests: AppRequestsInProgress<'a>,
     // app grant providing space fo app clients
-    apps: Grant<App<'a>>,
+    apps: Grant<App>,
 }
 
-pub struct AppRequests<'a> {
+pub struct AppRequestsInProgress<'a> {
+    tx_in_progress: OptionalCell<AppId>,
     tx: MapCell<&'a mut hil::uart::TxRequest<'a>>,
+    rx_in_progress: OptionalCell<AppId>,
     rx: MapCell<&'a mut hil::uart::RxRequest<'a>>,
 }
 
-impl<'a> AppRequests<'a> {
+impl<'a> AppRequestsInProgress<'a> {
     pub fn space() -> (
         [u8; 128],
         hil::uart::TxRequest<'a>,
@@ -170,7 +175,7 @@ impl<'a> AppRequests<'a> {
             [u8; 128],
             hil::uart::RxRequest<'a>,
         ),
-    ) -> AppRequests<'a> {
+    ) -> AppRequestsInProgress<'a> {
         let (tx_request_buffer, tx_request, rx_request_buffer, rx_request) = space;
 
         Self::new(tx_request_buffer, tx_request, rx_request_buffer, rx_request)
@@ -181,12 +186,14 @@ impl<'a> AppRequests<'a> {
         tx_request: &'a mut kernel::ikc::TxRequest<'a, u8>,
         rx_request_buffer: &'a mut [u8],
         rx_request: &'a mut kernel::ikc::RxRequest<'a, u8>,
-    ) -> AppRequests<'a> {
+    ) -> AppRequestsInProgress<'a> {
         tx_request.set_with_mut_ref(tx_request_buffer);
         rx_request.set_buf(rx_request_buffer);
 
-        AppRequests {
+        AppRequestsInProgress {
+            tx_in_progress: OptionalCell::empty(),
             tx: MapCell::new(tx_request),
+            rx_in_progress: OptionalCell::empty(),
             rx: MapCell::new(rx_request),
         }
     }
@@ -201,22 +208,37 @@ impl<'a> UartDriver<'a> {
         UartDriver { uart: uarts }
     }
 
-    pub fn handle_tx_request(&self, uart_num: usize, tx: &'a mut hil::uart::TxRequest<'a>) {
+    fn handle_tx_request(&self, uart_num: usize, tx: &'a mut hil::uart::TxRequest<'a>) {
         self.uart[uart_num].uart.transmit_buffer(tx);
     }
 
-    fn transmit_app_request(&self, uart_num: usize, app_id: AppId) -> ReturnCode {
-        if let Some(request) = self.uart[uart_num].app_requests.tx.take(){
+    fn pending_app_tx_request(&self, uart_num: usize) -> Option<AppId> {
+        for app in self.uart[uart_num].apps.iter() {
+            if let Some(app_id) = app.enter(|app, _| {
+                if app.tx.remaining!=0 {
+                    Some(app.appid())
+                } else {
+                    None
+                }
+            }){
+                return Some(app_id)
+            }
+        }
+        None
+    }
 
+    fn transmit_app_tx_request(&self, uart_num: usize, app_id: AppId) -> ReturnCode {
+        if let Some(request) = self.uart[uart_num].app_requests.tx.take(){
             //TODO: handle error from apps.enter
             self.uart[uart_num].apps.enter(app_id, |app, _| {
-                request.copy_from_app_slice(&mut app.tx_request);
+                request.reset();
+                request.copy_from_app_request(&mut app.tx);
             });
-            self.uart[uart_num].app_tx_in_progress.set(app_id);
+            self.uart[uart_num].app_requests.tx_in_progress.set(app_id);
             self.uart[uart_num].uart.transmit_buffer(request)
         }
         else{
-            panic!("Should not invoke transmit_app_request if there is no app request tx buffer available!");
+            panic!("transmit_app_request invoked but no request_tx buffer available on uart {}", uart_num);
             ReturnCode::ENOSUPPORT
         }
     }
@@ -235,8 +257,8 @@ impl<'a> Uart<'a> {
     pub fn new(
         uart: &'a hil::uart::UartPeripheral<'a>,
         rx_requests: Option<&'a [TakeCell<'a, hil::uart::RxRequest<'a>>]>,
-        app_requests: AppRequests<'a>,
-        grant: Grant<App<'a>>) -> Uart<'a> {
+        app_requests: AppRequestsInProgress<'a>,
+        grant: Grant<App>) -> Uart<'a> {
 
         uart.configure(DEFAULT_PARAMS);
 
@@ -244,8 +266,6 @@ impl<'a> Uart<'a> {
             uart,
             state: MapCell::new(hil::uart::PeripheralState::new()),
             rx_requests,
-            app_tx_in_progress: OptionalCell::empty(),
-            app_rx_in_progress: OptionalCell::empty(),
             app_requests,
             apps: grant,
         }
@@ -253,16 +273,15 @@ impl<'a> Uart<'a> {
 
     fn app_tx_update(&self, app_id: AppId) {
         self.apps.enter(app_id, |app, _| {
-
-            if app.tx_request.request_completed() {
+            if app.tx.remaining == 0 {
                 // Go ahead and signal the application
-                let written = app.tx_request.requested_length();
-                app.tx_callback.map(|mut cb| {
+                let written = app.tx.len();
+                app.tx.callback.map(|mut cb| {
                     cb.schedule(written, 0, 0);
                 });
             } else {
                 // Otherwise, don't drop app_id
-                self.app_tx_in_progress.set(app_id);
+                self.app_requests.tx_in_progress.set(app_id);
             }
 
         });
@@ -393,9 +412,7 @@ impl Driver for UartDriver<'a> {
             1 => self.uart[uart_num]
                 .apps
                 .enter(appid, |app, _| {
-                    if let Some(buf) = slice {
-                        app.tx_request.set_with_app_slice(buf);
-                    }
+                    app.tx.slice = slice;
                     ReturnCode::SUCCESS
                 })
                 .unwrap_or_else(|err| err.into()),
@@ -423,13 +440,13 @@ impl Driver for UartDriver<'a> {
         match subscribe_num {
             1 /* putstr/write_done */ => {
                 self.uart[uart_num].apps.enter(app_id, |app, _| {
-                    app.tx_callback = callback;
+                    app.tx.callback = callback;
                     ReturnCode::SUCCESS
                 }).unwrap_or_else(|err| err.into())
             },
             2 /* getnstr done */ => {
                 self.uart[uart_num].apps.enter(app_id, |app, _| {
-                    app.rx_callback = callback;
+                    app.rx.callback = callback;
                     ReturnCode::SUCCESS
                 }).unwrap_or_else(|err| err.into())
             },
@@ -456,17 +473,17 @@ impl Driver for UartDriver<'a> {
             1 /* transmit request */ => { 
                 // update the request with length
                 self.uart[uart_num].apps.enter(appid, |app, _| {
-                    let len = arg1;
-                    app.tx_request.set_request_len(len);
+                    let mut len = arg1;
+                    app.tx.set_len(len);
                 });
 
                 self.uart[uart_num].state.map_or(ReturnCode::ENOSUPPORT, 
                     |state| {
                     if state.tx == IDLE {
-                        self.transmit_app_request(uart_num, appid)
+                        state.tx = BUSY;
+                        self.transmit_app_tx_request(uart_num, appid)
                     }
                     else {
-                        debug!("BUSY!");
                         ReturnCode::SUCCESS
                     }
                 })
