@@ -29,13 +29,20 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil
                 driver.uart[num].app_tx_update(app_id);
                 // put the app_request.tx buffer back
                 driver.uart[num].app_requests.tx.put(request);
+
+                // if the app_id has been put back again, then the tx is not complete
+                if let Some(app_id) = driver.uart[num].app_requests.tx_in_progress.take() {
+                    driver.transmit_app_tx_request(num, app_id);
+                } else {
+                    state.tx = IDLE;
+                }
             }
-            // otherwise, it is a kernel client request who needs to be called back
+            // otherwise, it is a kernel client request that needs to be called back
             else if let Some(clients) = clients {
                 let client_id = request.client_id;
                 clients[client_id].tx_request_complete(num, request);
+                state.tx = IDLE;
             }
-            state.tx = IDLE;
         }
 
         // if we have receive a completed receive, then we need to handle it
@@ -82,7 +89,6 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil
             // so take any new ones that have occured this go-around
             take_new_rx_requests(num, driver, clients);
         }
-
 
         // If a request completed, dispatch the shortest pending request (if there is one)
         if state.rx == IDLE {
@@ -155,24 +161,24 @@ pub struct AppRequestsInProgress<'a> {
 
 impl<'a> AppRequestsInProgress<'a> {
     pub fn space() -> (
-        [u8; 128],
+        [u8; 8],
         hil::uart::TxRequest<'a>,
-        [u8; 128],
+        [u8; 8],
         hil::uart::RxRequest<'a>,
     ) {
         (
-            [0; 128],
+            [0; 8],
             hil::uart::TxRequest::new(),
-            [0; 128],
+            [0; 8],
             hil::uart::RxRequest::new(),
         )
     }
 
     pub fn new_with_default_space(
         space: &'a mut (
-            [u8; 128],
+            [u8; 8],
             hil::uart::TxRequest<'a>,
-            [u8; 128],
+            [u8; 8],
             hil::uart::RxRequest<'a>,
         ),
     ) -> AppRequestsInProgress<'a> {
@@ -283,7 +289,6 @@ impl<'a> Uart<'a> {
                 // Otherwise, don't drop app_id
                 self.app_requests.tx_in_progress.set(app_id);
             }
-
         });
     }
 

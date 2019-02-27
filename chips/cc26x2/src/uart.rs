@@ -2,7 +2,7 @@
 use crate::prcm;
 
 use core::cell::Cell;
-use kernel::common::cells::{OptionalCell, TakeCell};
+use kernel::common::cells::{OptionalCell, MapCell};
 use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
 use kernel::hil;
@@ -88,8 +88,8 @@ register_bitfields![
 
 pub struct UART<'a> {
     registers: &'a UartRegisters,
-    tx: TakeCell<'a, uart::TxRequest<'a>>,
-    rx: TakeCell<'a, uart::RxRequest<'a>>,
+    tx: MapCell<&'a mut uart::TxRequest<'a>>,
+    rx: MapCell<&'a mut uart::RxRequest<'a>>,
     receiving_word: Cell<bool>,
 }
 
@@ -110,8 +110,8 @@ impl<'a> UART<'a> {
 
         let ret = UART {
             registers,
-            tx: TakeCell::empty(),
-            rx: TakeCell::empty(),
+            tx: MapCell::empty(),
+            rx: MapCell::empty(),
 
             receiving_word: Cell::new(false),
         };
@@ -223,7 +223,7 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
                     if rx.request_completed() {
                         rx_complete = Some(rx);
                     } else {
-                        self.rx.put(Some(rx));
+                        self.rx.put(rx);
                     }
                 });
             }
@@ -237,7 +237,7 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
         //if we have a request, handle it
         self.tx.take().map(|tx| {
             // send out one byte at a time, IRQ when TX FIFO empty will bring us back
-            if self.tx_fifo_not_full() && !tx.request_completed() {
+            while self.tx_fifo_not_full() && !tx.request_completed() {
                 if let Some(item) = tx.pop() {
                     self.write(item as u32);
                 }
@@ -246,7 +246,7 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
             if tx.request_completed() {
                 tx_complete = Some(tx);
             } else {
-                self.tx.put(Some(tx));
+                self.tx.put(tx);
             }
         });
         (tx_complete, rx_complete)
@@ -306,7 +306,7 @@ impl<'a> uart::Transmit<'a> for UART<'a> {
             }
         }
         // Request will be continued in interrupt bottom half
-        self.tx.put(Some(request));
+        self.tx.put(request);
         ReturnCode::SUCCESS
     }
 
@@ -332,7 +332,7 @@ impl<'a> uart::Receive<'a> for UART<'a> {
         if self.rx.is_some() || self.receiving_word.get() {
             (ReturnCode::EBUSY, Some(request))
         } else {
-            self.rx.put(Some(request));
+            self.rx.put(request);
             (ReturnCode::SUCCESS, None)
         }
     }

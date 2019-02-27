@@ -124,13 +124,11 @@ impl<'a> hil::uart::Client<'a> for TestClient<'a> {
                         // if there is data
                         for _i in 0..returned_request.items_pushed() {
                             if let Some(data) = returned_request.pop() {
-                                    tx.push(data);
-                                    if data == b'\r' {
-                                        debug!("ENTER");
-                                        tx.push(b'\n')
-                                    }
-                                    
-                                
+                                tx.push(data);
+                                if data == b'\r' {
+                                    debug!("ENTER");
+                                    tx.push(b'\n')
+                                }
                             }
                         }
                         self.tx_request.put(Some(tx));

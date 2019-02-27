@@ -128,7 +128,6 @@ impl<'a, T: Copy> TxRequest<'a, T> {
             },
             _ => panic!("Can only copy_from_app_slice if self is TxBuf::MUT"),
         };
-        self.popped += 1;
     }
 
     pub fn has_some(&self) -> bool {
