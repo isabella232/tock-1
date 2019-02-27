@@ -114,6 +114,8 @@ pub struct Uart<'a> {
     state: MapCell<hil::uart::PeripheralState>,
     // slots of each intrakernel client
     rx_requests: Option<&'a [TakeCell<'a, hil::uart::RxRequest<'a>>]>,
+    app_tx_in_progress: OptionalCell<AppId>,
+    app_rx_in_progress: OptionalCell<AppId>,
     // space for copying requests from Apps before dispatching to UART HIL
     app_requests: AppRequests<'a>,
     // app grant providing space fo app clients
@@ -182,8 +184,14 @@ impl<'a> UartDriver<'a> {
         self.uart[uart_num].uart.transmit_buffer(tx);
     }
 
-    fn transmit_app_request(&self, uart_num: usize, appid: AppId) -> ReturnCode {
+    fn transmit_app_request(&self, uart_num: usize, app_id: AppId) -> ReturnCode {
         if let Some(request) = self.uart[uart_num].app_requests.tx.take(){
+
+            //TODO: handle error from apps.enter
+            self.uart[uart_num].apps.enter(app_id, |app, _| {
+                request.copy_from_app_slice(&mut app.tx_request);
+            });
+            self.uart[uart_num].app_tx_in_progress.set(app_id);
             self.uart[uart_num].uart.transmit_buffer(request)
         }
         else{
@@ -215,6 +223,8 @@ impl<'a> Uart<'a> {
             uart,
             state: MapCell::new(hil::uart::PeripheralState::new()),
             rx_requests,
+            app_tx_in_progress: OptionalCell::empty(),
+            app_rx_in_progress: OptionalCell::empty(),
             app_requests,
             apps: grant,
         }

@@ -90,6 +90,25 @@ impl<'a, T: Copy> TxRequest<'a, T> {
         self.requested += 1;
     }
 
+    pub fn copy_from_app_slice(&mut self, input: &mut TxRequest<'a, T>) {
+        match &mut self.buf {
+            TxBuf::MUT(ref mut buf) => {
+                match &input.buf{
+                    TxBuf::APP_SLICE(s) => {
+                        let num_elements = cmp::min(buf.len(), input.requested - input.popped);
+                        for i in 0..num_elements {
+                            buf[i] = s.as_ref()[i + input.popped];
+                        }
+                        input.popped += num_elements;
+                    }
+                    _ => panic!("Can only copy_from_app_slice if input is TxBuf::APP_SLICE!")
+                }
+            },
+            _ => panic!("Can only copy_from_app_slice if self is TxBuf::MUT"),
+        };
+        self.popped += 1;
+    }
+
     pub fn has_some(&self) -> bool {
        self.popped < self.pushed
     }
