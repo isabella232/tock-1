@@ -121,8 +121,8 @@ pub struct Uart<'a> {
 }
 
 pub struct AppRequests<'a> {
-    tx: TakeCell<'a, hil::uart::TxRequest<'a>>,
-    rx: TakeCell<'a, hil::uart::RxRequest<'a>>,
+    tx: MapCell<&'a mut hil::uart::TxRequest<'a>>,
+    rx: MapCell<&'a mut hil::uart::RxRequest<'a>>,
 }
 
 impl<'a> AppRequests<'a> {
@@ -163,8 +163,8 @@ impl<'a> AppRequests<'a> {
         rx_request.set_buf(rx_request_buffer);
 
         AppRequests {
-            tx: TakeCell::new(tx_request),
-            rx: TakeCell::new(rx_request),
+            tx: MapCell::new(tx_request),
+            rx: MapCell::new(rx_request),
         }
     }
 }
