@@ -123,7 +123,7 @@ pub struct Uart<'a> {
     app_tx_in_progress: OptionalCell<AppId>,
     app_rx_in_progress: OptionalCell<AppId>,
     // space for copying requests from Apps before dispatching to UART HIL
-    app_requests: AppRequests<'a>,
+    //app_requests: AppRequests<'a>,
     // app grant providing space fo app clients
     apps: Grant<App<'a>>,
 }
@@ -190,21 +190,21 @@ impl<'a> UartDriver<'a> {
         self.uart[uart_num].uart.transmit_buffer(tx);
     }
 
-    fn transmit_app_request(&self, uart_num: usize, app_id: AppId) -> ReturnCode {
-        if let Some(request) = self.uart[uart_num].app_requests.tx.take(){
+    // fn transmit_app_request(&self, uart_num: usize, app_id: AppId) -> ReturnCode {
+    //     if let Some(request) = self.uart[uart_num].app_requests.tx.take(){
 
-            //TODO: handle error from apps.enter
-            self.uart[uart_num].apps.enter(app_id, |app, _| {
-                request.copy_from_app_slice(&mut app.tx_request);
-            });
-            self.uart[uart_num].app_tx_in_progress.set(app_id);
-            self.uart[uart_num].uart.transmit_buffer(request)
-        }
-        else{
-            panic!("Should not invoke transmit_app_request if there is no app request tx buffer available!");
-            ReturnCode::ENOSUPPORT
-        }
-    }
+    //         //TODO: handle error from apps.enter
+    //         self.uart[uart_num].apps.enter(app_id, |app, _| {
+    //             request.copy_from_app_slice(&mut app.tx_request);
+    //         });
+    //         self.uart[uart_num].app_tx_in_progress.set(app_id);
+    //         self.uart[uart_num].uart.transmit_buffer(request)
+    //     }
+    //     else{
+    //         panic!("Should not invoke transmit_app_request if there is no app request tx buffer available!");
+    //         ReturnCode::ENOSUPPORT
+    //     }
+    // }
 
 }
 
@@ -220,7 +220,7 @@ impl<'a> Uart<'a> {
     pub fn new(
         uart: &'a hil::uart::UartPeripheral<'a>,
         rx_requests: Option<&'a [TakeCell<'a, hil::uart::RxRequest<'a>>]>,
-        app_requests: AppRequests<'a>,
+        //app_requests: AppRequests<'a>,
         grant: Grant<App<'a>>) -> Uart<'a> {
 
         uart.configure(DEFAULT_PARAMS);
@@ -231,7 +231,7 @@ impl<'a> Uart<'a> {
             rx_requests,
             app_tx_in_progress: OptionalCell::empty(),
             app_rx_in_progress: OptionalCell::empty(),
-            app_requests,
+            //app_requests,
             apps: grant,
         }
     }
@@ -454,7 +454,9 @@ impl Driver for UartDriver<'a> {
                 self.uart[uart_num].state.map_or(ReturnCode::ENOSUPPORT, 
                     |state| {
                     if state.tx == IDLE {
-                            self.transmit_app_request(uart_num, appid)
+                            //self.transmit_app_request(uart_num, appid)
+                            ReturnCode::SUCCESS
+
                         }
                         else {
                             ReturnCode::SUCCESS
