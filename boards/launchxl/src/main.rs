@@ -152,6 +152,34 @@ pub unsafe fn reset_handler() {
 
     configure_pins(pinmap);
 
+    // UART
+    let uart0_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_0);
+    let mut uart0_driver_app_space = uart::AppRequests::space();
+
+    // for each client for the driver, provide an empty TakeCell
+    let uart0_clients: [TakeCell<hil::uart::RxRequest>; 3] = [TakeCell::empty(), TakeCell::empty(), TakeCell::empty()];
+
+    let uart1_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_1);
+    let mut uart1_driver_app_space = uart::AppRequests::space();
+
+
+    let board_uarts = [
+        &uart::Uart::new(
+            &uart0_hil,
+            Some(&uart0_clients),
+            uart::AppRequests::new_with_default_space(&mut uart0_driver_app_space),
+            board_kernel.create_grant(&memory_allocation_capability),
+        ),
+        &uart::Uart::new(
+            &uart1_hil,
+            None,
+            uart::AppRequests::new_with_default_space(&mut uart1_driver_app_space),
+            board_kernel.create_grant(&memory_allocation_capability),
+        ),
+    ];
+
+    let uart_driver = uart::UartDriver::new(&board_uarts);
+
     // setup static debug writer
     let debug_writer = static_init!(
         kernel::debug::DebugWriter,
@@ -161,28 +189,6 @@ pub unsafe fn reset_handler() {
     // setup uart client for debug on stack
     let mut debug_client_space = debug::DebugClient::space();
     let debug_client = debug::DebugClient::new_with_default_space(&mut debug_client_space);
-
-    // UART
-    let uart0_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_0);
-    // for each client for the driver, provide an empty TakeCell
-    let uart0_clients: [TakeCell<hil::uart::RxRequest>; 3] = [TakeCell::empty(), TakeCell::empty(), TakeCell::empty()];
-
-    let uart1_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_1);
-
-    let board_uarts = [
-        &uart::Uart::new(
-            &uart0_hil,
-            Some(&uart0_clients),
-            board_kernel.create_grant(&memory_allocation_capability),
-        ),
-        &uart::Uart::new(
-            &uart1_hil,
-            None,
-            board_kernel.create_grant(&memory_allocation_capability),
-        ),
-    ];
-
-    let uart_driver = uart::UartDriver::new(&board_uarts);
 
     // Set up test client
     let mut client2_tx_buf: [u8; 3] = [0; 3];
@@ -196,7 +202,6 @@ pub unsafe fn reset_handler() {
         &mut client2_rx_buf, 
         &mut client2_rx_req
     );
-
 
 
     let mut test_client_space = uart_test::TestClient::space();

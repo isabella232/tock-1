@@ -1,15 +1,30 @@
 //! These are some primitive generics for Intra-Kernel Communication
+use super::{AppSlice, Shared};
+use core::cmp;
+
+
 pub enum TxBuf<'a, T: Copy> {
     None,
     CONST(&'a [T]),
     MUT(&'a mut [T]),
+    APP_SLICE(AppSlice<Shared, T>),
 }
 
 pub enum RxBuf<'a, T: Copy> {
     None,
     MUT(&'a mut [T]),
+    //APP_SLICE(AppSlice<Shared, T>),
 }
 
+impl<'a, T: Copy> Default for RxBuf<'a, T> {
+    fn default() -> Self { RxBuf::None }
+}
+
+impl<'a, T: Copy> Default for TxBuf<'a, T> {
+    fn default() -> Self { TxBuf::None }
+}
+
+#[derive(Default)]
 pub struct TxRequest<'a, T: Copy> {
     buf: TxBuf<'a, T>,
     // The total amount of data written in
@@ -22,6 +37,7 @@ pub struct TxRequest<'a, T: Copy> {
     pub client_id: usize,
 }
 
+#[derive(Default)]
 pub struct RxRequest<'a, T: Copy> {
     pub buf: RxBuf<'a, T>,
     // The total amount of data written in
@@ -39,8 +55,8 @@ pub enum Request<'a, T: Copy> {
     RX(&'a mut RxRequest<'a, T>),
 }
 
-pub enum DriverState<'a, T: Copy> {
-    REQUEST_COMPLETE(Request<'a, T>),
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum DriverState {
     BUSY,
     IDLE,
 }
@@ -50,19 +66,23 @@ impl<'a, T: Copy> TxRequest<'a, T> {
         let ret = match &self.buf {
             TxBuf::CONST(s) => Some(s[self.popped]),
             TxBuf::MUT(ref s) => Some(s[self.popped]),
+            TxBuf::APP_SLICE(ref s) => Some( s.as_ref()[self.popped]),
             TxBuf::None => None,
         };
         self.popped += 1;
         ret
     }
 
+    // this interface is for a Client that wants to prepare a Request
+    // as such, APP_SLICE and CONST types are not treated
     pub fn push(&mut self, element: T) {
         match &mut self.buf {
             TxBuf::MUT(buf) => {
                 buf[self.pushed] = element;
             }
-            TxBuf::CONST(buf) => {}
-            TxBuf::None => {}
+            TxBuf::CONST(_buf) => panic!("Should not be pushing data into constant TxRequest!"),
+            TxBuf::APP_SLICE(_s) => panic!("Should not be pushing data into AppSlice TxRequest!"),
+            TxBuf::None => panic!("Should not be pushing data into TxRequest with no TxBuf!")
         }
 
         // increment both the pushed and requested amount
@@ -85,16 +105,14 @@ impl<'a, T: Copy> TxRequest<'a, T> {
     pub fn has_room(&self) -> bool {
         match &self.buf {
             TxBuf::MUT(buf) => self.pushed < buf.len(),
-            TxBuf::CONST(buf) => false,
-            TxBuf::None => false,
+            _ => false,
         }
     }
 
     pub fn room_available(&self) -> usize {
         match &self.buf {
             TxBuf::MUT(buf) => buf.len() - self.pushed,
-            TxBuf::CONST(buf) => 0,
-            TxBuf::None => 0,
+            _ => 0,
         }
     }
 
@@ -104,6 +122,7 @@ impl<'a, T: Copy> TxRequest<'a, T> {
         match &self.buf { 
             TxBuf::MUT(buf) => self.requested = 0,
             TxBuf::CONST(buf) => self.requested = buf.len(),
+            TxBuf::APP_SLICE(s) => self.requested = s.len(),
             TxBuf::None => {},
         }
     }
@@ -123,6 +142,16 @@ impl<'a, T: Copy> TxRequest<'a, T> {
         self.pushed = 0;
         self.popped = 0;
         self.requested = 0;
+    }
+
+    // for TxRequest with mutable reference
+    // it is assumed empty so client will fill before dispatching
+    pub fn set_with_app_slice(&mut self, slice: AppSlice<Shared, T>) {
+        let default_request_length  = slice.len();
+        self.buf = TxBuf::APP_SLICE(slice);
+        self.pushed = 0;
+        self.popped = 0;
+        self.requested = default_request_length;
     }
 
     // initializes space expect for the TxItem, which must be allocated elsewhere
@@ -146,6 +175,16 @@ impl<'a, T: Copy> TxRequest<'a, T> {
         Self::new_with_ref_set_len(TxBuf::MUT(buf), length)
     }
 
+    // allow user to set request length, but don't let it exceed buffer/slice size
+    pub fn set_request_len(&mut self, length: usize) {
+        match &self.buf { 
+            TxBuf::MUT(buf) => self.requested = cmp::min(length, buf.len()),
+            TxBuf::CONST(buf) => self.requested = cmp::min(length, buf.len()),
+            TxBuf::APP_SLICE(s) => self.requested = cmp::min(length, s.len()),
+            TxBuf::None => {},
+        }
+    }
+
     pub fn new_with_ref_set_len(buf: TxBuf<'a, T>, length: usize) -> TxRequest<'a, T> {
         match buf {
             TxBuf::CONST(b) => TxRequest {
@@ -160,6 +199,13 @@ impl<'a, T: Copy> TxRequest<'a, T> {
                 pushed: 0,
                 popped: 0,
                 requested: 0,
+                client_id: 0xFF,
+            },
+            TxBuf::APP_SLICE(s) => TxRequest {
+                buf: TxBuf::APP_SLICE(s),
+                pushed: 0,
+                popped: 0,
+                requested: length,
                 client_id: 0xFF,
             },
             TxBuf::None => TxRequest {
@@ -180,6 +226,16 @@ impl<'a, T: Copy> RxRequest<'a, T> {
             pushed: 0,
             popped: 0,
             requested: 0,
+            client_id: 0xFF,
+        }
+    }
+
+    pub fn new_with_mut_ref(buf: &'a mut [T]) -> RxRequest<'a, T> {
+        RxRequest {
+            requested: buf.len(),
+            buf: RxBuf::MUT(buf),
+            pushed: 0,
+            popped: 0,
             client_id: 0xFF,
         }
     }

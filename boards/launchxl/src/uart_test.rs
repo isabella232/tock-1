@@ -119,7 +119,8 @@ impl<'a> hil::uart::Client<'a> for TestClient<'a> {
                 State::Echo => {
                     // if there is data
                     for _i in 0..returned_request.items_pushed() {
-                            if let Some(data) = returned_request.pop() {
+                        if let Some(data) = returned_request.pop() {
+                            
                             //copy it into the tx_request to echo
                             self.tx_request.take().map(|tx| {
                                 tx.push(data);

@@ -4,12 +4,12 @@
 use crate::ikc;
 use crate::returncode::ReturnCode;
 
-use crate::ikc::DriverState::{BUSY, IDLE, REQUEST_COMPLETE};
+use crate::ikc::DriverState::{BUSY, IDLE};
 use crate::ikc::Request::{RX, TX};
 
 pub type TxRequest<'a> = ikc::TxRequest<'a, u8>;
 pub type RxRequest<'a> = ikc::RxRequest<'a, u8>;
-pub type State<'a> = ikc::DriverState<'a, u8>;
+pub type State = ikc::DriverState;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum StopBits {
@@ -74,20 +74,21 @@ pub trait UartPeripheral<'a>:
 
 pub trait UartAdvanced<'a>: Configure + Transmit<'a> + ReceiveAdvanced<'a> {}
 
-pub struct PeripheralState<'a> {
-    pub tx: State<'a>,
-    pub rx: State<'a>,
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct PeripheralState {
+    pub tx: State,
+    pub rx: State,
 }
 
-impl<'a> PeripheralState<'a> {
-    pub fn new() -> PeripheralState<'a> {
+impl<'a> PeripheralState {
+    pub fn new() -> PeripheralState {
         PeripheralState { tx: IDLE, rx: IDLE }
     }
 }
 
 /// Trait for configuring a UART.
 pub trait InterruptHandler<'a> {
-    fn handle_interrupt(&self) -> PeripheralState<'a>;
+    fn handle_interrupt(&self, state: PeripheralState) -> (Option<&mut TxRequest<'a>>, Option<&mut RxRequest<'a>>);
 }
 
 /// Trait for configuring a UART.
@@ -128,7 +129,7 @@ pub trait Transmit<'a> {
     fn transmit_buffer(
         &self,
         req: &'a mut TxRequest<'a>,
-    ) -> (ReturnCode, Option<&'a mut TxRequest<'a>>);
+    ) -> ReturnCode;
 
     /// Transmit a single word of data asynchronously. The word length is
     /// determined by the UART configuration: it can be 6, 7, 8, or 9 bits long.
