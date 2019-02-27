@@ -20,8 +20,14 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: &[&'a hil::uart:
 
         // if we have receive a completed transmit, then we need to handle it
         if let Some(request) = tx_complete {
-            let client_id = request.client_id;
-            clients[client_id].tx_request_complete(num, request);
+
+            // if we are handling an app_tx and it is complete, we need to setup the callback
+            if let Some(app_id) = driver.uart[num].app_tx_in_progress.take() {
+                driver.uart[num].app_tx_update(app_id);
+            } else {
+                let client_id = request.client_id;
+                clients[client_id].tx_request_complete(num, request);
+            }
             state.tx = IDLE;
         }
 
@@ -228,6 +234,23 @@ impl<'a> Uart<'a> {
             app_requests,
             apps: grant,
         }
+    }
+
+    fn app_tx_update(&self, app_id: AppId) {
+        self.apps.enter(app_id, |app, _| {
+
+            if app.tx_request.request_completed() {
+                // Go ahead and signal the application
+                let written = app.tx_request.requested_length();
+                app.tx_callback.map(|mut cb| {
+                    cb.schedule(written, 0, 0);
+                });
+            } else {
+                // Otherwise, don't drop app_id
+                self.app_tx_in_progress.set(app_id);
+            }
+
+        });
     }
 
     fn handle_interrupt(&self, state: hil::uart::PeripheralState) 

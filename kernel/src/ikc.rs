@@ -113,6 +113,11 @@ impl<'a, T: Copy> TxRequest<'a, T> {
        self.popped < self.pushed
     }
 
+
+    pub fn requested_length(&self) -> usize {
+        self.requested
+    }
+
     pub fn remaining_request(&self) -> usize {
         self.requested - self.popped
     }
