@@ -165,26 +165,26 @@ pub unsafe fn reset_handler() {
 
     // UART
     let uart0_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_0);
-    //let mut uart0_driver_app_space = uart::AppRequests::space();
+    let mut uart0_driver_app_space = uart::AppRequests::space();
 
     // for each client for the driver, provide an empty TakeCell
     let uart0_clients: [TakeCell<hil::uart::RxRequest>; 3] = [TakeCell::empty(), TakeCell::empty(), TakeCell::empty()];
 
     let uart1_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_1);
-    //let mut uart1_driver_app_space = uart::AppRequests::space();
+    let mut uart1_driver_app_space = uart::AppRequests::space();
 
 
     let board_uarts = [
         &uart::Uart::new(
             &uart0_hil,
             Some(&uart0_clients),
-            //uart::AppRequests::new_with_default_space(&mut uart0_driver_app_space),
+            uart::AppRequests::new_with_default_space(&mut uart0_driver_app_space),
             board_kernel.create_grant(&memory_allocation_capability),
         ),
         &uart::Uart::new(
             &uart1_hil,
             None,
-            //uart::AppRequests::new_with_default_space(&mut uart1_driver_app_space),
+            uart::AppRequests::new_with_default_space(&mut uart1_driver_app_space),
             board_kernel.create_grant(&memory_allocation_capability),
         ),
     ];
@@ -192,7 +192,7 @@ pub unsafe fn reset_handler() {
     let uart_driver = uart::UartDriver::new(&board_uarts);
 
     // Set up test client
-    let mut client2_tx_buf: [u8; 3] = [0; 3];
+    let mut client2_tx_buf: [u8; 4] = [0; 4];
     let mut client2_tx_req = hil::uart::TxRequest::new();
     let mut client2_rx_buf: [u8; 2] = [0; 2];
     let mut client2_rx_req = hil::uart::RxRequest::new();
@@ -252,6 +252,7 @@ impl<'a> kernel::Platform for LaunchXlPlatform<'a> {
     where
         F: FnOnce(Option<&kernel::Driver>) -> R,
     {
+        debug!("With driver");
         match driver_num {
             capsules::uart::DRIVER_NUM => f(Some(self.uart_driver)),
             _ => f(None),
@@ -262,25 +263,27 @@ impl<'a> kernel::Platform for LaunchXlPlatform<'a> {
         let irq = NVIC_IRQ::from_u32(irq_num as u32)
             .expect("Pending IRQ flag not enumerated in NVIQ_IRQ");
         match irq {
-            NVIC_IRQ::GPIO => (),//gpio::PORT.handle_interrupt(),
-            NVIC_IRQ::AON_RTC => (),//rtc::RTC.handle_interrupt(),
+            NVIC_IRQ::GPIO => unsafe{ cc26x2::gpio::PORT.handle_interrupt() },
+            NVIC_IRQ::AON_RTC => unsafe{ cc26x2::rtc::RTC.handle_interrupt() },
             NVIC_IRQ::UART0 => {
                 // pass data from static debug writer to the debug uart client
                 unsafe {
                     self.debug_client.with_buffer( |buf| debug::get_debug_writer().publish_str(buf));
                 }
-                
                 let clients = [
                     self.debug_client as &kernel::hil::uart::Client,
                     self.test_client as &kernel::hil::uart::Client,
                     self.test_client2 as &kernel::hil::uart::Client,
                 ];
-                capsules::uart::handle_irq(0, self.uart_driver, &clients);
+                capsules::uart::handle_irq(0, self.uart_driver, Some(&clients));
             },
-            NVIC_IRQ::I2C0 => (),//i2c::I2C0.handle_interrupt(),
+            NVIC_IRQ::UART1 => {
+                capsules::uart::handle_irq(1, self.uart_driver, None);
+            }
+            NVIC_IRQ::I2C0 => unsafe{ cc26x2::i2c::I2C0.handle_interrupt() },
             // We need to ignore JTAG events since some debuggers emit these
             NVIC_IRQ::AON_PROG => (),
-            _ => ()//panic!("Unhandled interrupt {:?}", irq_num),
+            _ => panic!("Unhandled interrupt {:?}", irq_num),
         }
     }
 }

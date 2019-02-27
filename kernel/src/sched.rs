@@ -241,7 +241,6 @@ impl Kernel {
         systick.reset();
         systick.set_timer(KERNEL_TICK_DURATION_US);
         systick.enable(false);
-
         loop {
             if chip.has_pending_interrupts() {
                 break;
