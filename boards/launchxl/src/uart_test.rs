@@ -102,6 +102,7 @@ impl<'a> hil::uart::Client<'a> for TestClient<'a> {
             }
             self.state.put(state);
         });
+
         self.tx_request.put(Some(returned_request));
     }
 
@@ -117,21 +118,23 @@ impl<'a> hil::uart::Client<'a> for TestClient<'a> {
         self.state.take().map(|state| {
             match state {
                 State::Echo => {
-                    // if there is data
-                    for _i in 0..returned_request.items_pushed() {
-                        if let Some(data) = returned_request.pop() {
-                            
-                            //copy it into the tx_request to echo
-                            self.tx_request.take().map(|tx| {
-                                tx.push(data);
-                                if data == b'\r' {
-                                    debug!("ENTER");
-                                    tx.push(b'\n')
-                                }
-                                self.tx_request.put(Some(tx));
-                            });
+                    //copy it into the tx_request to echo
+                    self.tx_request.take().map(|tx| {
+                        tx.reset();
+                        // if there is data
+                        for _i in 0..returned_request.items_pushed() {
+                            if let Some(data) = returned_request.pop() {
+                                    tx.push(data);
+                                    if data == b'\r' {
+                                        debug!("ENTER");
+                                        tx.push(b'\n')
+                                    }
+                                    
+                                
+                            }
                         }
-                    }
+                        self.tx_request.put(Some(tx));
+                    });
                 }
                 // no behavior in other states
                 _ => {}
