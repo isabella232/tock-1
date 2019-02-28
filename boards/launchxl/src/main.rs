@@ -270,8 +270,8 @@ impl<'a> kernel::Platform for LaunchXlPlatform<'a> {
                 }
                 let clients = [
                     self.debug_client as &kernel::hil::uart::Client,
-                    //self.test_client as &kernel::hil::uart::Client,
-                    //self.test_client2 as &kernel::hil::uart::Client,
+                    // self.test_client as &kernel::hil::uart::Client,
+                    // self.test_client2 as &kernel::hil::uart::Client,
                 ];
                 capsules::uart::handle_irq(0, self.uart_driver, Some(&clients));
             },
