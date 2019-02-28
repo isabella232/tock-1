@@ -23,25 +23,24 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil
 
         // if we have receive a completed transmit, then we need to handle it
         if let Some(request) = tx_complete {
-
+            // set default state transition to IDLE
             state.tx = IDLE;
 
-
-            // if we are handling an app_tx and it is complete, we need to setup the callback
+            // if there is some app_id, then the it is app tx request
             if let Some(app_id) = driver.uart[num].app_requests.tx_in_progress.take() {
-                // put back the driver's request memory
+                // put back the driver's app request memory
                 driver.uart[num].app_requests.tx.put(request);
-
-                // update the app tx request
+                // update the app tx request; if it returns something then
+                // same app request still has data
                 if let Some(app_id) = driver.uart[num].app_tx_update(app_id){
-                    // if app_id has been returned, then it means the same app 
-                    // tx request still has data
                     driver.transmit_app_tx_request(num, app_id);
+                    // undo IDLE transition, we are in fact busy
                     state.tx = BUSY;
                 }
             }
-            // otherwise, it is a kernel client request that needs to be called back
+            // otherwise, it is a kernel client request 
             else if let Some(clients) = clients {
+                // use client callback
                 let client_id = request.client_id;
                 clients[client_id].tx_request_complete(num, request);
             }
@@ -49,6 +48,8 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil
 
         // if we have receive a completed receive, then we need to handle it
         if let Some(request) = rx_complete {
+            // set default state transition to IDLE
+            state.rx = IDLE;
 
             // give the transaction to the driver level for muxing out received bytes to other buffers
             let request = driver.uart[num].mux_completed_tx_to_others(request);
@@ -64,28 +65,24 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil
                     clients[client_id].rx_request_complete(num, next_request);
                 }
             }
-            
-            // rx state always goes IDLE after receiving a completed rx
-            state.rx = IDLE;
         }
 
         // // Dispatch new requests only after both TX/RX completed have been handled
         // TX'es are dispatched one by one, so only take it if we are ready for another one
         if state.tx == IDLE {
+            // Check if Kernel clients have app request
             if let Some(clients) = clients {
                 if dispatch_next_tx_request(num, driver, clients){
                     state.tx = BUSY;
                 }
-            }
-        }
-
-        // if no kernel clients needed to use UART, check for pending application requests
-        if state.tx == IDLE {
-            if let Some(appid) = driver.pending_app_tx_request(num){
+            } 
+            // If no kernel clients needed to use UART, check for pending application requests
+            else if let Some(appid) = driver.pending_app_tx_request(num){
                 driver.transmit_app_tx_request(num, appid);
                 state.tx = BUSY;
             }
         }
+
 
         if let Some(clients) = clients {
             // Each client can have one (and only one) pending RX concurrently with other clients
