@@ -24,24 +24,26 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil
         // if we have receive a completed transmit, then we need to handle it
         if let Some(request) = tx_complete {
 
+            state.tx = IDLE;
+
+
             // if we are handling an app_tx and it is complete, we need to setup the callback
             if let Some(app_id) = driver.uart[num].app_requests.tx_in_progress.take() {
-                driver.uart[num].app_tx_update(app_id);
-                // put the app_request.tx buffer back
+                // put back the driver's request memory
                 driver.uart[num].app_requests.tx.put(request);
 
-                // if the app_id has been put back again, then the tx is not complete
-                if let Some(app_id) = driver.uart[num].app_requests.tx_in_progress.take() {
+                // update the app tx request
+                if let Some(app_id) = driver.uart[num].app_tx_update(app_id){
+                    // if app_id has been returned, then it means the same app 
+                    // tx request still has data
                     driver.transmit_app_tx_request(num, app_id);
-                } else {
-                    state.tx = IDLE;
+                    state.tx = BUSY;
                 }
             }
             // otherwise, it is a kernel client request that needs to be called back
             else if let Some(clients) = clients {
                 let client_id = request.client_id;
                 clients[client_id].tx_request_complete(num, request);
-                state.tx = IDLE;
             }
         }
 
@@ -63,6 +65,7 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil
                 }
             }
             
+            // rx state always goes IDLE after receiving a completed rx
             state.rx = IDLE;
         }
 
@@ -277,19 +280,21 @@ impl<'a> Uart<'a> {
         }
     }
 
-    fn app_tx_update(&self, app_id: AppId) {
+    fn app_tx_update(&self, app_id: AppId) -> Option<AppId>{
         self.apps.enter(app_id, |app, _| {
+            // if app tx request has no data left
             if app.tx.remaining == 0 {
-                // Go ahead and signal the application
+                // Enqueue the application callback
                 let written = app.tx.len();
                 app.tx.callback.map(|mut cb| {
                     cb.schedule(written, 0, 0);
                 });
+                None
             } else {
-                // Otherwise, don't drop app_id
-                self.app_requests.tx_in_progress.set(app_id);
+                // Otherwise, return app_id
+                Some(app_id)
             }
-        });
+        }).unwrap_or_else(|_err| None)
     }
 
     fn handle_interrupt(&self, state: hil::uart::PeripheralState) 
@@ -424,9 +429,7 @@ impl Driver for UartDriver<'a> {
             2 => self.uart[uart_num]
                 .apps
                 .enter(appid, |app, _| {
-                    if let Some(buf) = slice {
-                        //app.rx_request.set_with_mut_ref(buf);
-                    }
+                    app.rx.slice = slice;
                     ReturnCode::SUCCESS
                 })
                 .unwrap_or_else(|err| err.into()),
@@ -495,12 +498,24 @@ impl Driver for UartDriver<'a> {
 
             },
             2 /* getnstr */ => { 
-                ReturnCode::SUCCESS
-                // let len = arg1;
-                // self.uart[uart_num].apps.enter(appid, |app, _| {
-                //     ReturnCode::SUCCESS
-                //     //self.uart[uart_num].receive(appid, app, len)
-                // }).unwrap_or_else(|err| err.into())
+                // update the request with length
+                self.uart[uart_num].apps.enter(appid, |app, _| {
+                    let mut len = arg1;
+                    app.rx.set_len(len);
+                });
+
+                self.uart[uart_num].state.map_or(ReturnCode::ENOSUPPORT, 
+                    |state| {
+                    if state.rx == IDLE {
+                        state.rx = BUSY;
+                        ReturnCode::SUCCESS
+
+                        //self.transmit_app_tx_request(uart_num, appid)
+                    }
+                    else {
+                        ReturnCode::SUCCESS
+                    }
+                })
             },
             3 /* abort rx */ => {
                 self.uart[uart_num].uart.receive_abort();
