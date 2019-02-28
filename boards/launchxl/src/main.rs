@@ -62,6 +62,8 @@ mod cc1352p;
 pub struct Pinmap {
     uart0_rx: usize,
     uart0_tx: usize,
+    uart1_rx: usize,
+    uart1_tx: usize,
     i2c0_scl: usize,
     i2c0_sda: usize,
     red_led: usize,
@@ -75,8 +77,6 @@ pub struct Pinmap {
     a3: usize,
     a4: usize,
     a5: usize,
-    a6: usize,
-    a7: usize,
     pwm0: usize,
     pwm1: usize,
 }
@@ -84,6 +84,9 @@ pub struct Pinmap {
 unsafe fn configure_pins(pin: &Pinmap) {
     cc26x2::gpio::PORT[pin.uart0_rx].enable_uart0_rx();
     cc26x2::gpio::PORT[pin.uart0_tx].enable_uart0_tx();
+
+    cc26x2::gpio::PORT[pin.uart1_rx].enable_uart1_rx();
+    cc26x2::gpio::PORT[pin.uart1_tx].enable_uart1_tx();
 
     cc26x2::gpio::PORT[pin.i2c0_scl].enable_i2c_scl();
     cc26x2::gpio::PORT[pin.i2c0_sda].enable_i2c_sda();
@@ -96,8 +99,6 @@ unsafe fn configure_pins(pin: &Pinmap) {
 
     cc26x2::gpio::PORT[pin.gpio0].enable_gpio();
 
-    cc26x2::gpio::PORT[pin.a7].enable_analog_input();
-    cc26x2::gpio::PORT[pin.a6].enable_analog_input();
     cc26x2::gpio::PORT[pin.a5].enable_analog_input();
     cc26x2::gpio::PORT[pin.a4].enable_analog_input();
     cc26x2::gpio::PORT[pin.a3].enable_analog_input();
@@ -161,7 +162,6 @@ pub unsafe fn reset_handler() {
     // setup uart client for debug on stack
     let mut debug_client_space = debug::DebugClient::space();
     let debug_client = debug::DebugClient::new_with_default_space(&mut debug_client_space);
-
 
     // UART
     let uart0_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_0);
@@ -235,7 +235,7 @@ pub unsafe fn reset_handler() {
         FAULT_RESPONSE,
         &process_management_capability,
     );
-
+    debug!("Hello!");
     board_kernel.kernel_loop(&mut launchxl, chip, None, &main_loop_capability);
 }
 
@@ -264,19 +264,24 @@ impl<'a> kernel::Platform for LaunchXlPlatform<'a> {
             NVIC_IRQ::GPIO => unsafe{ cc26x2::gpio::PORT.handle_interrupt() },
             NVIC_IRQ::AON_RTC => unsafe{ cc26x2::rtc::RTC.handle_interrupt() },
             NVIC_IRQ::UART0 => {
-                // pass data from static debug writer to the debug uart client
-                unsafe {
-                    self.debug_client.with_buffer( |buf| debug::get_debug_writer().publish_str(buf));
-                }
+                debug!(".");
+
                 let clients = [
-                    self.debug_client as &kernel::hil::uart::Client,
-                    // self.test_client as &kernel::hil::uart::Client,
-                    // self.test_client2 as &kernel::hil::uart::Client,
+                    self.test_client as &kernel::hil::uart::Client,
+                    self.test_client2 as &kernel::hil::uart::Client,
                 ];
                 capsules::uart::handle_irq(0, self.uart_driver, Some(&clients));
             },
             NVIC_IRQ::UART1 => {
-                capsules::uart::handle_irq(1, self.uart_driver, None);
+                // pass data from static debug writer to the debug uart client
+                unsafe {
+                    self.debug_client.with_buffer( |buf| debug::get_debug_writer().publish_str(buf));
+                }
+
+                let clients = [
+                    self.debug_client as &kernel::hil::uart::Client,
+                ];
+                capsules::uart::handle_irq(1, self.uart_driver, Some(&clients));
             }
             NVIC_IRQ::I2C0 => unsafe{ cc26x2::i2c::I2C0.handle_interrupt() },
             // We need to ignore JTAG events since some debuggers emit these

@@ -32,6 +32,10 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil
                 driver.uart[num].app_requests.tx.put(request);
                 // update the app tx request; if it returns something then
                 // same app request still has data
+                if num == 0 {
+                    debug!("Returning app tx request");
+
+                }
                 if let Some(app_id) = driver.uart[num].app_tx_update(app_id){
                     driver.transmit_app_tx_request(num, app_id);
                     // undo IDLE transition, we are in fact busy
@@ -42,6 +46,9 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil
             else if let Some(clients) = clients {
                 // use client callback
                 let client_id = request.client_id;
+                if num == 0 {
+                    debug!("Returning kernel client tx request {}", client_id);
+                }
                 clients[client_id].tx_request_complete(num, request);
             }
         }
@@ -79,15 +86,19 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil
             if let Some(clients) = clients {
                 if dispatch_next_tx_request(num, driver, clients){
                     state.tx = BUSY;
-                }
-            } 
-            // If no kernel clients needed to use UART, check for pending application requests
-            else if let Some(appid) = driver.pending_app_tx_request(num){
+                } 
+            }
+        }
+
+        // If no kernel clients needed to use UART, 
+        // check for pending application requests
+        if state.tx == IDLE {
+            if let Some(appid) = driver.pending_app_tx_request(num){
+                debug!("Dispatching app tx request");
                 driver.transmit_app_tx_request(num, appid);
                 state.tx = BUSY;
             }
         }
-
 
         if let Some(clients) = clients {
             // Each client can have one (and only one) pending RX concurrently with other clients
@@ -253,24 +264,6 @@ impl<'a> UartDriver<'a> {
             ReturnCode::ENOSUPPORT
         }
     }
-
-    fn transmit_app_rx_request(&self, uart_num: usize, app_id: AppId) -> ReturnCode {
-        
-        if let Some(request) = self.uart[uart_num].app_requests.rx.take(){
-            //TODO: handle error from apps.enter
-            self.uart[uart_num].apps.enter(app_id, |app, _| {
-                request.reset();
-                request.initialize_from_app_request(&mut app.rx);
-            });           
-            self.uart[uart_num].app_requests.rx_in_progress.set(app_id);
-            self.uart[uart_num].uart.receive_buffer(request)
-        }
-        else{
-            panic!("transmit_app_request invoked but no request_tx buffer available on uart {}", uart_num);
-            ReturnCode::ENOSUPPORT
-        }
-    }
-
 }
 
 static DEFAULT_PARAMS: hil::uart::Parameters = hil::uart::Parameters {
@@ -430,37 +423,34 @@ impl<'a> Uart<'a> {
             }
 
             // copy it into any app requests
-            // for app in self.apps.iter() {
-            //     app.enter(|app, _| {
-            //         // if there is a minimum already, compare to see if this is shorter
-            //         if let Some(mut min) = min {
-            //             if app.rx.remaining <  min {
-            //                 min = app.rx.remaining;
-            //                 appid  = app.appid();
-            //             }
-            //         }
-            //         // otherwise, this is the min so far
-            //         else{
-            //             min = Some(app.rx.remaining);
-            //             appid  = app.appid();
-            //         }
-            //     });
-            // }
+            for app in self.apps.iter() {
+                app.enter(|app, _| {
+
+                    if app.rx.remaining > 0 {
+                        // if there is a minimum already, compare to see if this is shorter
+                        if let Some(mut min) = min {
+                            if app.rx.remaining <  min {
+                                min = app.rx.remaining;
+                                appid  = Some(app.appid());
+                            }
+                        }
+                        // otherwise, this is the min so far
+                        else{
+                            min = Some(app.rx.remaining);
+                            appid  = Some(app.appid());
+                        }
+                    }
+                });
+            }
 
             // if there was a request found,dispatch it
             if let Some(_min) = min {
-                // if let Some(appid) = appid {
-                //     self.transmit_app_tx_request(appid);
-
-                // }
-
-
-                if let Some(request) = requests_stash[min_index].take() {
+                if let Some(appid) = appid {
+                    self.transmit_app_rx_request(appid);
+                } else if let Some(request) = requests_stash[min_index].take() {
                     self.uart.receive_buffer(request);
-                    
-                    return true;
                 }
-
+                return true;
             }
 
         }
@@ -468,9 +458,20 @@ impl<'a> Uart<'a> {
         false
     }
 
-    /// Internal helper function for starting a receive operation
-    fn receive(&self, app_id: AppId, app: &mut App, len: usize) -> ReturnCode {
-        ReturnCode::ENOSUPPORT
+    fn transmit_app_rx_request(&self, app_id: AppId) -> ReturnCode {
+        if let Some(request) = self.app_requests.rx.take(){
+            //TODO: handle error from apps.enter
+            self.apps.enter(app_id, |app, _| {
+                request.reset();
+                request.initialize_from_app_request(&mut app.rx);
+            });           
+            self.app_requests.rx_in_progress.set(app_id);
+            self.uart.receive_buffer(request)
+        }
+        else{
+            panic!("uart transmit_app_request invoked but no request_tx buffer available");
+            ReturnCode::ENOSUPPORT
+        }
     }
 }
 
@@ -574,7 +575,7 @@ impl Driver for UartDriver<'a> {
                     |state| {
                     if state.rx == IDLE {
                         state.rx = BUSY;
-                        self.transmit_app_rx_request(uart_num, appid)
+                        self.uart[uart_num].transmit_app_rx_request(appid)
                     }
                     else {
                         ReturnCode::SUCCESS

@@ -9,6 +9,8 @@ enum_from_primitive! {
 pub enum PIN_FN {
     UART0_RX = 2,
     UART0_TX = 3,
+    UART1_RX = 23,
+    UART1_TX = 24,
     I2C0_SCL = 4,
     I2C0_SDA = 5,
     TDO = 16,
@@ -24,8 +26,6 @@ pub enum PIN_FN {
     ADC3 = 27,
     ADC4 = 26,
     ADC5 = 25,
-    ADC6 = 24,
-    ADC7 = 23,
     PWM0 = 18,
     PWM1 = 19,
 }
@@ -34,6 +34,8 @@ pub enum PIN_FN {
 pub static PINMAP: Pinmap = Pinmap {
     uart0_rx: PIN_FN::UART0_RX as usize,
     uart0_tx: PIN_FN::UART0_TX as usize,
+    uart1_rx: PIN_FN::UART1_RX as usize,
+    uart1_tx: PIN_FN::UART1_TX as usize,
     i2c0_scl: PIN_FN::I2C0_SCL as usize,
     i2c0_sda: PIN_FN::I2C0_SDA as usize,
     red_led: PIN_FN::RED_LED as usize,
@@ -47,8 +49,6 @@ pub static PINMAP: Pinmap = Pinmap {
     a3: PIN_FN::ADC3 as usize,
     a4: PIN_FN::ADC4 as usize,
     a5: PIN_FN::ADC5 as usize,
-    a6: PIN_FN::ADC6 as usize,
-    a7: PIN_FN::ADC7 as usize,
     pwm0: PIN_FN::PWM0 as usize,
     pwm1: PIN_FN::PWM1 as usize,
 };
