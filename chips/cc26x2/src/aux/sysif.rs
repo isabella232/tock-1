@@ -245,74 +245,80 @@ pub const WUMODE_LP: u8 = 1;
 pub const WUMODE_PDA: u8 = 2;
 pub const WUMODE_PDLP: u8 = 3;
 
+pub const AUX: AuxSysIf = AuxSysIf::new();
+
 pub enum Polarity {
     High,
     Low,
 }
 
-// impl Aux {
-//     const fn new() -> Aux {
-//         Aux {
-//             sysif_regs: AUX_SYSIF,
-//         }
-//     }
+pub struct AuxSysIf {
+    sysif_regs: StaticRef<Registers>,
+}
 
-//     pub fn aux_prog_wu_cfg0(&self, src: WakeUpSource, pol: Polarity, en: bool) {
-//         let regs = &*self.sysif_regs;
-//         match pol {
-//             Polarity::High => regs.prog_wu0_cfg.modify(WUCfg::POL::CLEAR),
-//             Polarity::Low => regs.prog_wu0_cfg.modify(WUCfg::POL::SET),
-//         }
-//         match en {
-//             true => regs.prog_wu0_cfg.modify(WUCfg::EN::SET),
-//             false => regs.prog_wu0_cfg.modify(WUCfg::EN::CLEAR),
-//         }
-//         match src {
-//             WakeUpSource::NoEvent => regs.prog_wu0_cfg.modify(WUCfg::WU_SRC::NoEvent),
-//             WakeUpSource::McuActive => regs.prog_wu0_cfg.modify(WUCfg::WU_SRC::McuActive),
-//             _ => regs.prog_wu0_cfg.modify(WUCfg::WU_SRC::NoEvent),
-//         }
-//     }
+impl AuxSysIf {
+    const fn new() -> AuxSysIf {
+        AuxSysIf {
+            sysif_regs: REGISTERS,
+        }
+    }
 
-//     pub fn setup(&self) {
-//         self.operation_mode_request(WUMODE_A);
-//         while self.operation_mode_ack() != WUMODE_A {}
+    pub fn aux_prog_wu_cfg0(&self, src: WakeUpSource, pol: Polarity, en: bool) {
+        let regs = &*self.sysif_regs;
+        match pol {
+            Polarity::High => regs.prog_wu0_cfg.modify(WUCfg::POL::CLEAR),
+            Polarity::Low => regs.prog_wu0_cfg.modify(WUCfg::POL::SET),
+        }
+        match en {
+            true => regs.prog_wu0_cfg.modify(WUCfg::EN::SET),
+            false => regs.prog_wu0_cfg.modify(WUCfg::EN::CLEAR),
+        }
+        match src {
+            WakeUpSource::NoEvent => regs.prog_wu0_cfg.modify(WUCfg::WU_SRC::NoEvent),
+            WakeUpSource::McuActive => regs.prog_wu0_cfg.modify(WUCfg::WU_SRC::McuActive),
+            _ => regs.prog_wu0_cfg.modify(WUCfg::WU_SRC::NoEvent),
+        }
+    }
 
-//         // self.aux_wu_enable(false);
-//         self.aux_prog_wu_cfg0(WakeUpSource::NoEvent, Polarity::High, true);
-//         self.aux_wu_enable(true);
-//     }
+    pub fn setup(&self) {
+        self.operation_mode_request(WUMODE_A);
+        while self.operation_mode_ack() != WUMODE_A {}
 
-//     pub fn operation_mode_request(&self, new_mode: u8) {
-//         let regs = &*self.sysif_regs;
-//         match new_mode {
-//             WUMODE_A => {
-//                 regs.op_mode_req.modify(OpModeReq::REQ::Active);
-//             }
-//             WUMODE_LP => {
-//                 regs.op_mode_req.modify(OpModeReq::REQ::LowPower);
-//             }
-//             WUMODE_PDA => {
-//                 regs.op_mode_req.modify(OpModeReq::REQ::PowerDownActive);
-//             }
-//             WUMODE_PDLP => {
-//                 regs.op_mode_req.modify(OpModeReq::REQ::PowerDownLowPower);
-//             }
-//             _ => panic!("Not a valid op mode"),
-//         }
-//     }
+        // self.aux_wu_enable(false);
+        self.aux_prog_wu_cfg0(WakeUpSource::NoEvent, Polarity::High, true);
+        self.aux_wu_enable(true);
+    }
 
-//     pub fn operation_mode_ack(&self) -> u8 {
-//         let regs = &*self.sysif_regs;
-//         regs.op_mode_ack.read(OpModeAck::ACK) as u8
-//     }
+    pub fn operation_mode_request(&self, new_mode: u8) {
+        let regs = &*self.sysif_regs;
+        match new_mode {
+            WUMODE_A => {
+                regs.op_mode_req.modify(OpModeReq::CLOCK::Active);
+            }
+            WUMODE_LP => {
+                regs.op_mode_req.modify(OpModeReq::CLOCK::LowPower);
+            }
+            WUMODE_PDA => {
+                regs.op_mode_req.modify(OpModeReq::CLOCK::PowerDownActive);
+            }
+            WUMODE_PDLP => {
+                regs.op_mode_req.modify(OpModeReq::CLOCK::PowerDownLowPower);
+            }
+            _ => panic!("Not a valid op mode"),
+        }
+    }
 
-//     pub fn aux_wu_enable(&self, enable: bool) {
-//         let regs = &*self.sysif_regs;
-//         if enable {
-//             regs.wu_gate.modify(WUGate::EN::SET);
-//         } else {
-//             regs.wu_gate.modify(WUGate::EN::CLEAR);
-//         }
-//     }
-// }
+    pub fn operation_mode_ack(&self) -> u8 {
+        let regs = &*self.sysif_regs;
+        regs.op_mode_ack.read(OpModeAck::CLOCK) as u8
+    }
+
+    pub fn aux_wu_enable(&self, enable: bool) {
+        let regs = &*self.sysif_regs;
+        if enable {
+            regs.wu_gate.modify(WUGate::EN::SET);
+        } else {
+            regs.wu_gate.modify(WUGate::EN::CLEAR);
+        }
+    }
+}

@@ -280,7 +280,7 @@ unsafe extern "C" fn TrimAfterColdResetWakeupFromShutDown(mut ui32Fcfg1Revision:
     // Wait two more LF edges before restoring xxx_LOSS_EN settings
     rtc::RTC.synclf();
     rtc::RTC.synclf();
-    //aon::AON.reset_ctl_set((orgResetCtl as usize) as u32);
+    //aon::AON.reset_ctl_set(orgResetCtl);
     // Issue replacing unsafe write with aon set call here
     *((0x40090000i32 + 0x28i32) as (*mut usize)) = orgResetCtl as (usize);
 

@@ -1,5 +1,7 @@
+use crate::chip::SleepMode;
 use crate::enum_primitive::cast::FromPrimitive;
 use crate::osc;
+use crate::peripheral_manager::PowerClient;
 use crate::radio::commands::{
     prop_commands as prop, DirectCommand, RadioCommand, RfcCondition, RfcTrigger, LR_RFPARAMS,
 };
@@ -40,6 +42,7 @@ pub struct Radio {
     power_client: OptionalCell<&'static rfcore::PowerClient>,
     update_config: Cell<bool>,
     schedule_powerdown: Cell<bool>,
+    can_sleep: Cell<bool>,
     tx_buf: TakeCell<'static, [u8]>,
     rx_buf: TakeCell<'static, [u8]>,
     tx_power: Cell<u16>,
@@ -55,6 +58,7 @@ impl Radio {
             power_client: OptionalCell::empty(),
             update_config: Cell::new(false),
             schedule_powerdown: Cell::new(false),
+            can_sleep: Cell::new(false),
             tx_buf: TakeCell::empty(),
             rx_buf: TakeCell::empty(),
             tx_power: Cell::new(0xFFFF),
@@ -707,6 +711,20 @@ impl rfcore::RadioConfig for Radio {
             ReturnCode::SUCCESS
         } else {
             ReturnCode::FAIL
+        }
+    }
+}
+
+impl PowerClient for Radio {
+    fn before_sleep(&self, _sleep_mode: u32) {}
+
+    fn after_wakeup(&self, _sleep_mode: u32) {}
+
+    fn lowest_sleep_mode(&self) -> u32 {
+        if self.can_sleep.get() {
+            SleepMode::DeepSleep as u32
+        } else {
+            SleepMode::Sleep as u32
         }
     }
 }
