@@ -1,6 +1,5 @@
 use kernel::common::cells::{MapCell, TakeCell};
 
-use kernel::debug;
 const MSG1: &'static [u8; 15] = b"Hello, World!\r\n";
 const MSG2: &'static [u8; 22] = b"You can start typing\r\n";
 

@@ -20,8 +20,6 @@ use cc26x2::pwm;
 use kernel::capabilities;
 use kernel::hil;
 
-use core::mem;
-
 use capsules::uart;
 
 #[macro_use]

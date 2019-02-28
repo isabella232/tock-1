@@ -1,8 +1,6 @@
 use kernel::common::cells::{OptionalCell, TakeCell, MapCell};
-use kernel::debug;
 
 use kernel::hil;
-use kernel::hil::uart::InterruptHandler;
 use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
 
 /// Syscall driver number.
@@ -10,7 +8,6 @@ use crate::driver;
 pub const DRIVER_NUM: usize = driver::NUM::CONSOLE as usize;
 
 use kernel::ikc::DriverState::{BUSY, IDLE};
-use kernel::ikc::Request::{RX, TX};
 use kernel::ikc;
 
 pub type AppRequest = ikc::AppRequest<u8>;
@@ -32,10 +29,6 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil
                 driver.uart[num].app_requests.tx.put(request);
                 // update the app tx request; if it returns something then
                 // same app request still has data
-                if num == 0 {
-                    debug!("Returning app tx request");
-
-                }
                 if let Some(app_id) = driver.uart[num].app_tx_update(app_id){
                     driver.transmit_app_tx_request(num, app_id);
                     // undo IDLE transition, we are in fact busy
@@ -46,9 +39,6 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil
             else if let Some(clients) = clients {
                 // use client callback
                 let client_id = request.client_id;
-                if num == 0 {
-                    debug!("Returning kernel client tx request {}", client_id);
-                }
                 clients[client_id].tx_request_complete(num, request);
             }
         }
@@ -61,7 +51,7 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil
             let request = driver.uart[num].mux_completed_rx_to_others(request);
 
             // if there is some app_id, then the it is app tx request
-            if let Some(app_id) = driver.uart[num].app_requests.rx_in_progress.take() {
+            if let Some(_app_id) = driver.uart[num].app_requests.rx_in_progress.take() {
                 // put back the driver's app request memory
                 driver.uart[num].app_requests.rx.put(request);
                 // no need to write out the data since mux_completed does that already
@@ -94,7 +84,6 @@ pub fn handle_irq(num: usize, driver: &UartDriver<'a>, clients: Option<&[&'a hil
         // check for pending application requests
         if state.tx == IDLE {
             if let Some(appid) = driver.pending_app_tx_request(num){
-                debug!("Dispatching app tx request");
                 driver.transmit_app_tx_request(num, appid);
                 state.tx = BUSY;
             }
@@ -260,8 +249,8 @@ impl<'a> UartDriver<'a> {
             self.uart[uart_num].uart.transmit_buffer(request)
         }
         else{
-            panic!("transmit_app_request invoked but no request_tx buffer available on uart {}", uart_num);
-            ReturnCode::ENOSUPPORT
+            //transmit_app_request invoked but no request_tx buffer available
+            ReturnCode::FAIL
         }
     }
 }
@@ -291,7 +280,7 @@ impl<'a> Uart<'a> {
             apps: grant,
         }
     }
-
+    
     fn app_tx_update(&self, app_id: AppId) -> Option<AppId>{
         self.apps.enter(app_id, |app, _| {
             // if app tx request has no data left
@@ -317,7 +306,7 @@ impl<'a> Uart<'a> {
     fn stash_rx_request(&self, rx: &'a mut hil::uart::RxRequest<'a>){
         let index = rx.client_id;
         if let Some(requests_stash) = self.rx_requests {
-            if let Some(existing_request) = requests_stash[index].take() {
+            if let Some(_existing_request) = requests_stash[index].take() {
                 panic!("Client #{} should not be making new request when request is already pending!", index)
             }
             else {
@@ -469,8 +458,8 @@ impl<'a> Uart<'a> {
             self.uart.receive_buffer(request)
         }
         else{
-            panic!("uart transmit_app_request invoked but no request_tx buffer available");
-            ReturnCode::ENOSUPPORT
+            // uart transmit_app_request invoked but no request_tx buffer available
+            ReturnCode::FAIL
         }
     }
 }
