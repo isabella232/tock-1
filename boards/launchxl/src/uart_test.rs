@@ -126,7 +126,6 @@ impl<'a> hil::uart::Client<'a> for TestClient<'a> {
                             if let Some(data) = returned_request.pop() {
                                 tx.push(data);
                                 if data == b'\r' {
-                                    debug!("ENTER");
                                     tx.push(b'\n')
                                 }
                             }

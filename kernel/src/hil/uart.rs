@@ -195,7 +195,7 @@ pub trait Receive<'a> {
     fn receive_buffer(
         &self,
         req: &'a mut RxRequest<'a>,
-    ) -> (ReturnCode, Option<&'a mut RxRequest<'a>>);
+    ) -> ReturnCode;
 
     /// Receive a single word of data. The word length is determined
     /// by the UART configuration: it can be 6, 7, 8, or 9 bits long.

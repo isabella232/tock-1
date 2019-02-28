@@ -3,14 +3,14 @@ use super::{AppSlice, Shared, Callback};
 use core::cmp;
 
 #[derive(Default)]
-pub struct AppRequest <T> {
+pub struct AppRequest <T: Copy> {
     pub slice: Option<AppSlice<Shared, T>>,
     pub callback: Option<Callback>,
     length: usize ,
     pub remaining: usize,
 }
 
-impl<T> AppRequest <T> {
+impl<T: Copy> AppRequest <T> {
     pub fn set_len(&mut self, len: usize){
         let mut length = len;
         if let Some(ref buf) = self.slice {
@@ -22,6 +22,14 @@ impl<T> AppRequest <T> {
 
     pub fn len(&self) -> usize {
         self.length
+    }
+
+    pub fn push<'a>(&mut self, element: T) {
+        if let Some(ref mut buf) = self.slice {
+            let offset = self.length - self.remaining;
+            buf.as_mut()[offset] = element;
+            self.remaining -= 1;
+        }
     }
 }
 
@@ -258,6 +266,22 @@ impl<'a, T: Copy> RxRequest<'a, T> {
             requested: 0,
             client_id: 0xFF,
         }
+    }
+
+    pub fn initialize_from_app_request(&mut self, app_request: &mut AppRequest<T>) {
+        match &mut self.buf {
+            RxBuf::MUT(ref mut buf) => {
+                let num_elements = cmp::min(buf.len(), app_request.remaining);
+                if let Some(ref slice) = app_request.slice {
+                    self.requested = num_elements;
+                }
+            },
+            _ => panic!("Can only copy_from_app_slice if self is RxBuf::MUT"),
+        };
+    }
+
+    pub fn requested_length(&self) -> usize {
+       self.requested
     }
 
     pub fn new_with_mut_ref(buf: &'a mut [T]) -> RxRequest<'a, T> {

@@ -244,7 +244,6 @@ pub struct LaunchXlPlatform<'a> {
     debug_client: &'a debug::DebugClient<'a>,
     test_client: &'a uart_test::TestClient<'a>,
     test_client2: &'a uart_test::TestClient<'a>,
-
 }
 
 impl<'a> kernel::Platform for LaunchXlPlatform<'a> {
@@ -271,8 +270,8 @@ impl<'a> kernel::Platform for LaunchXlPlatform<'a> {
                 }
                 let clients = [
                     self.debug_client as &kernel::hil::uart::Client,
-                    self.test_client as &kernel::hil::uart::Client,
-                    self.test_client2 as &kernel::hil::uart::Client,
+                    //self.test_client as &kernel::hil::uart::Client,
+                    //self.test_client2 as &kernel::hil::uart::Client,
                 ];
                 capsules::uart::handle_irq(0, self.uart_driver, Some(&clients));
             },

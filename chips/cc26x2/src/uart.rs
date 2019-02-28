@@ -328,12 +328,12 @@ impl<'a> uart::Receive<'a> for UART<'a> {
     fn receive_buffer(
         &self,
         request: &'a mut uart::RxRequest<'a>,
-    ) -> (ReturnCode, Option<&'a mut uart::RxRequest<'a>>) {
+    ) -> ReturnCode {
         if self.rx.is_some() || self.receiving_word.get() {
-            (ReturnCode::EBUSY, Some(request))
+            ReturnCode::EBUSY 
         } else {
             self.rx.put(request);
-            (ReturnCode::SUCCESS, None)
+            ReturnCode::SUCCESS
         }
     }
 
