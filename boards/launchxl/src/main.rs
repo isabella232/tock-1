@@ -25,6 +25,7 @@ use kernel::hil::gpio::Pin;
 use kernel::hil::gpio::PinCtl;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::rng::Rng;
+use kernel::platform::Platform;
 
 #[macro_use]
 pub mod io;
@@ -55,7 +56,7 @@ static mut APP_MEMORY: [u8; 0x10000] = [0; 0x10000];
 #[link_section = ".stack_buffer"]
 pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 
-pub struct Platform<'a>{
+pub struct LaunchXlPlatform<'a>{
     gpio: &'static capsules::gpio::GPIO<'static, cc26x2::gpio::GPIOPin>,
     led: &'static capsules::led::LED<'static, cc26x2::gpio::GPIOPin>,
     uart: &'a capsules::uart::UartDriver<'a>,
@@ -69,7 +70,7 @@ pub struct Platform<'a>{
     i2c_master: &'static capsules::i2c_master::I2CMasterDriver<cc26x2::i2c::I2CMaster<'static>>,
 }
 
-impl<'a> kernel::Platform for Platform<'a> {
+impl<'a> kernel::Platform for LaunchXlPlatform<'a> {
     fn with_driver<F, R>(&self, driver_num: usize, f: F) -> R
     where
         F: FnOnce(Option<&kernel::Driver>) -> R,
@@ -391,7 +392,7 @@ pub unsafe fn reset_handler() {
 
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
 
-    let mut launchxl = Platform {
+    let mut launchxl = LaunchXlPlatform {
         uart: &uart_driver,
         debug_client: &debug_client,
         gpio,
@@ -401,6 +402,9 @@ pub unsafe fn reset_handler() {
         rng,
         i2c_master,
     };
+
+    // prime the pump with this interaction
+    launchxl.handle_irq(NVIC_IRQ::UART0 as usize);
 
     let chip = static_init!(cc26x2::chip::Cc26X2, cc26x2::chip::Cc26X2::new(HFREQ));
 

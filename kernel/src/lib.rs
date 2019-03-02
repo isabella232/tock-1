@@ -30,7 +30,7 @@ mod driver;
 mod grant;
 mod mem;
 mod memop;
-mod platform;
+pub mod platform;
 mod process;
 mod returncode;
 mod sched;
