@@ -1,7 +1,7 @@
 # Makefile for building the tock kernel for the launchxl development kit
 
 TOCK_ARCH=cortex-m4
-TOCK_BOARD=launchxl
+TOCK_BOARD=helium-feather
 TARGET=thumbv7em-none-eabi
 PLATFORM=helium-feather
 OPENOCD ?= openocd
@@ -14,11 +14,11 @@ include ../Makefile.common
 flash: target/$(TARGET)/release/helium-feather.bin
 	$(OPENOCD) -f flash-kernel.openocd
 
-flash-ccfg: target/$(TARGET)/release/helium-feather-ccfg.bin
+flash-ccfg: target/$(TARGET)/release/helium-featherccfg.bin
 	$(OPENOCD) -f flash-ccfg.openocd
 
 flash-jlink: target/$(TARGET)/release/helium-feather.bin
 	$(JLINK_EXE) $(JLINK_ARGUMENTS) -CommanderScript flash-kernel.jlink
 
-flash-ccfg-jlink: target/$(TARGET)/release/launchxlccfg.bin
+flash-ccfg-jlink: target/$(TARGET)/release/helium-featherccfg.bin
 	$(JLINK_EXE) $(JLINK_ARGUMENTS) -CommanderScript flash-ccfg.jlink

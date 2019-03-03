@@ -285,12 +285,12 @@ impl RFCore {
 
         // Initialize radio module
         let cmd_init = cmd::DirectCommand::new(cmd::RFC_CMD0, 0x10 | 0x40);
-        self.send_direct(&cmd_init).ok();
+        self.send_direct_async(&cmd_init).ok();
         self.apply_rfcore_patch();
 
         // Request bus
         let cmd_bus_req = cmd::DirectCommand::new(cmd::RFC_BUS_REQUEST, 1);
-        self.send_direct(&cmd_bus_req).ok();
+        self.send_direct_async(&cmd_bus_req).ok();
         self.sync_on_ack();
 
         // Ping radio module

@@ -18,7 +18,7 @@ use kernel::hil::sky2435l;
 use kernel::ReturnCode;
 
 // Fields for testing
-const TEST_PAYLOAD: [u8; 30] = [0; 30];
+const TEST_PAYLOAD: [u8; 100] = [0; 100];
 enum_from_primitive! {
 pub enum TestType {
     Tx = 0,
@@ -254,7 +254,6 @@ impl Radio {
         osc::OSC.switch_to_hf_xosc();
 
         self.set_pa_restriction();
-
         unsafe {
             let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
             let tx_std_overrides: u32 = TX_STD_PARAMS.as_mut_ptr() as u32;
@@ -324,7 +323,7 @@ impl Radio {
                 packet.set_var_len(true);
                 packet
             };
-            cmd.packet_len = 0x14;
+            cmd.packet_len = 0x64;
             cmd.sync_word = 0x00000000;
             cmd.packet_pointer = p_packet;
             RadioCommand::guard(cmd);

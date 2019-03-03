@@ -534,9 +534,9 @@ pub unsafe fn reset_handler() {
 
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
-    //debug!("RFC Test");
-    //let rfc = &cc26x2::radio::MULTIMODE_RADIO;
-    //rfc.run_tests(0);
+    debug!("RFC Test");
+    let rfc = &cc26x2::radio::MULTIMODE_RADIO;
+    rfc.run_tests(0);
 
     // set nominal voltage
     cc26x2::adc::ADC.nominal_voltage = Some(3300);
@@ -641,7 +641,7 @@ pub unsafe fn reset_handler() {
 
     adc::ADC.configure(adc::Source::NominalVdds, adc::SampleCycle::_170_us);
 
-    //debug!("Loading processes");
+    debug!("Loading processes");
 
     kernel::procs::load_processes(
         board_kernel,
