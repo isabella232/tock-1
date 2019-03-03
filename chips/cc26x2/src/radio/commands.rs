@@ -1,7 +1,16 @@
 use kernel::common::registers::ReadOnly;
 // Radio setup configuration overrides
 //
-pub static mut LR_RFPARAMS: [u32; 28] = [
+
+pub static mut LR_RFPARAMS: [u32; 6] = [
+    0x030c5068, 0x50884446, 0x0017609c, 0x000288A3, 0x7ddf0002, 0xFFFFFFFF,
+];
+
+pub static mut TX_STD_PARAMS: [u32; 4] = [0x0141362b, 0x11310703, 0x001a6028, 0xFFFFFFFF];
+
+pub static mut TX_20_PARAMS: [u32; 4] = [0x82a86c2b, 0x11310703, 0x001f6028, 0xFFFFFFFF];
+
+pub static mut OLD_LR_RFPARAMS: [u32; 28] = [
     // override_use_patch_simplelink_long_range.xml
     0x00000847, // PHY: Use MCE RAM patch, RFE RAM patch MCE_RFE_OVERRIDE(1,0,0,1,0,0),
     0x006E88E3, // PHY: Use MCE RAM patch only for Rx (0xE), use MCE ROM bank 6 for Tx (0x6)
@@ -282,6 +291,8 @@ pub mod prop_commands {
         pub center_freq: u16,
         pub int_freq: u16,
         pub lo_divider: u8,
+        pub reg_override_tx_std: u32,
+        pub reg_override_tx_20: u32,
     }
 
     unsafe impl RadioCommand for CommandRadioDivSetup {

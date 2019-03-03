@@ -17,6 +17,7 @@ pub mod radio;
 pub mod rfcore;
 pub mod rng;
 pub mod sensors;
+pub mod sky2435l;
 pub mod spi;
 pub mod symmetric_encryption;
 pub mod time;

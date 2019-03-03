@@ -4,6 +4,7 @@ use crate::osc;
 use crate::peripheral_manager::PowerClient;
 use crate::radio::commands::{
     prop_commands as prop, DirectCommand, RadioCommand, RfcCondition, RfcTrigger, LR_RFPARAMS,
+    TX_20_PARAMS, TX_STD_PARAMS,
 };
 use crate::radio::queue;
 use crate::radio::rfc;
@@ -13,6 +14,7 @@ use core::slice;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::rfcore;
 use kernel::hil::rfcore::PaType;
+use kernel::hil::sky2435l;
 use kernel::ReturnCode;
 
 // Fields for testing
@@ -40,6 +42,7 @@ pub struct Radio {
     tx_client: OptionalCell<&'static rfcore::TxClient>,
     rx_client: OptionalCell<&'static rfcore::RxClient>,
     power_client: OptionalCell<&'static rfcore::PowerClient>,
+    skyworks_client: OptionalCell<&'static sky2435l::Skyworks>,
     update_config: Cell<bool>,
     schedule_powerdown: Cell<bool>,
     can_sleep: Cell<bool>,
@@ -56,6 +59,7 @@ impl Radio {
             tx_client: OptionalCell::empty(),
             rx_client: OptionalCell::empty(),
             power_client: OptionalCell::empty(),
+            skyworks_client: OptionalCell::empty(),
             update_config: Cell::new(false),
             schedule_powerdown: Cell::new(false),
             can_sleep: Cell::new(false),
@@ -86,22 +90,34 @@ impl Radio {
         // Need to match on patches here but for now, just default to genfsk patches
         unsafe {
             let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
-            self.rfc.setup(reg_overrides, self.tx_power.get());
+            let tx_std_overrides: u32 = TX_STD_PARAMS.as_mut_ptr() as u32;
+            let tx_20_overrides: u32 = TX_20_PARAMS.as_mut_ptr() as u32;
+            self.rfc.setup(
+                reg_overrides,
+                tx_std_overrides,
+                tx_20_overrides,
+                self.tx_power.get(),
+            );
         }
 
         self.set_radio_fs();
         self.power_client
             .map(|client| client.power_mode_changed(true));
+        self.skyworks_client.map(|client| client.bypass());
     }
 
     pub fn power_down(&self) {
         self.rfc.disable();
+
+        self.skyworks_client.map(|client| client.bypass());
 
         self.power_client
             .map(|client| client.power_mode_changed(false));
     }
 
     unsafe fn replace_and_send_tx_buffer(&self, buf: &'static mut [u8], len: usize) {
+        self.skyworks_client.map(|client| client.enable_pa());
+
         for i in 0..COMMAND_BUF.len() {
             COMMAND_BUF[i] = 0;
         }
@@ -158,6 +174,8 @@ impl Radio {
     }
 
     unsafe fn start_rx_cmd(&self) -> ReturnCode {
+        self.skyworks_client.map(|client| client.enable_lna());
+
         for i in 0..COMMAND_BUF.len() {
             COMMAND_BUF[i] = 0;
         }
@@ -231,7 +249,6 @@ impl Radio {
 
         osc::OSC.request_switch_to_hf_xosc();
         self.rfc.enable();
-
         self.rfc.start_rat();
 
         osc::OSC.switch_to_hf_xosc();
@@ -240,11 +257,16 @@ impl Radio {
 
         unsafe {
             let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
-            self.rfc.setup(reg_overrides, self.tx_power.get());
+            let tx_std_overrides: u32 = TX_STD_PARAMS.as_mut_ptr() as u32;
+            let tx_20_overrides: u32 = TX_20_PARAMS.as_mut_ptr() as u32;
+            self.rfc.setup(
+                reg_overrides,
+                tx_std_overrides,
+                tx_20_overrides,
+                self.tx_power.get(),
+            );
         }
-
         self.set_radio_fs();
-
         if let Some(t) = TestType::from_u8(test) {
             match t {
                 TestType::Tx => self.test_radio_tx(),
@@ -254,6 +276,13 @@ impl Radio {
     }
 
     fn test_radio_tx(&self) {
+        let ret = self.skyworks_client.map(|client| client.enable_pa());
+        if ret == Some(ReturnCode::SUCCESS) {
+            debug!("PA enabled");
+        } else {
+            panic!("PA enable FAIL");
+        }
+
         let mut packet = TEST_PAYLOAD;
         let mut seq: u8 = 0;
         for p in packet.iter_mut() {
@@ -308,6 +337,13 @@ impl Radio {
     }
 
     fn test_radio_rx(&self) {
+        let ret = self.skyworks_client.map(|client| client.enable_lna());
+        if ret == Some(ReturnCode::SUCCESS) {
+            debug!("LNA enabled");
+        } else {
+            panic!("LNA enable FAIL");
+        }
+
         unsafe {
             for i in 0..COMMAND_BUF.len() {
                 COMMAND_BUF[i] = 0;
@@ -442,11 +478,15 @@ impl rfc::RFCoreClient for Radio {
     }
 
     fn tx_done(&self) {
+        self.skyworks_client.map(|client| client.enable_lna());
+
         unsafe { rtc::RTC.sync() };
 
         if self.schedule_powerdown.get() {
             // TODO Need to handle powerdown failure here or we will not be able to enter low power
             // modes
+            self.skyworks_client.map(|client| client.bypass());
+
             self.power_down();
             osc::OSC.switch_to_hf_rcosc();
 
@@ -461,6 +501,7 @@ impl rfc::RFCoreClient for Radio {
     }
 
     fn rx_ok(&self) {
+        self.skyworks_client.map(|client| client.bypass());
         unsafe {
             rtc::RTC.sync();
             //TODO: FIX THIS DISGUSTING CODE!
@@ -554,6 +595,10 @@ impl rfcore::RadioDriver for Radio {
 
     fn set_power_client(&self, power_client: &'static rfcore::PowerClient) {
         self.power_client.set(power_client);
+    }
+
+    fn set_skyworks_client(&self, skyworks_client: &'static sky2435l::Skyworks) {
+        self.skyworks_client.set(skyworks_client);
     }
 
     fn transmit(

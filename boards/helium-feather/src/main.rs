@@ -8,9 +8,6 @@ extern crate cortexm4;
 extern crate enum_primitive;
 extern crate fixedvec;
 
-#[allow(unused_imports)]
-use kernel::{create_capability, debug, debug_gpio, static_init};
-
 use capsules::helium;
 use capsules::helium::{device::Device, virtual_rfcore::RFCore};
 use capsules::virtual_uart::{MuxUart, UartDevice};
@@ -30,6 +27,8 @@ use kernel::hil::i2c::I2CMaster;
 use kernel::hil::rfcore::PaType;
 use kernel::hil::rng::Rng;
 use kernel::hil::uart::Configure;
+#[allow(unused_imports)]
+use kernel::{create_capability, debug, debug_gpio, static_init};
 
 #[macro_use]
 pub mod io;
@@ -63,6 +62,7 @@ pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 pub struct Platform<'a> {
     gpio: &'static capsules::gpio::GPIO<'static, cc26x2::gpio::GPIOPin>,
     led: &'static capsules::led::LED<'static, cc26x2::gpio::GPIOPin>,
+    sky: &'static capsules::skyworks_se2435l_r::Sky2435L<'static, cc26x2::gpio::GPIOPin>,
     uart: &'static capsules::uart::UartDriver<'static, UartDevice<'static>>,
     //console: &'static capsules::console::Console<'static>,
     button: &'static capsules::button::Button<'static, cc26x2::gpio::GPIOPin>,
@@ -87,6 +87,7 @@ impl<'a> kernel::Platform for Platform<'a> {
             capsules::uart::DRIVER_NUM => f(Some(self.uart)),
             capsules::gpio::DRIVER_NUM => f(Some(self.gpio)),
             capsules::led::DRIVER_NUM => f(Some(self.led)),
+            capsules::skyworks_se2435l_r::DRIVER_NUM => f(Some(self.sky)),
             capsules::button::DRIVER_NUM => f(Some(self.button)),
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules::rng::DRIVER_NUM => f(Some(self.rng)),
@@ -122,9 +123,9 @@ pub struct Pinmap {
     a2: usize,
     a3: usize,
     a4: usize,
-    a5: Option<usize>,
-    a6: Option<usize>,
-    a7: Option<usize>,
+    a5: usize,
+    a6: usize,
+    a7: usize,
     pwm0: Option<usize>,
     pwm1: Option<usize>,
     rf_2_4: Option<usize>,
@@ -156,16 +157,10 @@ unsafe fn configure_pins(pin: &Pinmap) {
     cc26x2::gpio::PORT[pin.a3].enable_analog_input();
     cc26x2::gpio::PORT[pin.a4].enable_analog_input();
 
-    if let Some(a5) = pin.a5 {
-        cc26x2::gpio::PORT[a5].enable_analog_input();
-    }
-    if let Some(a6) = pin.a6 {
-        cc26x2::gpio::PORT[a6].enable_analog_input();
-    }
-    if let Some(a7) = pin.a7 {
-        cc26x2::gpio::PORT[a7].enable_analog_input();
-    }
-    
+    cc26x2::gpio::PORT[pin.a5].enable_gpio();
+    cc26x2::gpio::PORT[pin.a6].enable_gpio();
+    cc26x2::gpio::PORT[pin.a7].enable_gpio();
+
     if let Some(pwm0) = pin.pwm0 {
         cc26x2::gpio::PORT[pwm0].enable_pwm(pwm::Timer::GPT0A);
     }
@@ -463,8 +458,40 @@ pub unsafe fn reset_handler() {
     cc26x2::trng::TRNG.set_client(entropy_to_random);
     entropy_to_random.set_client(rng);
 
+    // Set skyworks chip control pins
+    let sky_pins = static_init!(
+        [(
+            &'static cc26x2::gpio::GPIOPin,
+            capsules::skyworks_se2435l_r::ActivationMode,
+            capsules::skyworks_se2435l_r::CtlPinType
+        ); 3],
+        [
+            (
+                &cc26x2::gpio::PORT[pinmap.a5],
+                capsules::skyworks_se2435l_r::ActivationMode::ActiveHigh,
+                capsules::skyworks_se2435l_r::CtlPinType::Csd
+            ),
+            (
+                &cc26x2::gpio::PORT[pinmap.a6],
+                capsules::skyworks_se2435l_r::ActivationMode::ActiveHigh,
+                capsules::skyworks_se2435l_r::CtlPinType::Cps
+            ),
+            (
+                &cc26x2::gpio::PORT[pinmap.a7],
+                capsules::skyworks_se2435l_r::ActivationMode::ActiveHigh,
+                capsules::skyworks_se2435l_r::CtlPinType::Ctx
+            ),
+        ]
+    );
+
+    let sky = static_init!(
+        capsules::skyworks_se2435l_r::Sky2435L<'static, cc26x2::gpio::GPIOPin>,
+        capsules::skyworks_se2435l_r::Sky2435L::new(sky_pins)
+    );
+
     // Set underlying radio client to the radio mode wrapper
     radio::RFC.set_client(&radio::MULTIMODE_RADIO);
+
     let radio = static_init!(
         helium::virtual_rfcore::VirtualRadio<'static, cc26x2::radio::multimode::Radio>,
         helium::virtual_rfcore::VirtualRadio::new(&cc26x2::radio::MULTIMODE_RADIO)
@@ -480,6 +507,7 @@ pub unsafe fn reset_handler() {
         &mut HELIUM_BUF,
     );
     kernel::hil::rfcore::RadioDriver::set_power_client(&radio::MULTIMODE_RADIO, radio);
+    kernel::hil::rfcore::RadioDriver::set_skyworks_client(&radio::MULTIMODE_RADIO, sky);
 
     // Virtual device that will respond to callbacks from the underlying radio and library
     // operations
@@ -506,9 +534,9 @@ pub unsafe fn reset_handler() {
 
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
-
-    let rfc = &cc26x2::radio::MULTIMODE_RADIO;
-    rfc.run_tests(0);
+    //debug!("RFC Test");
+    //let rfc = &cc26x2::radio::MULTIMODE_RADIO;
+    //rfc.run_tests(0);
 
     // set nominal voltage
     cc26x2::adc::ADC.nominal_voltage = Some(3300);
@@ -593,6 +621,7 @@ pub unsafe fn reset_handler() {
         uart,
         gpio,
         led,
+        sky,
         button,
         alarm,
         rng,
@@ -612,8 +641,8 @@ pub unsafe fn reset_handler() {
 
     adc::ADC.configure(adc::Source::NominalVdds, adc::SampleCycle::_170_us);
 
-    debug!("Loading processes");
-    
+    //debug!("Loading processes");
+
     kernel::procs::load_processes(
         board_kernel,
         chip,

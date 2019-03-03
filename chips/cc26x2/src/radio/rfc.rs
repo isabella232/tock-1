@@ -23,9 +23,7 @@
 use crate::prcm;
 use crate::radio::commands as cmd;
 use crate::radio::commands::prop_commands as prop;
-use crate::radio::patches::{
-    patch_cpe_prop as patch_cpe, patch_mce_longrange as patch_mce, patch_rfe_genfsk as patch_rfe,
-};
+use crate::radio::patches::patch_cpe_prop as patch_cpe;
 use crate::radio::RFC;
 use crate::rtc;
 use core::cell::Cell;
@@ -240,12 +238,13 @@ impl RFCore {
         // Make sure RFC power is enabled
         prcm::Power::enable_domain(prcm::PowerDomain::RFC);
         prcm::Clock::enable_rfc();
-        prcm::set_rfc_bits(BOOT0);
+        //prcm::set_rfc_bits(BOOT0);
         unsafe {
             rtc::RTC.set_upd_en(true);
         }
 
         while !prcm::Power::is_enabled(prcm::PowerDomain::RFC) {}
+        prcm::set_rfc_bits(BOOT0);
 
         // Set power and clock regs for RFC
         let pwc_regs = self.pwc_regs;
@@ -286,14 +285,12 @@ impl RFCore {
 
         // Initialize radio module
         let cmd_init = cmd::DirectCommand::new(cmd::RFC_CMD0, 0x10 | 0x40);
-        self.send_direct_async(&cmd_init).ok();
-
+        self.send_direct(&cmd_init).ok();
         self.apply_rfcore_patch();
 
         // Request bus
         let cmd_bus_req = cmd::DirectCommand::new(cmd::RFC_BUS_REQUEST, 1);
-        self.send_direct_async(&cmd_bus_req).ok();
-
+        self.send_direct(&cmd_bus_req).ok();
         self.sync_on_ack();
 
         // Ping radio module
@@ -339,7 +336,13 @@ impl RFCore {
     }
 
     // Call commands to setup RFCore with optional register overrides and power output
-    pub fn setup(&self, reg_overrides: u32, tx_power: u16) {
+    pub fn setup(
+        &self,
+        reg_overrides: u32,
+        tx_std_overrides: u32,
+        tx_20_overrides: u32,
+        tx_power: u16,
+    ) {
         let mut setup_cmd = prop::CommandRadioDivSetup {
             command_no: 0x3807,
             status: 0,
@@ -393,6 +396,8 @@ impl RFCore {
             center_freq: 0x0395,
             int_freq: 0x8000,
             lo_divider: 0x05,
+            reg_override_tx_std: tx_std_overrides,
+            reg_override_tx_20: tx_20_overrides,
         };
         cmd::RadioCommand::guard(&mut setup_cmd);
 
@@ -480,6 +485,10 @@ impl RFCore {
     }
 
     // Post command pointer to CMDR register
+    //
+    // **IMPORTANT**
+    // This post function clears the ACK flag after receiving an OK response.
+    // Do not wait on ACK after posting cmdr sync or you will hang forever.
     fn post_cmdr_sync(&self, rf_command: u32) -> RadioReturnCode {
         let dbell_regs: &RfcDBellRegisters = &*self.dbell_regs;
         if !prcm::Power::is_enabled(prcm::PowerDomain::RFC) {
@@ -535,8 +544,8 @@ impl RFCore {
     pub fn apply_rfcore_patch(&self) {
         patch_cpe::CPE_PATCH.apply_patch();
         self.sync_on_ack();
-        patch_mce::LONGRANGE_PATCH.apply_patch();
-        patch_rfe::RFE_PATCH.apply_patch();
+        //patch_mce::LONGRANGE_PATCH.apply_patch();
+        //patch_rfe::RFE_PATCH.apply_patch();
 
         let cmd = cmd::DirectCommand::new(cmd::RFC_CMD0, 0);
         self.send_direct(&cmd).ok();
