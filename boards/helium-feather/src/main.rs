@@ -61,7 +61,6 @@ pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 
 pub struct Platform {
     led: &'static capsules::led::LED<'static, cc26x2::gpio::GPIOPin>,
-    sky: &'static capsules::skyworks_se2435l_r::Sky2435L<'static, cc26x2::gpio::GPIOPin>,
     uart: &'static capsules::uart::UartDriver<'static, UartDevice<'static>>,
     //console: &'static capsules::console::Console<'static>,
     button: &'static capsules::button::Button<'static, cc26x2::gpio::GPIOPin>,
@@ -83,7 +82,6 @@ impl<'a> kernel::Platform for Platform {
         match driver_num {
             capsules::uart::DRIVER_NUM => f(Some(self.uart)),
             capsules::led::DRIVER_NUM => f(Some(self.led)),
-            capsules::skyworks_se2435l_r::DRIVER_NUM => f(Some(self.sky)),
             capsules::button::DRIVER_NUM => f(Some(self.button)),
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules::rng::DRIVER_NUM => f(Some(self.rng)),
@@ -569,7 +567,6 @@ pub unsafe fn reset_handler() {
     let launchxl = Platform {
         uart,
         led,
-        sky,
         button,
         alarm,
         rng,
