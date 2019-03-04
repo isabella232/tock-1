@@ -18,7 +18,7 @@ use kernel::hil::sky2435l;
 use kernel::ReturnCode;
 
 // Fields for testing
-const TEST_PAYLOAD: [u8; 100] = [0; 100];
+const TEST_PAYLOAD: [u8; 30] = [0; 30];
 enum_from_primitive! {
 pub enum TestType {
     Tx = 0,
@@ -65,7 +65,7 @@ impl Radio {
             can_sleep: Cell::new(false),
             tx_buf: TakeCell::empty(),
             rx_buf: TakeCell::empty(),
-            tx_power: Cell::new(0xFFFF),
+            tx_power: Cell::new(0x3248),
             pa_type: Cell::new(PaType::None),
         }
     }
@@ -323,7 +323,7 @@ impl Radio {
                 packet.set_var_len(true);
                 packet
             };
-            cmd.packet_len = 0x64;
+            cmd.packet_len = 0x14;
             cmd.sync_word = 0x00000000;
             cmd.packet_pointer = p_packet;
             RadioCommand::guard(cmd);
@@ -447,9 +447,14 @@ impl Radio {
             PaType::None => (),
             PaType::Internal => (),
             PaType::Skyworks => {
+                if tx_power > 0x3248 {
+                    self.tx_power.set(0x3248);
+                }
+                /*
                 if tx_power > 0x504D {
                     self.tx_power.set(0x504D);
                 }
+                */
             }
         }
     }
