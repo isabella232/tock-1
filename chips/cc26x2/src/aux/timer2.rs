@@ -1,7 +1,7 @@
-use kernel::common::registers::{ReadWrite, WriteOnly};
+use kernel::common::registers::{register_bitfields, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
 
-use memory_map::AUX_TIMER2_BASE;
+use crate::memory_map::AUX_TIMER2_BASE;
 
 pub const REG: StaticRef<Registers> =
     unsafe { StaticRef::new(AUX_TIMER2_BASE as *const Registers) };

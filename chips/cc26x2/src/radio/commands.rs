@@ -1,5 +1,4 @@
 use kernel::common::registers::ReadOnly;
-
 // Radio setup configuration overrides
 //
 pub static mut LR_RFPARAMS: [u32; 28] = [
@@ -154,9 +153,9 @@ pub unsafe trait RadioCommand {
 
 pub mod prop_commands {
     #![allow(unused)]
+    use crate::radio::commands::{RadioCommand, RfcCondition, RfcSetupConfig, RfcTrigger};
+    use crate::radio::queue;
     use kernel::common::registers::ReadOnly;
-    use radio::commands::{RadioCommand, RfcCondition, RfcSetupConfig, RfcTrigger};
-    use radio::queue;
 
     // Radio and data commands bitfields
     bitfield! {

@@ -1,21 +1,19 @@
 #![no_std]
 #![no_main]
-#![feature(lang_items, asm, panic_implementation)]
+#![feature(lang_items, asm)]
 
 extern crate capsules;
 extern crate cc26x2;
 extern crate cortexm4;
-#[macro_use]
 extern crate enum_primitive;
 extern crate fixedvec;
 
 #[allow(unused_imports)]
-#[macro_use(create_capability, debug, debug_gpio, static_init)]
-extern crate kernel;
+use kernel::{create_capability, debug, debug_gpio, static_init};
 
 use capsules::helium;
 use capsules::helium::{device::Device, virtual_rfcore::RFCore};
-use capsules::virtual_uart::{UartDevice, UartMux};
+use capsules::virtual_uart::{MuxUart, UartDevice};
 use cc26x2::adc;
 use cc26x2::aon;
 use cc26x2::osc;
@@ -30,7 +28,8 @@ use kernel::hil::gpio::Pin;
 use kernel::hil::gpio::PinCtl;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::rng::Rng;
-use kernel::Chip;
+use kernel::hil::uart::Configure;
+
 #[macro_use]
 pub mod io;
 
@@ -48,12 +47,12 @@ pub const HFREQ: u32 = 48 * 1_000_000;
 const FAULT_RESPONSE: kernel::procs::FaultResponse = kernel::procs::FaultResponse::Panic;
 
 // Number of concurrent processes this platform supports.
-const NUM_PROCS: usize = 2;
-static mut PROCESSES: [Option<&'static kernel::procs::ProcessType>; NUM_PROCS] = [None, None];
+const NUM_PROCS: usize = 3;
+static mut PROCESSES: [Option<&'static kernel::procs::ProcessType>; NUM_PROCS] = [None, None, None];
 
 #[link_section = ".app_memory"]
 // Give half of RAM to be dedicated APP memory
-static mut APP_MEMORY: [u8; 0xA000] = [0; 0xA000];
+static mut APP_MEMORY: [u8; 0x10000] = [0; 0x10000];
 
 /// Dummy buffer that causes the linker to reserve enough space for the stack.
 #[no_mangle]
@@ -64,6 +63,7 @@ pub struct Platform<'a> {
     gpio: &'static capsules::gpio::GPIO<'static, cc26x2::gpio::GPIOPin>,
     led: &'static capsules::led::LED<'static, cc26x2::gpio::GPIOPin>,
     uart: &'static capsules::uart::UartDriver<'static, UartDevice<'static>>,
+    //console: &'static capsules::console::Console<'static>,
     button: &'static capsules::button::Button<'static, cc26x2::gpio::GPIOPin>,
     alarm: &'static capsules::alarm::AlarmDriver<
         'static,
@@ -74,6 +74,7 @@ pub struct Platform<'a> {
     adc: &'static capsules::adc::Adc<'static, cc26x2::adc::Adc>,
     helium: &'static capsules::helium::driver::Helium<'static>,
     pwm: &'a capsules::pwm::Pwm<'a, cc26x2::pwm::Signal<'a>>,
+    ipc: kernel::ipc::IPC,
 }
 
 impl<'a> kernel::Platform for Platform<'a> {
@@ -92,6 +93,7 @@ impl<'a> kernel::Platform for Platform<'a> {
             capsules::adc::DRIVER_NUM => f(Some(self.adc)),
             capsules::helium::driver::DRIVER_NUM => f(Some(self.helium)),
             capsules::pwm::DRIVER_NUM => f(Some(self.pwm)),
+            kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             _ => f(None),
         }
     }
@@ -277,17 +279,20 @@ pub unsafe fn reset_handler() {
     }
 
     // UART
+    cc26x2::uart::UART0.initialize();
 
     // Create a shared UART channel for the uart and for kernel debug.
     let uart0_mux = static_init!(
-        UartMux<'static>,
-        UartMux::new(
+        MuxUart<'static>,
+        MuxUart::new(
             &cc26x2::uart::UART0,
             &mut capsules::virtual_uart::RX_BUF,
             115200
         )
     );
-    hil::uart::UART::set_client(&cc26x2::uart::UART0, uart0_mux);
+    uart0_mux.initialize();
+    hil::uart::Receive::set_receive_client(&cc26x2::uart::UART0, uart0_mux);
+    hil::uart::Transmit::set_transmit_client(&cc26x2::uart::UART0, uart0_mux);
 
     // Create virtual device for kernel debug.
     let debugger_uart = static_init!(UartDevice, UartDevice::new(uart0_mux, false));
@@ -300,7 +305,7 @@ pub unsafe fn reset_handler() {
             &mut kernel::debug::INTERNAL_BUF,
         )
     );
-    hil::uart::UART::set_client(debugger_uart, debugger);
+    hil::uart::Transmit::set_transmit_client(debugger_uart, debugger);
 
     let debug_wrapper = static_init!(
         kernel::debug::DebugWriterWrapper,
@@ -311,39 +316,43 @@ pub unsafe fn reset_handler() {
     // Create a UartDevice for the uart.
     let uart0_device = static_init!(UartDevice, UartDevice::new(uart0_mux, true));
     uart0_device.setup();
-    kernel::hil::uart::UART::set_client(uart0_device, &DRIVER_UART0);
-
-    cc26x2::uart::UART0.initialize();
+    kernel::hil::uart::Transmit::set_transmit_client(uart0_device, &DRIVER_UART0);
+    kernel::hil::uart::Receive::set_receive_client(uart0_device, &DRIVER_UART0);
 
     // the debug uart should be initialized by hand
-    cc26x2::uart::UART0.configure(hil::uart::UARTParameters {
+    cc26x2::uart::UART0.configure(hil::uart::Parameters {
         baud_rate: 115200,
+        width: hil::uart::Width::Eight,
         stop_bits: hil::uart::StopBits::One,
         parity: hil::uart::Parity::None,
         hw_flow_control: false,
     });
 
+    cc26x2::uart::UART1.initialize();
     // Create a UART channel for the additional UART
     let uart1_mux = static_init!(
-        UartMux,
-        UartMux::new(
+        MuxUart<'static>,
+        MuxUart::new(
             &cc26x2::uart::UART1,
             &mut capsules::virtual_uart::RX_BUF1,
             115200
         )
     );
-    hil::uart::UART::set_client(&cc26x2::uart::UART1, uart1_mux);
+    uart1_mux.initialize();
+    hil::uart::Receive::set_receive_client(&cc26x2::uart::UART1, uart1_mux);
+    hil::uart::Transmit::set_transmit_client(&cc26x2::uart::UART1, uart1_mux);
 
     // Create a UartDevice for the second UART
     let uart1_device = static_init!(UartDevice, UartDevice::new(uart1_mux, true));
     uart1_device.setup();
-    kernel::hil::uart::UART::set_client(uart1_device, &DRIVER_UART1);
 
-    cc26x2::uart::UART1.initialize();
+    kernel::hil::uart::Transmit::set_transmit_client(uart1_device, &DRIVER_UART1);
+    kernel::hil::uart::Receive::set_receive_client(uart1_device, &DRIVER_UART1);
 
     // the debug uart should be initialized by hand
-    cc26x2::uart::UART1.configure(hil::uart::UARTParameters {
+    cc26x2::uart::UART1.configure(hil::uart::Parameters {
         baud_rate: 115200,
+        width: hil::uart::Width::Eight,
         stop_bits: hil::uart::StopBits::One,
         parity: hil::uart::Parity::None,
         hw_flow_control: false,
@@ -372,6 +381,7 @@ pub unsafe fn reset_handler() {
         &mut capsules::uart::READ_BUF0,
         uart,
     );
+
     DRIVER_UART1.initialize(
         uart1_device,
         &mut capsules::uart::WRITE_BUF1,
@@ -404,7 +414,10 @@ pub unsafe fn reset_handler() {
     );
     let gpio = static_init!(
         capsules::gpio::GPIO<'static, cc26x2::gpio::GPIOPin>,
-        capsules::gpio::GPIO::new(gpio_pins)
+        capsules::gpio::GPIO::new(
+            gpio_pins,
+            board_kernel.create_grant(&memory_allocation_capability)
+        )
     );
     for pin in gpio_pins.iter() {
         pin.set_client(gpio);
@@ -499,7 +512,6 @@ pub unsafe fn reset_handler() {
 
     // Setup ADC
     let adc: &'static capsules::adc::Adc<'static, cc26x2::adc::Adc>;
-
     if chip_id == cc1352p::CHIP_ID {
         let adc_channels = static_init!(
             [&cc26x2::adc::Input; 5],
@@ -564,12 +576,14 @@ pub unsafe fn reset_handler() {
         pwm::Signal::new(pwm::Timer::GPT3B),
     ];
 
-    // all PWM channels are enabled, but not necessarily corrected
+    // all PWM channels are enabled
     for pwm_channel in pwm_channels.iter() {
         pwm_channel.enable();
     }
 
     let pwm = capsules::pwm::Pwm::new(HFREQ as usize, &pwm_channels);
+
+    let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
 
     let launchxl = Platform {
         uart,
@@ -582,6 +596,7 @@ pub unsafe fn reset_handler() {
         adc,
         helium: radio_driver,
         pwm: &pwm,
+        ipc,
     };
 
     let chip = static_init!(cc26x2::chip::Cc26X2, cc26x2::chip::Cc26X2::new(HFREQ));
@@ -591,16 +606,13 @@ pub unsafe fn reset_handler() {
         static _sapps: u8;
     }
 
-    let ipc = &kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
-
     adc::ADC.configure(adc::Source::NominalVdds, adc::SampleCycle::_170_us);
 
     // debug!("Loading processes");
 
     kernel::procs::load_processes(
         board_kernel,
-        &cortexm4::syscall::SysCall::new(),
-        chip.mpu(),
+        chip,
         &_sapps as *const u8,
         &mut APP_MEMORY,
         &mut PROCESSES,
@@ -608,6 +620,5 @@ pub unsafe fn reset_handler() {
         &process_management_capability,
     );
 
-    board_kernel.kernel_loop(&launchxl, chip, Some(&ipc), &main_loop_capability);
-    loop {}
+    board_kernel.kernel_loop(&launchxl, chip, Some(&launchxl.ipc), &main_loop_capability);
 }

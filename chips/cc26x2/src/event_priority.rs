@@ -6,7 +6,7 @@ use enum_primitive::cast::FromPrimitive;
 
 pub static mut FLAGS: u32 = 0;
 
-enum_from_primitive!{
+enum_from_primitive! {
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum EVENT_PRIORITY {
     GPIO = 0,

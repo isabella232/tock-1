@@ -3,7 +3,7 @@
 //! - Preparing frames (data frame, command frames, beacon frames)
 //! - Transmitting and receiving frames
 //!
-use helium::framer::{CauterizeType, Frame};
+use crate::helium::framer::{CauterizeType, Frame};
 use kernel::ReturnCode;
 
 pub trait Device<'a> {
@@ -23,7 +23,7 @@ pub trait Device<'a> {
     /// regardless of state
     fn send_kill_command(&self) -> ReturnCode;
 
-    fn set_address_long(&self, [u8; 10]);
+    fn set_address_long(&self, addr: [u8; 10]);
     /// Returns if the MAC device is currently on.
     fn is_on(&self) -> bool;
 

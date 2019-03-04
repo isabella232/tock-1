@@ -1,4 +1,4 @@
-use kernel::common::registers::ReadWrite;
+use kernel::common::registers::{register_bitfields, ReadWrite};
 
 // Table 19-40. ADI_4_AUX_MMAP1 Registers
 

@@ -41,6 +41,7 @@ dependencies = [
  "enum_primitive 0.1.0",
  "fixedvec 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "kernel 0.1.0",
+ "tock_rt0 0.1.0",
 ]
 
 [[package]]
@@ -97,7 +98,7 @@ name = "kernel"
 version = "0.1.0"
 dependencies = [
  "tock-cells 0.1.0",
- "tock-registers 0.2.0",
+ "tock-registers 0.3.0",
 ]
 
 [[package]]
@@ -174,7 +175,11 @@ version = "0.1.0"
 
 [[package]]
 name = "tock-registers"
-version = "0.2.0"
+version = "0.3.0"
+
+[[package]]
+name = "tock_rt0"
+version = "0.1.0"
 
 [[package]]
 name = "unicode-width"

@@ -2,13 +2,13 @@
 
 use core::cmp;
 use kernel::common::cells::{MapCell, OptionalCell};
-use kernel::common::registers::{ReadOnly, ReadWrite, WriteOnly};
+use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
 use kernel::hil::i2c;
 
+use crate::peripheral_interrupts;
+use crate::prcm;
 use cortexm4::nvic;
-use peripheral_interrupts;
-use prcm;
 
 /// A wrapper module for interal register types.
 ///

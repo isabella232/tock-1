@@ -1,4 +1,5 @@
 use enum_primitive::cast::FromPrimitive;
+use enum_primitive::enum_from_primitive;
 use kernel::common::StaticRef;
 
 // Pretty much this whole file is extracted from
@@ -39,7 +40,7 @@ pub const HAPI: StaticRef<HARD_API> =
 
 // Defines for input parameter to the select_comp_a_input function.
 // The define values can not be changed!
-enum_from_primitive!{
+enum_from_primitive! {
 #[derive(Debug, PartialEq)]
 pub enum COMPA_IN {
     NC = 0x00,
@@ -56,7 +57,7 @@ pub enum COMPA_IN {
 
 // Defines for input parameter to the select_comp_a_ref function.
 // The define values can not be changed!
-enum_from_primitive!{
+enum_from_primitive! {
 #[derive(Debug, PartialEq)]
 pub enum COMPA_REF {
     NC = 0x00,
@@ -77,7 +78,7 @@ pub enum COMPA_REF {
 
 // Defines for input parameter to the select_adc_comp_b_input function.
 // The define values can not be changed!
-enum_from_primitive!{
+enum_from_primitive! {
 #[derive(Debug, PartialEq)]
 pub enum ADC_COMPB_IN {
     NC = 0x00,
@@ -97,7 +98,7 @@ pub enum ADC_COMPB_IN {
 
 // Defines for input parameter to the select_dac_vref function.
 // The define values can not be changed!
-enum_from_primitive!{
+enum_from_primitive! {
 #[derive(Debug, PartialEq)]
 pub enum DAC_REF {
     NC = 0x00,

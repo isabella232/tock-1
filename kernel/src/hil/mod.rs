@@ -28,5 +28,5 @@ pub mod watchdog;
 pub trait Controller {
     type Config;
 
-    fn configure(&self, Self::Config);
+    fn configure(&self, _: Self::Config);
 }

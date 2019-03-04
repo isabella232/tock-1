@@ -34,13 +34,12 @@
 //! the driver. Successive writes must call `allow` each time a buffer is to be
 //! written.
 
+use crate::driver;
 use core::cmp;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil;
 use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
-
-/// Syscall driver number.
-pub const DRIVER_NUM: usize = 0x00000001;
+pub const DRIVER_NUM: usize = driver::NUM::UART as usize;
 
 #[derive(Default)]
 pub struct App {
@@ -62,12 +61,12 @@ pub static mut READ_BUF0: [u8; 64] = [0; 64];
 pub static mut WRITE_BUF1: [u8; 64] = [0; 64];
 pub static mut READ_BUF1: [u8; 64] = [0; 64];
 
-pub struct UartDriver<'a, U: 'static + hil::uart::UART> {
+pub struct UartDriver<'a, U: 'static + hil::uart::UartData<'a>> {
     uarts: &'a mut [&'a mut Uart<'a, U>],
     apps: [Grant<App>; 2],
 }
 
-impl<'a, U: 'static + hil::uart::UART> UartDriver<'a, U> {
+impl<'a, U: hil::uart::UartData<'a>> UartDriver<'a, U> {
     pub fn new(
         uarts: &'a mut [&'static mut Uart<'a, U>],
         apps: [Grant<App>; 2],
@@ -169,14 +168,13 @@ impl<'a, U: 'static + hil::uart::UART> UartDriver<'a, U> {
                             // bytes
                             let rx_buffer = buffer.iter().take(rx_len);
                             match error {
-                                hil::uart::Error::CommandComplete | hil::uart::Error::Aborted => {
+                                hil::uart::Error::None | hil::uart::Error::Aborted => {
                                     // Receive some bytes, signal error type and return bytes to process buffer
                                     if let Some(mut app_buffer) = app.read_buffer.take() {
                                         for (a, b) in app_buffer.iter_mut().zip(rx_buffer) {
                                             *a = *b;
                                         }
-                                        let rettype = if error == hil::uart::Error::CommandComplete
-                                        {
+                                        let rettype = if error == hil::uart::Error::None {
                                             ReturnCode::SUCCESS
                                         } else {
                                             ReturnCode::ECANCEL
@@ -194,17 +192,19 @@ impl<'a, U: 'static + hil::uart::UART> UartDriver<'a, U> {
                                 }
                             }
                         });
-                    }).unwrap_or_default();
-            }).unwrap_or_default();
+                    })
+                    .unwrap_or_default();
+            })
+            .unwrap_or_default();
 
         // Whatever happens, we want to make sure to replace the rx_buffer for future transactions
         self.uarts[uart_index].rx_buffer.replace(buffer);
     }
 }
 
-pub struct Uart<'a, U: 'static + hil::uart::UART> {
-    parent: Option<&'static UartDriver<'static, U>>,
-    hw: Option<&'a U>,
+pub struct Uart<'a, U: 'static + hil::uart::UartData<'a>> {
+    parent: Option<&'a UartDriver<'a, U>>,
+    hw: Option<&'a hil::uart::Uart<'a>>,
     index: usize,
     tx_in_progress: OptionalCell<AppId>,
     tx_buffer: TakeCell<'static, [u8]>,
@@ -212,7 +212,7 @@ pub struct Uart<'a, U: 'static + hil::uart::UART> {
     rx_buffer: TakeCell<'static, [u8]>,
 }
 
-impl<U: 'static + hil::uart::UART> Uart<'a, U> {
+impl<'a, U: 'static + hil::uart::UartData<'a>> Uart<'a, U> {
     pub const fn new(index: usize) -> Uart<'a, U> {
         Uart {
             parent: None,
@@ -227,7 +227,7 @@ impl<U: 'static + hil::uart::UART> Uart<'a, U> {
 
     pub fn initialize(
         &mut self,
-        uart: &'a U,
+        uart: &'a hil::uart::Uart,
         tx_buffer: &'static mut [u8],
         rx_buffer: &'static mut [u8],
         parent: &'static UartDriver<'a, U>,
@@ -293,7 +293,7 @@ impl<U: 'static + hil::uart::UART> Uart<'a, U> {
                     app.write_remaining = 0;
                 }
                 if let Some(hw) = self.hw {
-                    hw.transmit(buffer, transaction_len);
+                    hw.transmit_buffer(buffer, transaction_len);
                 }
             });
         } else {
@@ -323,7 +323,7 @@ impl<U: 'static + hil::uart::UART> Uart<'a, U> {
                     self.rx_buffer.take().map(|buffer| {
                         self.rx_in_progress.set(app_id);
                         if let Some(hw) = self.hw {
-                            hw.receive(buffer, app.read_len);
+                            hw.receive_buffer(buffer, app.read_len);
                         }
                     });
                     ReturnCode::SUCCESS
@@ -337,7 +337,7 @@ impl<U: 'static + hil::uart::UART> Uart<'a, U> {
     }
 }
 
-impl<'a, U: 'static + hil::uart::UART + hil::uart::Client> Driver for UartDriver<'a, U> {
+impl<'a, U: 'static + hil::uart::UartData<'a>> Driver for UartDriver<'a, U> {
     /// Setup shared buffers.
     ///
     /// ### `allow_num`
@@ -353,12 +353,14 @@ impl<'a, U: 'static + hil::uart::UART + hil::uart::Client> Driver for UartDriver
                 .enter(appid, |app, _| {
                     app.write_buffer = slice;
                     ReturnCode::SUCCESS
-                }).unwrap_or_else(|err| err.into()),
+                })
+                .unwrap_or_else(|err| err.into()),
             2 => self.apps[uart_num]
                 .enter(appid, |app, _| {
                     app.read_buffer = slice;
                     ReturnCode::SUCCESS
-                }).unwrap_or_else(|err| err.into()),
+                })
+                .unwrap_or_else(|err| err.into()),
             _ => ReturnCode::ENOSUPPORT,
         }
     }
@@ -425,7 +427,7 @@ impl<'a, U: 'static + hil::uart::UART + hil::uart::Client> Driver for UartDriver
                 self.apps[uart_num]
                 .enter(appid, |app, _| {
                     if let Some(hw) = self.uarts[app.write_uart].hw {
-                        hw.abort_receive();
+                        hw.receive_abort();
                     }
                     ReturnCode::SUCCESS
                 }).unwrap_or_else(|err| err.into())
@@ -435,14 +437,22 @@ impl<'a, U: 'static + hil::uart::UART + hil::uart::Client> Driver for UartDriver
     }
 }
 
-impl<U: hil::uart::UART> hil::uart::Client for Uart<'a, U> {
-    fn transmit_complete(&self, buffer: &'static mut [u8], error: hil::uart::Error) {
+impl<'a, U: 'static + hil::uart::UartData<'a>> hil::uart::TransmitClient for Uart<'a, U> {
+    fn transmitted_buffer(&self, buffer: &'static mut [u8], _tx_len: usize, _rcode: ReturnCode) {
         if let Some(parent) = self.parent {
-            parent.transmit_complete(self.index, buffer, error);
+            parent.transmit_complete(self.index, buffer, hil::uart::Error::None);
         }
     }
+}
 
-    fn receive_complete(&self, buffer: &'static mut [u8], rx_len: usize, error: hil::uart::Error) {
+impl<'a, U: hil::uart::UartData<'a>> hil::uart::ReceiveClient for Uart<'a, U> {
+    fn received_buffer(
+        &self,
+        buffer: &'static mut [u8],
+        rx_len: usize,
+        _rcode: ReturnCode,
+        error: hil::uart::Error,
+    ) {
         if let Some(parent) = self.parent {
             parent.receive_complete(self.index, buffer, rx_len, error);
         }

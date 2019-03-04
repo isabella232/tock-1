@@ -1,14 +1,14 @@
-use adc;
+use crate::adc;
+use crate::event_priority::EVENT_PRIORITY;
+use crate::events;
+use crate::gpio;
+use crate::i2c;
+use crate::prcm;
+use crate::radio;
+use crate::rtc;
+use crate::uart;
 use cortexm4;
-use event_priority::EVENT_PRIORITY;
-use events;
-use gpio;
-use i2c;
 use kernel;
-use prcm;
-use radio;
-use rtc;
-use uart;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -31,13 +31,17 @@ impl From<u32> for SleepMode {
 
 pub struct Cc26X2 {
     mpu: cortexm4::mpu::MPU,
+    userspace_kernel_boundary: cortexm4::syscall::SysCall,
     systick: cortexm4::systick::SysTick,
 }
 
 impl Cc26X2 {
+    // internal HFREQ is 40_000_000 Hz
+    // but if you are using an external HFREQ to derive systick, you will want to input value here (in Hz)
     pub unsafe fn new(hfreq: u32) -> Cc26X2 {
         Cc26X2 {
             mpu: cortexm4::mpu::MPU::new(),
+            userspace_kernel_boundary: cortexm4::syscall::SysCall::new(),
             // The systick clocks with 48MHz by default
             systick: cortexm4::systick::SysTick::new_with_calibration(hfreq),
         }
@@ -46,6 +50,7 @@ impl Cc26X2 {
 
 impl kernel::Chip for Cc26X2 {
     type MPU = cortexm4::mpu::MPU;
+    type UserspaceKernelBoundary = cortexm4::syscall::SysCall;
     type SysTick = cortexm4::systick::SysTick;
 
     fn mpu(&self) -> &Self::MPU {
@@ -54,6 +59,10 @@ impl kernel::Chip for Cc26X2 {
 
     fn systick(&self) -> &Self::SysTick {
         &self.systick
+    }
+
+    fn userspace_kernel_boundary(&self) -> &Self::UserspaceKernelBoundary {
+        &self.userspace_kernel_boundary
     }
 
     fn service_pending_interrupts(&self) {

@@ -1,20 +1,20 @@
+use crate::enum_primitive::cast::FromPrimitive;
+use crate::osc;
+use crate::radio::commands::{
+    prop_commands as prop, DirectCommand, RadioCommand, RfcCondition, RfcTrigger, LR_RFPARAMS,
+};
+use crate::radio::queue;
+use crate::radio::rfc;
+use crate::rtc;
 use core::cell::Cell;
 use core::slice;
-use enum_primitive::cast::FromPrimitive;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::rfcore;
 use kernel::ReturnCode;
-use osc;
-use radio::commands::{
-    prop_commands as prop, DirectCommand, RadioCommand, RfcCondition, RfcTrigger, LR_RFPARAMS,
-};
-use radio::queue;
-use radio::rfc;
-use rtc;
 
 // Fields for testing
 const TEST_PAYLOAD: [u8; 30] = [0; 30];
-enum_from_primitive!{
+enum_from_primitive! {
 pub enum TestType {
     Tx = 0,
     Rx = 1,

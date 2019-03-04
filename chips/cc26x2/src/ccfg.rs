@@ -1,7 +1,7 @@
-use kernel::common::registers::{ReadOnly, ReadWrite};
+use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 
-use memory_map::CCFG_BASE;
+use crate::memory_map::CCFG_BASE;
 
 pub const OFFSET: usize = 0x1FA8;
 
@@ -39,7 +39,7 @@ pub struct Registers {
     //_offset: [ReadOnly<u8>; 0x1FA8],
     pub ext_lf_clk: ReadWrite<u32, ExtLfClk::Register>,
     mode_conf1: ReadWrite<u32, ModeConf1::Register>,
-    size_and_dis_flags: ReadWrite<u32, SizeAndDisFlags::Register>,
+    pub size_and_dis_flags: ReadWrite<u32, SizeAndDisFlags::Register>,
     mode_conf0: ReadWrite<u32, ModeConf0::Register>,
     _volt_load0: ReadOnly<u32>,  //unimplemented by TI
     _volt_load1: ReadOnly<u32>,  //unimplemented by TI

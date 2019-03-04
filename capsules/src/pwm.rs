@@ -21,7 +21,7 @@ impl<'a, S: hil::pwm::Signal> Pwm<'a, S> {
 
 use enum_primitive::cast::FromPrimitive;
 
-enum_from_primitive!{
+enum_from_primitive! {
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum CMD {
     PING = 0,

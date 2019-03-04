@@ -1,8 +1,10 @@
 use enum_primitive::cast::FromPrimitive;
-use gpt;
-use prcm;
+use enum_primitive::enum_from_primitive;
 
-enum_from_primitive!{
+use crate::gpt;
+use crate::prcm;
+
+enum_from_primitive! {
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Timer {
     GPT0A = 0,
@@ -16,7 +18,7 @@ pub enum Timer {
 }
 }
 
-enum_from_primitive!{
+enum_from_primitive! {
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum Gpt {
     GPT0 = 0,

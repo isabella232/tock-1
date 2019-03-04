@@ -19,20 +19,21 @@ const CCFG: ccfg::Registers = ccfg::Registers::new(ccfg::RegisterInitializer {
     bl_config: ReadWrite::new(0x00FFFFFF),
 });
 
-// pub fn test() {
-//     unsafe {
-//         let raw_array: *const u32 = &CCFG_CONF[0] as *const u32;
-//         let constructed = &CCFG.ext_lf_clk.value as *const u32;
+#[cfg(test)]
+pub fn test() {
+    unsafe {
+        let raw_array: *const u32 = &CCFG_CONF[0] as *const u32;
+        let constructed = &CCFG.ext_lf_clk.value as *const u32;
 
-//         for n in 0..22 {
-//             let raw = *(raw_array.offset(n));
-//             let new = *(constructed.offset(n));
-//             if raw != new {
-//                 debug!(
-//                     "Mismatch at location {:} : OLD {:x} != {:x} NEW",
-//                     n, raw, new
-//                 );
-//             }
-//         }
-//     }
-// }
+        for n in 0..22 {
+            let raw = *(raw_array.offset(n));
+            let new = *(constructed.offset(n));
+            if raw != new {
+                debug!(
+                    "Mismatch at location {:} : OLD {:x} != {:x} NEW",
+                    n, raw, new
+                );
+            }
+        }
+    }
+}
