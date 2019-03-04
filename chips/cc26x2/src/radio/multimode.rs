@@ -109,7 +109,7 @@ impl Radio {
     pub fn power_down(&self) {
         self.rfc.disable();
 
-        self.skyworks_client.map(|client| client.bypass());
+        self.skyworks_client.map(|client| client.sleep());
 
         self.power_client
             .map(|client| client.power_mode_changed(false));
@@ -171,6 +171,8 @@ impl Radio {
                 .and_then(|_| self.rfc.wait(cmd))
                 .ok();
         });
+
+        self.skyworks_client.map(|client| client.client.bypass());
     }
 
     unsafe fn start_rx_cmd(&self) -> ReturnCode {
@@ -240,6 +242,7 @@ impl Radio {
             .and_then(|_| self.rfc.wait(cmd))
             .ok();
 
+        self.skyworks_client.map(|client| client.bypass());
         // TODO: Need to do some command success or fail checking return code here
         ReturnCode::SUCCESS
     }
@@ -275,12 +278,7 @@ impl Radio {
     }
 
     fn test_radio_tx(&self) {
-        let ret = self.skyworks_client.map(|client| client.enable_pa());
-        if ret == Some(ReturnCode::SUCCESS) {
-            debug!("PA enabled");
-        } else {
-            panic!("PA enable FAIL");
-        }
+        self.skyworks_client.map(|client| client.enable_pa());
 
         let mut packet = TEST_PAYLOAD;
         let mut seq: u8 = 0;
@@ -333,15 +331,12 @@ impl Radio {
                 .and_then(|_| self.rfc.wait(cmd))
                 .ok();
         }
+
+        self.skyworks_client.map(|client| client.bypass());
     }
 
     fn test_radio_rx(&self) {
-        let ret = self.skyworks_client.map(|client| client.enable_lna());
-        if ret == Some(ReturnCode::SUCCESS) {
-            debug!("LNA enabled");
-        } else {
-            panic!("LNA enable FAIL");
-        }
+        self.skyworks_client.map(|client| client.enable_lna());
 
         unsafe {
             for i in 0..COMMAND_BUF.len() {
@@ -405,6 +400,8 @@ impl Radio {
                 .and_then(|_| self.rfc.wait(cmd))
                 .ok();
         }
+
+        self.skyworks_client.map(|client| client.bypass());
     }
 
     fn set_radio_fs(&self) {
@@ -450,11 +447,6 @@ impl Radio {
                 if tx_power > 0x3248 {
                     self.tx_power.set(0x3248);
                 }
-                /*
-                if tx_power > 0x504D {
-                    self.tx_power.set(0x504D);
-                }
-                */
             }
         }
     }
