@@ -1,6 +1,6 @@
 use crate::returncode::ReturnCode;
 
-pub trait Skyworks {
+pub trait SE2435L {
     fn sleep(&self) -> ReturnCode;
     fn bypass(&self) -> ReturnCode;
     fn enable_pa(&self) -> ReturnCode;

@@ -12,9 +12,9 @@ use crate::rtc;
 use core::cell::Cell;
 use core::slice;
 use kernel::common::cells::{OptionalCell, TakeCell};
+use kernel::hil::rf_frontend;
 use kernel::hil::rfcore;
 use kernel::hil::rfcore::PaType;
-use kernel::hil::sky2435l;
 use kernel::ReturnCode;
 
 // Fields for testing
@@ -42,7 +42,7 @@ pub struct Radio {
     tx_client: OptionalCell<&'static rfcore::TxClient>,
     rx_client: OptionalCell<&'static rfcore::RxClient>,
     power_client: OptionalCell<&'static rfcore::PowerClient>,
-    skyworks_client: OptionalCell<&'static sky2435l::Skyworks>,
+    frontend_client: OptionalCell<&'static rf_frontend::SE2435L>,
     update_config: Cell<bool>,
     schedule_powerdown: Cell<bool>,
     can_sleep: Cell<bool>,
@@ -59,7 +59,7 @@ impl Radio {
             tx_client: OptionalCell::empty(),
             rx_client: OptionalCell::empty(),
             power_client: OptionalCell::empty(),
-            skyworks_client: OptionalCell::empty(),
+            frontend_client: OptionalCell::empty(),
             update_config: Cell::new(false),
             schedule_powerdown: Cell::new(false),
             can_sleep: Cell::new(false),
@@ -103,20 +103,20 @@ impl Radio {
         self.set_radio_fs();
         self.power_client
             .map(|client| client.power_mode_changed(true));
-        self.skyworks_client.map(|client| client.bypass());
+        self.frontend_client.map(|client| client.bypass());
     }
 
     pub fn power_down(&self) {
         self.rfc.disable();
 
-        self.skyworks_client.map(|client| client.sleep());
+        self.frontend_client.map(|client| client.sleep());
 
         self.power_client
             .map(|client| client.power_mode_changed(false));
     }
 
     unsafe fn replace_and_send_tx_buffer(&self, buf: &'static mut [u8], len: usize) {
-        self.skyworks_client.map(|client| client.enable_pa());
+        self.frontend_client.map(|client| client.enable_pa());
 
         for i in 0..COMMAND_BUF.len() {
             COMMAND_BUF[i] = 0;
@@ -172,11 +172,11 @@ impl Radio {
                 .ok();
         });
 
-        self.skyworks_client.map(|client| client.bypass());
+        self.frontend_client.map(|client| client.bypass());
     }
 
     unsafe fn start_rx_cmd(&self) -> ReturnCode {
-        self.skyworks_client.map(|client| client.enable_lna());
+        self.frontend_client.map(|client| client.enable_lna());
 
         for i in 0..COMMAND_BUF.len() {
             COMMAND_BUF[i] = 0;
@@ -242,7 +242,7 @@ impl Radio {
             .and_then(|_| self.rfc.wait(cmd))
             .ok();
 
-        self.skyworks_client.map(|client| client.bypass());
+        self.frontend_client.map(|client| client.bypass());
         // TODO: Need to do some command success or fail checking return code here
         ReturnCode::SUCCESS
     }
@@ -278,7 +278,7 @@ impl Radio {
     }
 
     fn test_radio_tx(&self) {
-        self.skyworks_client.map(|client| client.enable_pa());
+        self.frontend_client.map(|client| client.enable_pa());
 
         let mut packet = TEST_PAYLOAD;
         let mut seq: u8 = 0;
@@ -332,11 +332,11 @@ impl Radio {
                 .ok();
         }
 
-        self.skyworks_client.map(|client| client.bypass());
+        self.frontend_client.map(|client| client.bypass());
     }
 
     fn test_radio_rx(&self) {
-        self.skyworks_client.map(|client| client.enable_lna());
+        self.frontend_client.map(|client| client.enable_lna());
 
         unsafe {
             for i in 0..COMMAND_BUF.len() {
@@ -401,7 +401,7 @@ impl Radio {
                 .ok();
         }
 
-        self.skyworks_client.map(|client| client.bypass());
+        self.frontend_client.map(|client| client.bypass());
     }
 
     fn set_radio_fs(&self) {
@@ -474,14 +474,14 @@ impl rfc::RFCoreClient for Radio {
     }
 
     fn tx_done(&self) {
-        self.skyworks_client.map(|client| client.enable_lna());
+        self.frontend_client.map(|client| client.enable_lna());
 
         unsafe { rtc::RTC.sync() };
 
         if self.schedule_powerdown.get() {
             // TODO Need to handle powerdown failure here or we will not be able to enter low power
             // modes
-            self.skyworks_client.map(|client| client.bypass());
+            self.frontend_client.map(|client| client.bypass());
 
             self.power_down();
             osc::OSC.switch_to_hf_rcosc();
@@ -497,7 +497,7 @@ impl rfc::RFCoreClient for Radio {
     }
 
     fn rx_ok(&self) {
-        self.skyworks_client.map(|client| client.bypass());
+        self.frontend_client.map(|client| client.bypass());
         unsafe {
             rtc::RTC.sync();
             //TODO: FIX THIS DISGUSTING CODE!
@@ -593,8 +593,8 @@ impl rfcore::RadioDriver for Radio {
         self.power_client.set(power_client);
     }
 
-    fn set_skyworks_client(&self, skyworks_client: &'static sky2435l::Skyworks) {
-        self.skyworks_client.set(skyworks_client);
+    fn set_rf_frontend_client(&self, frontend_client: &'static rf_frontend::SE2435L) {
+        self.frontend_client.set(frontend_client);
     }
 
     fn transmit(

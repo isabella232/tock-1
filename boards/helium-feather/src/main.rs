@@ -430,7 +430,7 @@ pub unsafe fn reset_handler() {
         &mut HELIUM_BUF,
     );
     kernel::hil::rfcore::RadioDriver::set_power_client(&radio::MULTIMODE_RADIO, radio);
-    kernel::hil::rfcore::RadioDriver::set_skyworks_client(&radio::MULTIMODE_RADIO, sky);
+    kernel::hil::rfcore::RadioDriver::set_rf_frontend_client(&radio::MULTIMODE_RADIO, sky);
 
     // Virtual device that will respond to callbacks from the underlying radio and library
     // operations
