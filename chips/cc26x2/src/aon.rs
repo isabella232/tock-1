@@ -37,7 +37,7 @@ struct AonPmCtlRegisters {
     _osc_cfg: ReadWrite<u32, OscCtl::Register>,
     reset_ctl: ReadWrite<u32, ResetCtl::Register>,
     sleep_ctl: ReadWrite<u32, SleepCtl::Register>,
-    _jtag_cfg: [ReadOnly<u8>; 4],
+    jtag_cfg: ReadWrite<u32, JtagCtl::Register>,
     _jtag_usercode: [ReadOnly<u8>; 4],
 }
 
@@ -117,6 +117,9 @@ register_bitfields![
     ],
     SleepCtl [
         IO_PAD_SLEEP_DIS OFFSET(0) NUMBITS(1) []
+    ],
+    JtagCtl [
+        JTAG_PD_FORCE_ON OFFSET(8) NUMBITS(1) []
     ]
 ];
 
@@ -278,5 +281,13 @@ impl Aon {
     pub fn reset_ctl_get(&self) -> u32 {
         let regs = &*self.pmctl_regs;
         regs.reset_ctl.get()
+    }
+
+    pub fn jtag_set_enabled(&self, val: bool) {
+        let regs = &*self.pmctl_regs;
+        match val {
+            true => regs.jtag_cfg.modify(JtagCtl::JTAG_PD_FORCE_ON::SET),
+            false => regs.jtag_cfg.modify(JtagCtl::JTAG_PD_FORCE_ON::CLEAR),
+        }
     }
 }

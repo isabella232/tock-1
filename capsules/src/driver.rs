@@ -31,6 +31,7 @@ pub enum NUM {
     PCA9544A = 0x80002,
     RNG = 0x40001,
     SD_CARD = 0x50002,
+    SKY2435L = 0x484c4d03, // ascii hex val for "HLMx"
     SPI = 0x20001,
     TEMPERATURE = 0x60000,
     TMP006 = 0x70001,

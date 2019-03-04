@@ -58,6 +58,7 @@ pub mod rng;
 pub mod sdcard;
 pub mod si7021;
 pub mod simple_rfcore;
+pub mod skyworks_se2435l_r;
 pub mod spi;
 pub mod temperature;
 pub mod tmp006;

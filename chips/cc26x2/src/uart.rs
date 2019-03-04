@@ -1,15 +1,17 @@
 //! UART driver, cc26x2 family
+use crate::chip::SleepMode;
+use crate::peripheral_interrupts;
+use crate::peripheral_manager::PowerClient;
+use crate::power::PM;
+use crate::prcm;
+use core::cell::Cell;
+use cortexm4::nvic;
 use kernel;
 use kernel::common::cells::{MapCell, OptionalCell};
 use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
 use kernel::hil::uart;
 use kernel::ReturnCode;
-
-use crate::peripheral_interrupts;
-use crate::prcm;
-use core::cell::Cell;
-use cortexm4::nvic;
 
 use crate::memory_map::{UART0_BASE, UART1_BASE};
 
@@ -408,5 +410,23 @@ impl<'a> uart::Receive<'a> for UART<'a> {
 
     fn receive_abort(&self) -> ReturnCode {
         ReturnCode::FAIL
+    }
+}
+
+impl<'a> PowerClient for UART<'a> {
+    fn before_sleep(&self, _sleep_mode: u32) {
+        prcm::Clock::disable_uarts();
+    }
+
+    fn after_wakeup(&self, _sleep_mode: u32) {
+        unsafe {
+            PM.request_resource(prcm::PowerDomain::Serial as u32);
+        }
+
+        self.initialize();
+    }
+
+    fn lowest_sleep_mode(&self) -> u32 {
+        SleepMode::DeepSleep as u32
     }
 }
