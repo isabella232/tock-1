@@ -125,10 +125,17 @@ impl<G: hil::gpio::Pin + hil::gpio::PinCtl> Driver for Sky2435L<'a, G> {
 // ________________________________________|
 //
 impl<G: hil::gpio::Pin + hil::gpio::PinCtl> Skyworks for Sky2435L<'a, G> {
-    // Bypass mode pin settings: CPS: Low, CSD: Low, CTX: Low
-    fn bypass(&self) -> ReturnCode {
+    // Sleep mode pin settings: CPS: Low, CSD: Low, CTX: Low
+    fn sleep(&self) -> ReturnCode {
         self.clear_pin(CtlPinType::Cps)
             .and_then(|_| self.clear_pin(CtlPinType::Csd))
+            .and_then(|_| self.clear_pin(CtlPinType::Ctx))
+            .unwrap_or(ReturnCode::FAIL)
+    }
+    // Bypass mode pin settings: CPS: Low, CSD: High, CTX: Low
+    fn bypass(&self) -> ReturnCode {
+        self.clear_pin(CtlPinType::Cps)
+            .and_then(|_| self.set_pin(CtlPinType::Csd))
             .and_then(|_| self.clear_pin(CtlPinType::Ctx))
             .unwrap_or(ReturnCode::FAIL)
     }

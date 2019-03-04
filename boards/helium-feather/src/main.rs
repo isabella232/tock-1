@@ -15,7 +15,6 @@ use cc26x2::adc;
 use cc26x2::aon;
 use cc26x2::osc;
 use cc26x2::prcm;
-use cc26x2::pwm;
 use cc26x2::radio;
 use kernel::capabilities;
 use kernel::hil;
@@ -184,7 +183,6 @@ pub unsafe fn reset_handler() {
     prcm::Clock::enable_gpio();
 
     let pinmap: &Pinmap;
-    let chip_id = (cc26x2::rom::HAPI.get_chip_id)();
 
     pinmap = &cc1352p::PINMAP;
     configure_pins(pinmap);
@@ -482,7 +480,7 @@ pub unsafe fn reset_handler() {
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
 
-    let rfc = &cc26x2::radio::MULTIMODE_RADIO;
+    //let rfc = &cc26x2::radio::MULTIMODE_RADIO;
     //rfc.run_tests(0);
 
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);

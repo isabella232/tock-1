@@ -2,8 +2,6 @@ use super::Pinmap;
 use crate::enum_primitive::cast::FromPrimitive;
 use crate::enum_primitive::enum_from_primitive;
 
-pub const CHIP_ID: u32 = 0x2282f000;
-
 enum_from_primitive! {
 pub enum PIN_FN {
     I2C0_SDA = 5,

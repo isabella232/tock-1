@@ -271,6 +271,15 @@ pub mod prop_commands {
         pub _num_addr, set_num_addr                         : 15, 11;
     }
 
+    bitfield! {
+        #[derive(Copy, Clone)]
+        pub struct RfcTxTestConf(u8);
+        impl Debug;
+        pub _use_cw, set_use_cw                             : 0;
+        pub _fs_off, set_fs_off                             : 1;
+        pub _whiten_mode, set_whiten_mode                   :3, 2;
+    }
+
     // Radio Operation Commands
     #[repr(C)]
     #[derive(Copy, Clone)]
@@ -442,5 +451,22 @@ pub mod prop_commands {
 
     unsafe impl RadioCommand for CommandRxAdv {
         fn guard(&mut self) {}
+    }
+
+    #[repr(C)]
+    pub struct CommandTxTest {
+        pub command_no: u16, // 0808
+        pub status: u16,
+        pub p_nextop: u32,
+        pub start_time: u32,
+        pub start_trigger: u8,
+        pub condition: RfcCondition,
+        pub config: RfcTxTestConf,
+        pub _reserved0: u8,
+        pub tx_word: u16,
+        pub _reserved1: u8,
+        pub end_trigger: RfcTrigger,
+        pub sync_word: u32,
+        pub end_time: u32,
     }
 }
