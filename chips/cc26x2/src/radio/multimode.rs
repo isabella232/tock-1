@@ -172,7 +172,7 @@ impl Radio {
                 .ok();
         });
 
-        self.skyworks_client.map(|client| client.client.bypass());
+        self.skyworks_client.map(|client| client.bypass());
     }
 
     unsafe fn start_rx_cmd(&self) -> ReturnCode {
