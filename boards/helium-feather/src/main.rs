@@ -403,35 +403,13 @@ pub unsafe fn reset_handler() {
     cc26x2::trng::TRNG.set_client(entropy_to_random);
     entropy_to_random.set_client(rng);
 
-    // Set skyworks chip control pins
-    let sky_pins = static_init!(
-        [(
-            &'static cc26x2::gpio::GPIOPin,
-            capsules::skyworks_se2435l_r::ActivationMode,
-            capsules::skyworks_se2435l_r::CtlPinType
-        ); 3],
-        [
-            (
-                &cc26x2::gpio::PORT[pinmap.skyworks_csd],
-                capsules::skyworks_se2435l_r::ActivationMode::ActiveHigh,
-                capsules::skyworks_se2435l_r::CtlPinType::Csd
-            ),
-            (
-                &cc26x2::gpio::PORT[pinmap.skyworks_cps],
-                capsules::skyworks_se2435l_r::ActivationMode::ActiveHigh,
-                capsules::skyworks_se2435l_r::CtlPinType::Cps
-            ),
-            (
-                &cc26x2::gpio::PORT[pinmap.skyworks_ctx],
-                capsules::skyworks_se2435l_r::ActivationMode::ActiveHigh,
-                capsules::skyworks_se2435l_r::CtlPinType::Ctx
-            ),
-        ]
-    );
-
     let sky = static_init!(
         capsules::skyworks_se2435l_r::Sky2435L<'static, cc26x2::gpio::GPIOPin>,
-        capsules::skyworks_se2435l_r::Sky2435L::new(sky_pins)
+        capsules::skyworks_se2435l_r::Sky2435L::new(
+            &cc26x2::gpio::PORT[pinmap.skyworks_csd],
+            &cc26x2::gpio::PORT[pinmap.skyworks_cps],
+            &cc26x2::gpio::PORT[pinmap.skyworks_ctx],
+        )
     );
 
     // Set underlying radio client to the radio mode wrapper
