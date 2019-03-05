@@ -6,9 +6,11 @@ pub static mut LR_RFPARAMS: [u32; 6] = [
     0x030c5068, 0x50884446, 0x0017609c, 0x000288A3, 0x7ddf0002, 0xFFFFFFFF,
 ];
 
-//pub static mut TX_STD_PARAMS: [u32; 4] = [0x0141362b, 0x11310703, 0x001a6028, 0xFFFFFFFF];
-pub static mut TX_STD_PARAMS: [u32; 4] = [0x00c9222b, 0x11310703, 0x001a6028, 0xFFFFFFFF];
-
+//pub static mut TX_STD_PARAMS: [u32; 4] = [0x0141362b, 0x11310703, 0x001a6028, 0xFFFFFFFF]; // 10
+//dB output
+pub static mut TX_STD_PARAMS: [u32; 4] = [0x00c9222b, 0x11310703, 0x001a6028, 0xFFFFFFFF]; // 9 dB output
+                                                                                           //pub static mut TX_STD_PARAMS: [u32; 4] = [0x004f262b, 0x11310703, 0x001a6028, 0xFFFFFFFF]; // 2
+                                                                                           //dB output
 pub static mut TX_20_PARAMS: [u32; 4] = [0x82a86c2b, 0x11310703, 0x001f6028, 0xFFFFFFFF];
 
 pub static mut OLD_LR_RFPARAMS: [u32; 28] = [
