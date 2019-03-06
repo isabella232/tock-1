@@ -2,6 +2,7 @@
 
 use crate::driver::Driver;
 use crate::syscall;
+use enum_primitive::cast::{FromPrimitive, ToPrimitive};
 
 pub mod mpu;
 crate mod systick;
@@ -14,7 +15,9 @@ pub trait Platform {
     where
         F: FnOnce(Option<&Driver>) -> R;
 
-    fn handle_irq(&mut self, irq_num: usize);
+    fn has_pending_events(&mut self)-> bool;
+
+    fn service_pending_events(&mut self);
 }
 
 /// Interface for individual MCUs.
@@ -23,8 +26,6 @@ pub trait Chip {
     type UserspaceKernelBoundary: syscall::UserspaceKernelBoundary;
     type SysTick: systick::SysTick;
 
-    fn service_pending_interrupts<P: Platform>(&self, platform: &mut P);
-    fn has_pending_interrupts(&self) -> bool;
     fn mpu(&self) -> &Self::MPU;
     fn systick(&self) -> &Self::SysTick;
     fn userspace_kernel_boundary(&self) -> &Self::UserspaceKernelBoundary;

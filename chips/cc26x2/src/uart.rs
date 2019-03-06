@@ -86,7 +86,7 @@ pub struct UART<'a> {
     receiving_word: Cell<bool>,
 }
 
-use enum_primitive::cast::FromPrimitive;
+use enum_primitive::cast::{FromPrimitive, ToPrimitive};
 use enum_primitive::enum_from_primitive;
 enum_from_primitive! {
 #[derive(Debug, PartialEq, Clone, Copy)]

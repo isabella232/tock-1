@@ -2,6 +2,7 @@
 
 use core::cell::Cell;
 use core::ptr::NonNull;
+use enum_primitive::cast::{FromPrimitive, ToPrimitive};
 
 use crate::callback::Callback;
 use crate::capabilities;
@@ -15,6 +16,7 @@ use crate::platform::{Chip, Platform};
 use crate::process::{self, Task};
 use crate::returncode::ReturnCode;
 use crate::syscall::{ContextSwitchReason, Syscall};
+
 
 /// The time a process is permitted to run before being pre-empted
 const KERNEL_TICK_DURATION_US: u32 = 10000;
@@ -209,19 +211,19 @@ impl Kernel {
     ) {
         loop {
             unsafe {
-                chip.service_pending_interrupts(platform);
+                platform.service_pending_events();
 
                 for p in self.processes.iter() {
                     p.map(|process| {
                         self.do_process(platform, chip, process, ipc);
                     });
-                    if chip.has_pending_interrupts() {
+                    if platform.has_pending_events() {
                         break;
                     }
                 }
 
                 chip.atomic(|| {
-                    if !chip.has_pending_interrupts() && self.processes_blocked() {
+                    if !platform.has_pending_events() && self.processes_blocked() {
                         chip.sleep();
                     }
                 });
@@ -243,9 +245,6 @@ impl Kernel {
         systick.enable(false);
 
         loop {
-            if chip.has_pending_interrupts() {
-                break;
-            }
 
             if systick.overflowed() || !systick.greater_than(MIN_QUANTA_THRESHOLD_US) {
                 process.debug_timeslice_expired();

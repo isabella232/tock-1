@@ -5,6 +5,7 @@
 extern crate capsules;
 extern crate cc26x2;
 extern crate cortexm4;
+extern crate cortexm; 
 extern crate enum_primitive;
 
 use capsules::uart;
@@ -12,6 +13,8 @@ use cc26x2::aon;
 use cc26x2::peripheral_interrupts::NVIC_IRQ;
 use cc26x2::prcm;
 use cc26x2::pwm;
+use cortexm::events;
+
 use enum_primitive::cast::FromPrimitive;
 #[allow(unused_imports)]
 use kernel::{create_capability, debug, debug_gpio, static_init};
@@ -37,6 +40,7 @@ mod i2c_tests;
 #[allow(dead_code)]
 mod uart_test;
 mod event_priority;
+
 
 // High frequency oscillator speed
 pub const HFREQ: u32 = 48 * 1_000_000;
@@ -88,30 +92,32 @@ impl<'a> kernel::Platform for LaunchXlPlatform<'a> {
         }
     }
 
-    fn handle_irq(&mut self, irq_num: usize) {
-        let irq = NVIC_IRQ::from_u32(irq_num as u32)
-            .expect("Pending IRQ flag not enumerated in NVIQ_IRQ");
+    fn has_pending_events(&mut self) -> bool {
+        events::has_event()
+    }
 
-        match irq {
-            NVIC_IRQ::GPIO => unsafe { cc26x2::gpio::PORT.handle_interrupt() },
-            NVIC_IRQ::AON_RTC => unsafe { cc26x2::rtc::RTC.handle_interrupt() },
-            NVIC_IRQ::UART0 => {
-                // pass data from static debug writer to the stack allocated debug uart client
-                unsafe {
-                    self.debug_client.with_buffer( |buf| debug::get_debug_writer().publish_str(buf));
-                }
-                let clients = [
-                    self.debug_client as &kernel::hil::uart::Client,
-                ];
-                capsules::uart::handle_irq(0, self.uart, Some(&clients));
-            },
-            NVIC_IRQ::UART1 => {
-                capsules::uart::handle_irq(1, self.uart, None);
+    fn service_pending_events(&mut self) {
+        unsafe {
+
+            let pending_event: Option<event_priority::EVENT_PRIORITY>  = events::next_pending();
+            while let Some(event) = pending_event {
+                events::clear_event_flag(event);
+                // match event {
+                //     EVENT_PRIORITY::GPIO => gpio::PORT.handle_events(),
+                //     EVENT_PRIORITY::AON_RTC => rtc::RTC.handle_events(),
+                //     EVENT_PRIORITY::I2C0 => i2c::I2C0.handle_events(),
+                //     EVENT_PRIORITY::UART0 => uart::UART0.handle_events(),
+                //     EVENT_PRIORITY::UART1 => uart::UART1.handle_events(),
+                //     EVENT_PRIORITY::RF_CMD_ACK => radio::RFC.handle_ack_event(),
+                //     EVENT_PRIORITY::RF_CORE_CPE0 => radio::RFC.handle_cpe0_event(),
+                //     EVENT_PRIORITY::RF_CORE_CPE1 => radio::RFC.handle_cpe1_event(),
+                //     EVENT_PRIORITY::RF_CORE_HW => panic!("Unhandled RFC interupt event!"),
+                //     EVENT_PRIORITY::AUX_ADC => adc::ADC.handle_events(),
+                //     EVENT_PRIORITY::OSC => prcm::handle_osc_interrupt(),
+                //     EVENT_PRIORITY::AON_PROG => (),
+                //     _ => panic!("unhandled event {:?} ", event),
+                // }
             }
-            NVIC_IRQ::I2C0 => unsafe { cc26x2::i2c::I2C0.handle_interrupt() },
-            // We need to ignore JTAG events since some debuggers emit these
-            NVIC_IRQ::AON_PROG => (),
-            _ => panic!("Unhandled interrupt {:?}", irq),
         }
     }
 }
@@ -405,7 +411,7 @@ pub unsafe fn reset_handler() {
     };
 
     // prime the pump with this interaction
-    launchxl.handle_irq(NVIC_IRQ::UART0 as usize);
+    //launchxl.handle_irq(NVIC_IRQ::UART0 as usize);
 
     let chip = static_init!(cc26x2::chip::Cc26X2, cc26x2::chip::Cc26X2::new(HFREQ));
 
