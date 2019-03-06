@@ -36,6 +36,7 @@ mod ccfg_test;
 mod i2c_tests;
 #[allow(dead_code)]
 mod uart_test;
+mod event_priority;
 
 // High frequency oscillator speed
 pub const HFREQ: u32 = 48 * 1_000_000;

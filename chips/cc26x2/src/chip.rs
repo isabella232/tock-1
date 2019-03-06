@@ -37,18 +37,21 @@ impl kernel::Chip for Cc26X2 {
     }
 
     fn service_pending_interrupts<P: kernel::Platform>(&self, platform: &mut P) {
-        unsafe {
-            while let Some(interrupt) = events::next_pending() {
-                platform.handle_event(interrupt as usize);
-                let n = nvic::Nvic::new(interrupt);
-                n.clear_pending();
-                n.enable();
-            }
-        }
+
+        // platform.service_pending_events();
+        // unsafe {
+        //     while let Some(interrupt) = events::next_pending() {
+        //         platform.handle_event(interrupt as usize);
+        //         let n = nvic::Nvic::new(interrupt);
+        //         n.clear_pending();
+        //         n.enable();
+        //     }
+        // }
     }
 
     fn has_pending_interrupts(&self) -> bool {
-        events::has_event()
+        //events::has_event()
+        false
     }
 
     fn sleep(&self) {

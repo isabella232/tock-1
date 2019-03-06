@@ -20,6 +20,7 @@ dependencies = [
 name = "cortexm"
 version = "0.1.0"
 dependencies = [
+ "enum_primitive 0.1.0",
  "kernel 0.1.0",
 ]
 
