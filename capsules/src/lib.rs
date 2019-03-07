@@ -2,10 +2,18 @@
 #![forbid(unsafe_code)]
 #![no_std]
 
+#[allow(unused_imports)]
+#[macro_use(debug, static_init)]
+extern crate kernel;
+#[macro_use]
+extern crate enum_primitive;
 pub mod test;
 
 #[macro_use]
 pub mod net;
+extern crate cauterize;
+extern crate fixedvec;
+extern crate msg;
 
 pub mod adc;
 pub mod aes_ccm;
@@ -16,7 +24,6 @@ pub mod analog_sensor;
 pub mod app_flash_driver;
 pub mod ble_advertising_driver;
 pub mod button;
-pub mod buzzer_driver;
 pub mod crc;
 pub mod dac;
 pub mod debug_process_restart;
@@ -25,6 +32,7 @@ pub mod fm25cl;
 pub mod fxos8700cq;
 pub mod gpio;
 pub mod gpio_async;
+pub mod helium;
 pub mod humidity;
 pub mod i2c_master;
 pub mod i2c_master_slave_driver;
@@ -40,11 +48,14 @@ pub mod ninedof;
 pub mod nonvolatile_storage_driver;
 pub mod nonvolatile_to_pages;
 pub mod pca9544a;
+pub mod pwm;
 pub mod rf233;
 pub mod rf233_const;
 pub mod rng;
 pub mod sdcard;
 pub mod si7021;
+pub mod simple_rfcore;
+pub mod skyworks_se2435l_r;
 pub mod spi;
 pub mod temperature;
 pub mod tmp006;

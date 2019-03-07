@@ -144,7 +144,7 @@ pub struct I2CMaster<'a> {
 impl<'a> I2CMaster<'a> {
     const fn new(registers: StaticRef<I2CMasterRegisters>, nvic: &'a nvic::Nvic) -> I2CMaster<'a> {
         I2CMaster {
-            registers: registers,
+            registers,
             nvic,
             client: OptionalCell::empty(),
             transfer: MapCell::empty(),

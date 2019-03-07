@@ -255,6 +255,7 @@ pub trait ReceiveAdvanced<'a>: Receive<'a> {
     ) -> (ReturnCode, Option<&'a mut [u8]>);
 }
 
+
 pub trait Client<'a> {
     fn has_tx_request(&self) -> bool;
     fn get_tx_request(&self) -> Option<&mut TxRequest<'a>>;

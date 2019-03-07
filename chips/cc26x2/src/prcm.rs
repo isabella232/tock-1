@@ -108,8 +108,7 @@ struct PrcmRegisters {
 
     _reserved9: [ReadOnly<u8>; 0x24],
 
-    _rfc_bits: ReadOnly<u32, AutoControl::Register>, // CPE auto check at boot for immediate start up tasks
-
+    pub rfc_bits: ReadWrite<u32, AutoControl::Register>, // CPE auto check at boot for immediate start up tasks
     // RF
     pub rfc_mode_sel: ReadWrite<u32>,
     pub rfc_mode_allowed: ReadOnly<u32>,
@@ -195,7 +194,7 @@ register_bitfields![
         CPU_ON      OFFSET(1) NUMBITS(1) []
     ],
     AutoControl [
-        Startup_Prefs OFFSET(0) NUMBITS(32) []
+        STARTUP OFFSET(0) NUMBITS(32) []
     ],
     OscInterrupt [
         HF_SRC OFFSET(7) NUMBITS(1) [],
@@ -248,6 +247,21 @@ pub fn acquire_uldo() {
 pub fn release_uldo() {
     let regs = PRCM_BASE;
     regs.vd_ctl.modify(VDControl::ULDO::CLEAR);
+}
+
+pub fn set_rfc_bits(val: u32) {
+    let regs = PRCM_BASE;
+    regs.rfc_bits.modify(AutoControl::STARTUP.val(val));
+}
+
+pub fn get_rfc_bits() -> u32 {
+    let regs = PRCM_BASE;
+    regs.rfc_bits.get()
+}
+
+pub fn rf_mode_sel(mode: u32) {
+    let regs = PRCM_BASE;
+    regs.rfc_mode_sel.set(mode);
 }
 
 pub enum PowerDomain {
@@ -371,7 +385,12 @@ impl Clock {
         let regs = PRCM_BASE;
         regs.sec_dma_clk_run
             .modify(SECDMAClockGate::TRNG_CLK_EN::SET);
-
+        /*
+                regs.sec_dma_clk_sleep
+                    .modify(SECDMAClockGate::TRNG_CLK_EN::SET);
+                regs.sec_dma_clk_deep_sleep
+                    .modify(SECDMAClockGate::TRNG_CLK_EN::SET);
+        */
         prcm_commit();
     }
 
@@ -531,5 +550,62 @@ impl Clock {
             .modify(ClockGate::CLK_EN::CLEAR);
 
         prcm_commit();
+    }
+}
+
+pub fn disable_osc_interrupt() {
+    let regs = PRCM_BASE;
+    regs.osc_imsc.write(
+        OscInterrupt::HF_SRC::CLEAR
+            + OscInterrupt::LF_SRC::CLEAR
+            + OscInterrupt::RCOSC_DLF::CLEAR
+            + OscInterrupt::RCOSC_LF::CLEAR
+            + OscInterrupt::RCOSC_HF::CLEAR
+            + OscInterrupt::XOSC_DLF::CLEAR
+            + OscInterrupt::XOSC_HF::CLEAR
+            + OscInterrupt::XOSC_LF::CLEAR,
+    );
+}
+
+pub fn enable_osc_interrupt(osc: OscInt) {
+    let regs = PRCM_BASE;
+    match osc {
+        OscInt::HF_SRC => regs.osc_imsc.modify(OscInterrupt::HF_SRC::SET),
+        OscInt::LF_SRC => regs.osc_imsc.modify(OscInterrupt::LF_SRC::SET),
+        OscInt::RCOSC_DLF => regs.osc_imsc.modify(OscInterrupt::RCOSC_DLF::SET),
+        OscInt::RCOSC_LF => regs.osc_imsc.modify(OscInterrupt::RCOSC_LF::SET),
+        OscInt::RCOSC_HF => regs.osc_imsc.modify(OscInterrupt::RCOSC_HF::SET),
+        OscInt::XOSC_DLF => regs.osc_imsc.modify(OscInterrupt::XOSC_DLF::SET),
+        OscInt::XOSC_HF => regs.osc_imsc.modify(OscInterrupt::XOSC_HF::SET),
+        OscInt::XOSC_LF => regs.osc_imsc.modify(OscInterrupt::XOSC_LF::SET),
+    }
+}
+
+pub fn handle_osc_interrupt() {
+    let regs = PRCM_BASE;
+
+    if regs.osc_ris.is_set(OscInterrupt::HF_SRC) {
+        regs.osc_icr.write(OscInterrupt::HF_SRC::SET);
+    }
+    if regs.osc_ris.is_set(OscInterrupt::LF_SRC) {
+        regs.osc_icr.write(OscInterrupt::LF_SRC::SET);
+    }
+    if regs.osc_ris.is_set(OscInterrupt::RCOSC_DLF) {
+        regs.osc_icr.write(OscInterrupt::RCOSC_DLF::SET);
+    }
+    if regs.osc_ris.is_set(OscInterrupt::RCOSC_LF) {
+        regs.osc_icr.write(OscInterrupt::RCOSC_LF::SET);
+    }
+    if regs.osc_ris.is_set(OscInterrupt::RCOSC_HF) {
+        regs.osc_icr.write(OscInterrupt::RCOSC_HF::SET);
+    }
+    if regs.osc_ris.is_set(OscInterrupt::XOSC_HF) {
+        regs.osc_icr.write(OscInterrupt::XOSC_HF::SET);
+    }
+    if regs.osc_ris.is_set(OscInterrupt::XOSC_LF) {
+        regs.osc_icr.write(OscInterrupt::XOSC_LF::SET);
+    }
+    if regs.osc_ris.is_set(OscInterrupt::XOSC_DLF) {
+        regs.osc_icr.write(OscInterrupt::XOSC_DLF::SET);
     }
 }

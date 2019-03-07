@@ -41,11 +41,9 @@ pub unsafe extern "C" fn systick_handler() {
     ldr r0, =SYSTICK_EXPIRED
     mov r1, #1
     str r1, [r0, #0]
-
     /* Set thread mode to privileged */
     mov r0, #0
     msr CONTROL, r0
-
     movw LR, #0xFFF9
     movt LR, #0xFFFF"
     : : : : "volatile" );
@@ -168,19 +166,14 @@ pub unsafe extern "C" fn switch_to_user(
     asm!("
     /* Load bottom of stack into Process Stack Pointer */
     msr psp, $0
-
     /* Load non-hardware-stacked registers from Process stack */
     /* Ensure that $2 is stored in a callee saved register */
     ldmia $2, {r4-r11}
-
     /* SWITCH */
     svc 0xff /* It doesn't matter which SVC number we use here */
-
     /* Push non-hardware-stacked registers into Process struct's */
     /* regs field */
     stmia $2, {r4-r11}
-
-
     mrs $0, PSP /* PSP into r0 */"
     : "={r0}"(user_stack)
     : "{r0}"(user_stack), "{r1}"(process_regs)
@@ -359,7 +352,6 @@ pub unsafe extern "C" fn hard_fault_handler() {
             "ldr r0, =APP_HARD_FAULT
               mov r1, #1 /* Fault */
               str r1, [r0, #0]
-
               /* Read the SCB registers. */
               ldr r0, =SCB_REGISTERS
               ldr r1, =0xE000ED14
@@ -373,11 +365,9 @@ pub unsafe extern "C" fn hard_fault_handler() {
               str r2, [r0, #12]
               ldr r2, [r1, #36] /* BFAR */
               str r2, [r0, #16]
-
               /* Set thread mode to privileged */
               mov r0, #0
               msr CONTROL, r0
-
               movw LR, #0xFFF9
               movt LR, #0xFFFF"
         : : : : "volatile" );

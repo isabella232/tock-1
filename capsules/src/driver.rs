@@ -12,7 +12,8 @@ pub enum NUM {
     APP_FLASH =  0x50000,
     BLE_ADVERTISING = 0x030000,
     BUTTON = 0x00000003,
-    CONSOLE = 0x00000001,
+    CONSOLE = 0x0000ABCD,
+    UART = 0x00000001,
     CRC = 0x40002,
     DAC = 0x00000006,
     GPIO = 0x00000004,
@@ -30,6 +31,7 @@ pub enum NUM {
     PCA9544A = 0x80002,
     RNG = 0x40001,
     SD_CARD = 0x50002,
+    SKY2435L = 0x484c4d03, // ascii hex val for "HLMx"
     SPI = 0x20001,
     TEMPERATURE = 0x60000,
     TMP006 = 0x70001,

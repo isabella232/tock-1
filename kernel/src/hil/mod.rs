@@ -14,6 +14,8 @@ pub mod led;
 pub mod nonvolatile_storage;
 pub mod pwm;
 pub mod radio;
+pub mod rf_frontend;
+pub mod rfcore;
 pub mod rng;
 pub mod sensors;
 pub mod spi;
