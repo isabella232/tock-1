@@ -4,6 +4,11 @@ use crate::prcm;
 use core::cell::Cell;
 use kernel::common::cells::MapCell;
 use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite, WriteOnly};
+use kernel::debug;
+use cortexm4::nvic;
+use crate::peripheral_interrupts;
+
+
 use kernel::hil;
 use kernel::hil::uart;
 use kernel::ReturnCode;
@@ -80,6 +85,7 @@ register_bitfields![
 ];
 
 pub struct UART<'a> {
+    nvic: nvic::Nvic,
     registers: &'a UartRegisters,
     tx: MapCell<&'a mut uart::TxRequest<'a>>,
     rx: MapCell<&'a mut uart::RxRequest<'a>>,
@@ -120,7 +126,14 @@ impl<'a> UART<'a> {
             PeripheralNum::_1 => &*(UART1_BASE as *const UartRegisters),
         };
 
+        let nvic = match num {
+            PeripheralNum::_0 => nvic::Nvic::new(peripheral_interrupts::NVIC_IRQ::UART0 as u32),
+            PeripheralNum::_1 => nvic::Nvic::new(peripheral_interrupts::NVIC_IRQ::UART1 as u32),
+
+        };
+
         let ret = UART {
+            nvic,
             registers,
             tx: MapCell::empty(),
             rx: MapCell::empty(),
@@ -242,7 +255,7 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
             // no current read request
             else {
                 // read bytes into the void to avoid hardware RX buffer overflow
-                self.read();
+                debug!("{}", self.read());
             }
         }
 
@@ -261,6 +274,10 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
                 self.tx.put(tx);
             }
         });
+
+        self.nvic.clear_pending();
+        self.nvic.enable();
+
         (tx_complete, rx_complete)
     }
 }

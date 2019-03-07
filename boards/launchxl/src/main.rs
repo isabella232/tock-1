@@ -1,6 +1,6 @@
 #![no_std]
 #![no_main]
-#![feature(lang_items, asm)]
+#![feature(lang_items, asm, naked_functions)]
 
 extern crate capsules;
 extern crate cc26x2;
@@ -97,26 +97,35 @@ impl<'a> kernel::Platform for LaunchXlPlatform<'a> {
     }
 
     fn service_pending_events(&mut self) {
-        unsafe {
+        let pending_event: Option<event_priority::EVENT_PRIORITY>  = events::next_pending();
+        while let Some(event) = pending_event {
+            events::clear_event_flag(event);
+            match event {
+                event_priority::EVENT_PRIORITY::GPIO => {}, //unsafe {cc26x2::gpio::PORT.handle_events()},
+                event_priority::EVENT_PRIORITY::AON_RTC => {}, //unsafe {cc26x2::rtc::RTC.handle_events()},
+                event_priority::EVENT_PRIORITY::I2C0 => {}, //unsafe {cc26x2::i2c::I2C0.handle_events()},
+                event_priority::EVENT_PRIORITY::UART0 => {
 
-            let pending_event: Option<event_priority::EVENT_PRIORITY>  = events::next_pending();
-            while let Some(event) = pending_event {
-                events::clear_event_flag(event);
-                // match event {
-                //     EVENT_PRIORITY::GPIO => gpio::PORT.handle_events(),
-                //     EVENT_PRIORITY::AON_RTC => rtc::RTC.handle_events(),
-                //     EVENT_PRIORITY::I2C0 => i2c::I2C0.handle_events(),
-                //     EVENT_PRIORITY::UART0 => uart::UART0.handle_events(),
-                //     EVENT_PRIORITY::UART1 => uart::UART1.handle_events(),
-                //     EVENT_PRIORITY::RF_CMD_ACK => radio::RFC.handle_ack_event(),
-                //     EVENT_PRIORITY::RF_CORE_CPE0 => radio::RFC.handle_cpe0_event(),
-                //     EVENT_PRIORITY::RF_CORE_CPE1 => radio::RFC.handle_cpe1_event(),
-                //     EVENT_PRIORITY::RF_CORE_HW => panic!("Unhandled RFC interupt event!"),
-                //     EVENT_PRIORITY::AUX_ADC => adc::ADC.handle_events(),
-                //     EVENT_PRIORITY::OSC => prcm::handle_osc_interrupt(),
-                //     EVENT_PRIORITY::AON_PROG => (),
-                //     _ => panic!("unhandled event {:?} ", event),
-                // }
+                    // pass data from static debug writer to the stack allocated debug uart client
+                    unsafe {
+                        self.debug_client.with_buffer( |buf| debug::get_debug_writer().publish_str(buf));
+                    }
+                    let clients = [
+                        self.debug_client as &kernel::hil::uart::Client,
+                    ];
+                    capsules::uart::handle_irq(0, self.uart, Some(&clients));
+                },
+                event_priority::EVENT_PRIORITY::UART1 => {
+                    //capsules::uart::handle_irq(1, self.uart, None);
+                },
+                //event_priority::EVENT_PRIORITY::RF_CMD_ACK => cc26x2::radio::RFC.handle_ack_event(),
+                //event_priority::EVENT_PRIORITY::RF_CORE_CPE0 => cc26x2::radio::RFC.handle_cpe0_event(),
+                //event_priority::EVENT_PRIORITY::RF_CORE_CPE1 => cc26x2::radio::RFC.handle_cpe1_event(),
+                //event_priority::EVENT_PRIORITY::RF_CORE_HW => panic!("Unhandled RFC interupt event!"),
+                //event_priority::EVENT_PRIORITY::AUX_ADC => cc26x2::adc::ADC.handle_events(),
+                //event_priority::EVENT_PRIORITY::OSC => cc26x2::prcm::handle_osc_interrupt(),
+                event_priority::EVENT_PRIORITY::AON_PROG => (),
+                _ => panic!("unhandled event {:?} ", event),
             }
         }
     }
@@ -268,9 +277,8 @@ pub unsafe fn reset_handler() {
         count += 1;
     }
 
-    // UART
-
-        // setup static debug writer
+    // UARTU
+    // setup static debug writer
     let debug_writer = static_init!(
         kernel::debug::DebugWriter,
         kernel::debug::DebugWriter::new(&mut kernel::debug::BUF)
@@ -410,6 +418,8 @@ pub unsafe fn reset_handler() {
         i2c_master,
     };
 
+    events::set_event_flag(event_priority::EVENT_PRIORITY::UART0);
+
     // prime the pump with this interaction
     //launchxl.handle_irq(NVIC_IRQ::UART0 as usize);
 
@@ -430,13 +440,15 @@ pub unsafe fn reset_handler() {
         &process_management_capability,
     );
 
+    debug!("!");
+
     board_kernel.kernel_loop(&mut launchxl, chip, Some(&ipc), &main_loop_capability);
 }
 
 
 use cortexm4::{
     disable_specific_nvic, generic_isr, hard_fault_handler, nvic, set_privileged_thread,
-    stash_process_state, svc_handler, systick_handler,
+    stash_process_state, svc_handler, systick_handler
 };
 
 macro_rules! generic_isr {
@@ -445,7 +457,7 @@ macro_rules! generic_isr {
         #[naked]
         unsafe extern "C" fn $label() {
             stash_process_state();
-            set_event_flag_from_isr($priority);
+            events::set_event_flag_from_isr($priority);
             disable_specific_nvic();
             set_privileged_thread();
         }
@@ -458,7 +470,7 @@ macro_rules! custom_isr {
         #[naked]
         unsafe extern "C" fn $label() {
             stash_process_state();
-            set_event_flag_from_isr($priority);
+            events::set_event_flag_from_isr($priority);
             $isr();
             set_privileged_thread();
         }
@@ -468,6 +480,8 @@ macro_rules! custom_isr {
 unsafe extern "C" fn unhandled_interrupt() {
     'loop0: loop {}
 }
+
+generic_isr!(uart0_nvic, event_priority::EVENT_PRIORITY::UART0);
 
 #[link_section = ".vectors"]
 // used Ensures that the symbol is kept until the final binary
@@ -494,7 +508,7 @@ pub static BASE_VECTORS: [unsafe extern "C" fn(); 54] = [
     generic_isr,         // RF Core Command & Packet Engine 1
     generic_isr,         // AON SpiSplave Rx, Tx and CS
     generic_isr,         // AON RTC
-    generic_isr,         // UART0 Rx and Tx
+    uart0_nvic,         // UART0 Rx and Tx
     generic_isr,         // AUX software event 0
     generic_isr,         // SSI0 Rx and Tx
     generic_isr,         // SSI1 Rx and Tx
