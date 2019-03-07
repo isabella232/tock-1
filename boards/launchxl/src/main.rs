@@ -421,7 +421,6 @@ pub unsafe fn reset_handler() {
     events::set_event_flag(event_priority::EVENT_PRIORITY::UART0);
 
     // prime the pump with this interaction
-    //launchxl.handle_irq(NVIC_IRQ::UART0 as usize);
 
     let chip = static_init!(cc26x2::chip::Cc26X2, cc26x2::chip::Cc26X2::new(HFREQ));
 
@@ -440,7 +439,7 @@ pub unsafe fn reset_handler() {
         &process_management_capability,
     );
 
-    debug!("!");
+    debug!("wowowahdowadaadasdasdasdasdw");
 
     board_kernel.kernel_loop(&mut launchxl, chip, Some(&ipc), &main_loop_capability);
 }
@@ -456,10 +455,10 @@ macro_rules! generic_isr {
         #[cfg(target_os = "none")]
         #[naked]
         unsafe extern "C" fn $label() {
+
             stash_process_state();
-            events::set_event_flag_from_isr($priority);
-            disable_specific_nvic();
             set_privileged_thread();
+            events::set_event_flag_from_isr($priority as usize);
         }
     };
 }

@@ -42,7 +42,7 @@ pub fn set_event_flag<T: ToPrimitive>(priority: T) {
 }
 
 #[naked]
-pub unsafe fn set_event_flag_from_isr<T: ToPrimitive>(priority: T) {
+pub unsafe fn set_event_flag_from_isr(priority: usize) {
     // Set PRIMASK
     asm!("cpsid i" :::: "volatile");
 
@@ -52,7 +52,7 @@ pub unsafe fn set_event_flag_from_isr<T: ToPrimitive>(priority: T) {
         isb
         "
         : "={r0}"(FLAGS)
-        : "{r0}"(FLAGS), "{r1}"(0b1<<(priority.to_usize().expect("Could not cast priority enum as usize")))
+        : "{r0}"(FLAGS), "{r1}"(0b1<<(priority))
         : : "volatile" "volatile"
     );
 
