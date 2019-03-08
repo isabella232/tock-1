@@ -20,6 +20,7 @@ pub mod component;
 #[macro_use]
 pub mod debug;
 pub mod hil;
+pub mod ikc;
 pub mod introspection;
 pub mod ipc;
 pub mod syscall;
@@ -29,7 +30,7 @@ mod driver;
 mod grant;
 mod mem;
 mod memop;
-mod platform;
+pub mod platform;
 mod process;
 mod returncode;
 mod sched;

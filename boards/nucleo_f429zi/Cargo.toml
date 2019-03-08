@@ -1,5 +1,5 @@
 [package]
-name = "helium-feather"
+name = "nucleo_f429zi"
 version = "0.1.0"
 authors = ["Tock Project Developers <tock-dev@googlegroups.com>"]
 build = "build.rs"
@@ -17,19 +17,8 @@ lto = true
 opt-level = "z"
 debug = true
 
-[[bin]]
-name = "helium-feather"
-path = "src/main.rs"
-
-[[bin]]
-name = "helium-featherccfg"
-path = "src/ccfg.rs"
-
 [dependencies]
-cortexm = { path = "../../arch/cortex-m" }
 cortexm4 = { path = "../../arch/cortex-m4" }
 capsules = { path = "../../capsules" }
 kernel = { path = "../../kernel" }
-cc26x2 = { path = "../../chips/cc26x2" }
-fixedvec = "0.2.3"
-enum_primitive = { path = "../../libraries/enum_primitive" }
+stm32f4xx = { path = "../../chips/stm32f4xx", features = ["stm32f429zi"] }

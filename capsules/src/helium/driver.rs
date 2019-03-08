@@ -1,4 +1,4 @@
-use crate::enum_primitive::cast::FromPrimitive;
+use crate::enum_primitive::cast::{FromPrimitive, ToPrimitive};
 use crate::helium::{device, framer::CauterizeType};
 use core::cmp::min;
 use kernel::common::cells::{OptionalCell, TakeCell};

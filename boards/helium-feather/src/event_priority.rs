@@ -1,10 +1,8 @@
 //
 //  These are configurable priorities that can be used by ISRs or yields from within kernel space
 //
-
-use enum_primitive::cast::FromPrimitive;
-
-pub static mut FLAGS: u32 = 0;
+use enum_primitive::cast::{FromPrimitive, ToPrimitive};
+use enum_primitive::enum_from_primitive;
 
 enum_from_primitive! {
 #[derive(Debug, PartialEq, Clone, Copy)]

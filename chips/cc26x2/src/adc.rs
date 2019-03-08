@@ -1,7 +1,7 @@
 use crate::adi;
 use crate::adi::AuxAdi4Registers;
 use crate::aux;
-use crate::enum_primitive::cast::FromPrimitive;
+use crate::enum_primitive::cast::{FromPrimitive, ToPrimitive};
 use crate::fcfg1;
 use crate::peripheral_interrupts;
 use crate::rom;

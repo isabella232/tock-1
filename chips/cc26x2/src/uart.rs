@@ -1,19 +1,16 @@
 //! UART driver, cc26x2 family
-use crate::chip::SleepMode;
-use crate::peripheral_interrupts;
-use crate::peripheral_manager::PowerClient;
-use crate::power::PM;
 use crate::prcm;
+
+use crate::peripheral_interrupts;
 use core::cell::Cell;
 use cortexm4::nvic;
-use kernel;
-use kernel::common::cells::{MapCell, OptionalCell};
+use kernel::common::cells::MapCell;
 use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite, WriteOnly};
-use kernel::common::StaticRef;
+use kernel::debug;
+
+use kernel::hil;
 use kernel::hil::uart;
 use kernel::ReturnCode;
-
-use crate::memory_map::{UART0_BASE, UART1_BASE};
 
 const MCU_CLOCK: u32 = 48_000_000;
 
@@ -35,9 +32,6 @@ struct UartRegisters {
     icr: WriteOnly<u32, Interrupts::Register>,
     dmactl: ReadWrite<u32>,
 }
-
-pub static mut UART0: UART = UART::new(&UART0_REG, &UART0_NVIC);
-pub static mut UART1: UART = UART::new(&UART1_REG, &UART1_NVIC);
 
 register_bitfields![
     u32,
@@ -89,87 +83,68 @@ register_bitfields![
     ]
 ];
 
-const UART0_REG: StaticRef<UartRegisters> =
-    unsafe { StaticRef::new(UART0_BASE as *const UartRegisters) };
-
-const UART1_REG: StaticRef<UartRegisters> =
-    unsafe { StaticRef::new(UART1_BASE as *const UartRegisters) };
-
-const UART0_NVIC: nvic::Nvic =
-    unsafe { nvic::Nvic::new(peripheral_interrupts::NVIC_IRQ::UART0 as u32) };
-const UART1_NVIC: nvic::Nvic =
-    unsafe { nvic::Nvic::new(peripheral_interrupts::NVIC_IRQ::UART1 as u32) };
-
-/// Stores an ongoing TX transaction
-struct Transaction {
-    /// The buffer containing the bytes to transmit as it should be returned to
-    /// the client
-    buffer: &'static mut [u8],
-    /// The total amount to transmit
-    length: usize,
-    /// The index of the byte currently being sent
-    index: usize,
-}
-
 pub struct UART<'a> {
-    registers: &'static StaticRef<UartRegisters>,
-    nvic: &'static nvic::Nvic,
-    tx_client: OptionalCell<&'a uart::TransmitClient>,
-    rx_client: OptionalCell<&'a uart::ReceiveClient>,
-    tx: MapCell<Transaction>,
-    rx: MapCell<Transaction>,
+    nvic: nvic::Nvic,
+    registers: &'a UartRegisters,
+    tx: MapCell<&'a mut uart::TxRequest<'a>>,
+    rx: MapCell<&'a mut uart::RxRequest<'a>>,
     receiving_word: Cell<bool>,
 }
 
-macro_rules! uart_nvic {
-    ($fn_name:tt, $uart:ident) => {
-        #[inline(never)]
-        pub extern "C" fn $fn_name() {
-            unsafe {
-                // handle RX
-                $uart.rx.map(|rx| {
-                    while $uart.rx_fifo_not_empty() && rx.index < rx.length {
-                        let byte = $uart.read_byte();
-                        rx.buffer[rx.index] = byte;
-                        rx.index += 1;
-                    }
-                });
-                // if there is no client, empty the buffer into the void
-                if $uart.rx_fifo_not_empty() {
-                    $uart.read_byte();
-                }
-                $uart.tx.map(|tx| {
-                    // if a big buffer was given, this could be a very long call
-                    if $uart.tx_fifo_not_full() && tx.index < tx.length {
-                        $uart.send_byte(tx.buffer[tx.index]);
-                        tx.index += 1;
-                    }
-                });
-                $uart.registers.icr.write(Interrupts::ALL_INTERRUPTS::Set);
-                $uart.nvic.clear_pending();
-            }
-        }
-    };
+use enum_primitive::cast::{FromPrimitive, ToPrimitive};
+use enum_primitive::enum_from_primitive;
+enum_from_primitive! {
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum PeripheralNum {
+    _0,
+    _1,
+}
 }
 
-uart_nvic!(uart0_isr, UART0);
-uart_nvic!(uart1_isr, UART1);
+static mut GRANTED: [bool; 2] = [false, false];
+
+use crate::memory_map::{UART0_BASE, UART1_BASE};
 
 impl<'a> UART<'a> {
-    const fn new(
-        registers: &'static StaticRef<UartRegisters>,
-        nvic: &'static nvic::Nvic,
-    ) -> UART<'a> {
-        UART {
-            registers,
+    pub fn new(num: PeripheralNum) -> UART<'a> {
+        unsafe {
+            if GRANTED[num as usize] == false {
+                GRANTED[num as usize] = true;
+                return Self::unsafe_new(num);
+            } else {
+                panic!(
+                    "CC26x2: You have attempted to initialize UART {:?} more than once!",
+                    num
+                );
+            }
+        }
+    }
+
+    pub unsafe fn unsafe_new(num: PeripheralNum) -> UART<'a> {
+        // a counter tracking if you've given these out would help make this safe
+        let registers = match num {
+            PeripheralNum::_0 => &*(UART0_BASE as *const UartRegisters),
+            PeripheralNum::_1 => &*(UART1_BASE as *const UartRegisters),
+        };
+
+        let nvic = match num {
+            PeripheralNum::_0 => nvic::Nvic::new(peripheral_interrupts::NVIC_IRQ::UART0 as u32),
+            PeripheralNum::_1 => nvic::Nvic::new(peripheral_interrupts::NVIC_IRQ::UART1 as u32),
+        };
+
+        let ret = UART {
             nvic,
-            tx_client: OptionalCell::empty(),
-            rx_client: OptionalCell::empty(),
+            registers,
             tx: MapCell::empty(),
             rx: MapCell::empty(),
 
             receiving_word: Cell::new(false),
-        }
+        };
+
+        // initialize power, clock and interrupts so it's usable
+        ret.initialize();
+
+        ret
     }
 
     /// Initialize the UART hardware.
@@ -222,52 +197,15 @@ impl<'a> UART<'a> {
         );
     }
 
-    /// Clears all interrupts related to UART.
-    pub fn handle_events(&self) {
-        // Clear interrupts
-        self.registers.icr.write(Interrupts::ALL_INTERRUPTS::SET);
-
-        self.rx.take().map(|rx| {
-            if rx.index == rx.length {
-                self.rx_client.map(move |client| {
-                    client.received_buffer(
-                        rx.buffer,
-                        rx.index,
-                        ReturnCode::SUCCESS,
-                        kernel::hil::uart::Error::None,
-                    );
-                });
-            } else {
-                self.rx.put(rx);
-            }
-        });
-
-        self.tx.take().map(|tx| {
-            if tx.index == tx.length {
-                self.tx_client.map(move |client| {
-                    client.transmitted_buffer(tx.buffer, tx.length, ReturnCode::SUCCESS);
-                });
-            } else {
-                self.tx.put(tx);
-            }
-        });
-    }
-
     pub fn write(&self, c: u32) {
-        self.registers.dr.set(c);
-    }
-
-    // Pushes a byte into the TX FIFO.
-    #[inline]
-    pub fn send_byte(&self, c: u8) {
         // Put byte in data register
-        self.registers.dr.set(c as u32);
+        self.registers.dr.set(c);
     }
 
     // Pulls a byte out of the RX FIFO.
     #[inline]
-    pub fn read_byte(&self) -> u8 {
-        self.registers.dr.get() as u8
+    pub fn read(&self) -> u32 {
+        self.registers.dr.get()
     }
 
     /// Checks if there is space in the transmit fifo queue.
@@ -284,7 +222,69 @@ impl<'a> UART<'a> {
 }
 
 impl<'a> uart::Uart<'a> for UART<'a> {}
-impl<'a> uart::UartData<'a> for UART<'a> {}
+impl<'a> uart::UartPeripheral<'a> for UART<'a> {}
+
+impl<'a> uart::InterruptHandler<'a> for UART<'a> {
+    /// this particular implementation can use hardware to determine state
+    fn handle_interrupt(
+        &self,
+        _state: hil::uart::PeripheralState,
+    ) -> (
+        Option<&mut hil::uart::TxRequest<'a>>,
+        Option<&mut hil::uart::RxRequest<'a>>,
+    ) {
+        let (mut tx_complete, mut rx_complete) = (None, None);
+
+        // Clear interrupts
+        self.registers.icr.write(Interrupts::ALL_INTERRUPTS::SET);
+
+        // Hardware RX FIFO is not empty
+        while self.rx_fifo_not_empty() {
+            // buffer read request was made
+            if self.rx.is_some() {
+                self.rx.take().map(|rx| {
+                    // read in a byte
+                    if !rx.request_completed() {
+                        let byte = self.read() as u8;
+                        rx.push(byte);
+                    }
+
+                    if rx.request_completed() {
+                        rx_complete = Some(rx);
+                    } else {
+                        self.rx.put(rx);
+                    }
+                });
+            }
+            // no current read request
+            else {
+                // read bytes into the void to avoid hardware RX buffer overflow
+                debug!("{}", self.read());
+            }
+        }
+
+        //if we have a request, handle it
+        self.tx.take().map(|tx| {
+            // send out one byte at a time, IRQ when TX FIFO empty will bring us back
+            while self.tx_fifo_not_full() && !tx.request_completed() {
+                if let Some(item) = tx.pop() {
+                    self.write(item as u32);
+                }
+            }
+
+            if tx.request_completed() {
+                tx_complete = Some(tx);
+            } else {
+                self.tx.put(tx);
+            }
+        });
+
+        self.nvic.clear_pending();
+        self.nvic.enable();
+
+        (tx_complete, rx_complete)
+    }
+}
 
 impl<'a> uart::Configure for UART<'a> {
     fn configure(&self, params: uart::Parameters) -> ReturnCode {
@@ -306,12 +306,12 @@ impl<'a> uart::Configure for UART<'a> {
         self.set_baud_rate(params.baud_rate);
 
         // Set word length
-        let word_width = match params.width {
-            uart::Width::Six => LineControl::WORD_LENGTH::Len6,
-            uart::Width::Seven => LineControl::WORD_LENGTH::Len7,
-            uart::Width::Eight => LineControl::WORD_LENGTH::Len8,
-        };
-
+        let word_width;
+        match params.width {
+            uart::Width::Six => word_width = LineControl::WORD_LENGTH::Len6,
+            uart::Width::Seven => word_width = LineControl::WORD_LENGTH::Len7,
+            uart::Width::Eight => word_width = LineControl::WORD_LENGTH::Len8,
+        }
         self.registers.lcrh.write(word_width);
 
         self.fifo_enable();
@@ -328,41 +328,20 @@ impl<'a> uart::Configure for UART<'a> {
 }
 
 impl<'a> uart::Transmit<'a> for UART<'a> {
-    fn set_transmit_client(&self, client: &'a uart::TransmitClient) {
-        self.tx_client.set(client);
-    }
-
-    fn transmit_buffer(
-        &self,
-        buffer: &'static mut [u8],
-        len: usize,
-    ) -> (ReturnCode, Option<&'static mut [u8]>) {
-        // if there is a weird input, don't try to do any transfers
-        if len == 0 || len > buffer.len() {
-            (ReturnCode::ESIZE, Some(buffer))
-        } else if self.tx.is_some() {
-            (ReturnCode::EBUSY, Some(buffer))
-        } else {
-            // we will send one byte, causing EOT interrupt
-            if self.tx_fifo_not_full() {
-                self.send_byte(buffer[0]);
+    fn transmit_buffer(&self, request: &'a mut uart::TxRequest<'a>) -> ReturnCode {
+        // we will send one byte, causing EOT interrupt
+        if self.tx_fifo_not_full() {
+            if let Some(item) = request.pop() {
+                self.write(item as u32);
             }
-            // Transaction will be continued in interrupt bottom half
-            self.tx.put(Transaction {
-                buffer: buffer,
-                length: len,
-                index: 1,
-            });
-            (ReturnCode::SUCCESS, None)
         }
+        // Request will be continued in interrupt bottom half
+        self.tx.put(request);
+        ReturnCode::SUCCESS
     }
 
-    // Incorporating this into the state machine is tricky because
-    // it relies on implicit state from outstanding operations. I.e.,
-    // rather than see if a TX interrupt occurred it checks if the FIFO
-    // can accept data from a buffer. -pal 12/31/18
     fn transmit_word(&self, word: u32) -> ReturnCode {
-        // if there's room in outgoing FIFO and no buffer transaction
+        // if there's room in outgoing FIFO and no buffer Request
         if self.tx_fifo_not_full() && self.tx.is_none() {
             self.write(word);
             return ReturnCode::SUCCESS;
@@ -370,32 +349,18 @@ impl<'a> uart::Transmit<'a> for UART<'a> {
         ReturnCode::FAIL
     }
 
-    fn transmit_abort(&self) -> ReturnCode {
-        ReturnCode::FAIL
+    fn transmit_abort(&self) -> Option<&'a mut uart::TxRequest<'a>> {
+        self.tx.take()
     }
 }
 
 impl<'a> uart::Receive<'a> for UART<'a> {
-    fn set_receive_client(&self, client: &'a uart::ReceiveClient) {
-        self.rx_client.set(client);
-    }
-
-    fn receive_buffer(
-        &self,
-        buffer: &'static mut [u8],
-        len: usize,
-    ) -> (ReturnCode, Option<&'static mut [u8]>) {
-        if len == 0 || len > buffer.len() {
-            (ReturnCode::ESIZE, Some(buffer))
-        } else if self.rx.is_some() || self.receiving_word.get() {
-            (ReturnCode::EBUSY, Some(buffer))
+    fn receive_buffer(&self, request: &'a mut uart::RxRequest<'a>) -> ReturnCode {
+        if self.rx.is_some() || self.receiving_word.get() {
+            ReturnCode::EBUSY
         } else {
-            self.rx.put(Transaction {
-                buffer: buffer,
-                length: len,
-                index: 0,
-            });
-            (ReturnCode::SUCCESS, None)
+            self.rx.put(request);
+            ReturnCode::SUCCESS
         }
     }
 
@@ -408,25 +373,7 @@ impl<'a> uart::Receive<'a> for UART<'a> {
         }
     }
 
-    fn receive_abort(&self) -> ReturnCode {
-        ReturnCode::FAIL
-    }
-}
-
-impl<'a> PowerClient for UART<'a> {
-    fn before_sleep(&self, _sleep_mode: u32) {
-        prcm::Clock::disable_uarts();
-    }
-
-    fn after_wakeup(&self, _sleep_mode: u32) {
-        unsafe {
-            PM.request_resource(prcm::PowerDomain::Serial as u32);
-        }
-
-        self.initialize();
-    }
-
-    fn lowest_sleep_mode(&self) -> u32 {
-        SleepMode::DeepSleep as u32
+    fn receive_abort(&self) -> Option<&'a mut uart::RxRequest<'a>> {
+        self.rx.take()
     }
 }

@@ -1,26 +1,31 @@
 #![no_std]
 #![no_main]
-#![feature(lang_items, asm)]
+#![feature(lang_items, asm, naked_functions)]
 
 extern crate capsules;
 extern crate cc26x2;
+extern crate cortexm;
 extern crate cortexm4;
 extern crate enum_primitive;
 extern crate fixedvec;
+
+use cc26x2::aon;
+use cc26x2::prcm;
+use cc26x2::pwm;
+use cortexm::events;
 
 #[allow(unused_imports)]
 use kernel::{create_capability, debug, debug_gpio, static_init};
 
 use capsules::helium;
 use capsules::helium::{device::Device, virtual_rfcore::RFCore};
-use capsules::virtual_uart::{MuxUart, UartDevice};
+use capsules::uart;
 use cc26x2::adc;
-use cc26x2::aon;
 use cc26x2::osc;
-use cc26x2::prcm;
-use cc26x2::pwm;
 use cc26x2::radio;
+
 use kernel::capabilities;
+use kernel::common::cells::TakeCell;
 use kernel::hil;
 use kernel::hil::entropy::Entropy32;
 use kernel::hil::gpio::InterruptMode;
@@ -29,17 +34,19 @@ use kernel::hil::gpio::PinCtl;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::rfcore::PaType;
 use kernel::hil::rng::Rng;
-use kernel::hil::uart::Configure;
 
 #[macro_use]
 pub mod io;
 
 #[allow(dead_code)]
 mod ccfg_test;
+mod event_priority;
 #[allow(dead_code)]
 mod i2c_tests;
+#[allow(unused_macros)]
+mod interrupt_table;
 #[allow(dead_code)]
-mod uart_echo;
+mod uart_test;
 
 // High frequency oscillator speed
 pub const HFREQ: u32 = 48 * 1_000_000;
@@ -60,11 +67,11 @@ static mut APP_MEMORY: [u8; 0x10000] = [0; 0x10000];
 #[link_section = ".stack_buffer"]
 pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 
-pub struct Platform<'a> {
+pub struct LaunchXlPlatform<'a> {
     gpio: &'static capsules::gpio::GPIO<'static, cc26x2::gpio::GPIOPin>,
     led: &'static capsules::led::LED<'static, cc26x2::gpio::GPIOPin>,
-    uart: &'static capsules::uart::UartDriver<'static, UartDevice<'static>>,
-    //console: &'static capsules::console::Console<'static>,
+    uart: &'a capsules::uart::UartDriver<'a>,
+    debug_client: &'a debug::DebugClient<'a>,
     button: &'static capsules::button::Button<'static, cc26x2::gpio::GPIOPin>,
     alarm: &'static capsules::alarm::AlarmDriver<
         'static,
@@ -75,10 +82,9 @@ pub struct Platform<'a> {
     adc: &'static capsules::adc::Adc<'static, cc26x2::adc::Adc>,
     helium: &'static capsules::helium::driver::Helium<'static>,
     pwm: &'a capsules::pwm::Pwm<'a, cc26x2::pwm::Signal<'a>>,
-    ipc: kernel::ipc::IPC,
 }
 
-impl<'a> kernel::Platform for Platform<'a> {
+impl<'a> kernel::Platform for LaunchXlPlatform<'a> {
     fn with_driver<F, R>(&self, driver_num: usize, f: F) -> R
     where
         F: FnOnce(Option<&kernel::Driver>) -> R,
@@ -94,8 +100,43 @@ impl<'a> kernel::Platform for Platform<'a> {
             capsules::adc::DRIVER_NUM => f(Some(self.adc)),
             capsules::helium::driver::DRIVER_NUM => f(Some(self.helium)),
             capsules::pwm::DRIVER_NUM => f(Some(self.pwm)),
-            kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             _ => f(None),
+        }
+    }
+
+    fn has_pending_events(&mut self) -> bool {
+        events::has_event()
+    }
+
+    fn service_pending_events(&mut self) {
+        let pending_event: Option<event_priority::EVENT_PRIORITY> = events::next_pending();
+        while let Some(event) = pending_event {
+            events::clear_event_flag(event);
+            match event {
+                event_priority::EVENT_PRIORITY::GPIO => {} //unsafe {cc26x2::gpio::PORT.handle_events()},
+                event_priority::EVENT_PRIORITY::AON_RTC => {} //unsafe {cc26x2::rtc::RTC.handle_events()},
+                event_priority::EVENT_PRIORITY::I2C0 => {} //unsafe {cc26x2::i2c::I2C0.handle_events()},
+                event_priority::EVENT_PRIORITY::UART0 => {
+                    // pass data from static debug writer to the stack allocated debug uart client
+                    unsafe {
+                        self.debug_client
+                            .with_buffer(|buf| debug::get_debug_writer().publish_str(buf));
+                    }
+                    let clients = [self.debug_client as &kernel::hil::uart::Client];
+                    capsules::uart::handle_irq(0, self.uart, Some(&clients));
+                }
+                event_priority::EVENT_PRIORITY::UART1 => {
+                    //capsules::uart::handle_irq(1, self.uart, None);
+                }
+                //event_priority::EVENT_PRIORITY::RF_CMD_ACK => cc26x2::radio::RFC.handle_ack_event(),
+                //event_priority::EVENT_PRIORITY::RF_CORE_CPE0 => cc26x2::radio::RFC.handle_cpe0_event(),
+                //event_priority::EVENT_PRIORITY::RF_CORE_CPE1 => cc26x2::radio::RFC.handle_cpe1_event(),
+                //event_priority::EVENT_PRIORITY::RF_CORE_HW => panic!("Unhandled RFC interupt event!"),
+                //event_priority::EVENT_PRIORITY::AUX_ADC => cc26x2::adc::ADC.handle_events(),
+                event_priority::EVENT_PRIORITY::OSC => cc26x2::prcm::handle_osc_interrupt(),
+                event_priority::EVENT_PRIORITY::AON_PROG => (),
+                _ => panic!("unhandled event {:?} ", event),
+            }
         }
     }
 }
@@ -179,9 +220,6 @@ unsafe fn configure_pins(pin: &Pinmap) {
         cc26x2::gpio::PORT[rf_subg].enable_subg_output();
     }
 }
-
-static mut DRIVER_UART0: capsules::uart::Uart<UartDevice> = capsules::uart::Uart::new(0);
-static mut DRIVER_UART1: capsules::uart::Uart<UartDevice> = capsules::uart::Uart::new(1);
 
 #[no_mangle]
 pub unsafe fn reset_handler() {
@@ -280,115 +318,43 @@ pub unsafe fn reset_handler() {
     }
 
     // UART
-    cc26x2::uart::UART0.initialize();
-
-    // Create a shared UART channel for the uart and for kernel debug.
-    let uart0_mux = static_init!(
-        MuxUart<'static>,
-        MuxUart::new(
-            &cc26x2::uart::UART0,
-            &mut capsules::virtual_uart::RX_BUF,
-            115200
-        )
-    );
-    uart0_mux.initialize();
-    hil::uart::Receive::set_receive_client(&cc26x2::uart::UART0, uart0_mux);
-    hil::uart::Transmit::set_transmit_client(&cc26x2::uart::UART0, uart0_mux);
-
-    // Create virtual device for kernel debug.
-    let debugger_uart = static_init!(UartDevice, UartDevice::new(uart0_mux, false));
-    debugger_uart.setup();
-    let debugger = static_init!(
+    // setup static debug writer
+    let debug_writer = static_init!(
         kernel::debug::DebugWriter,
-        kernel::debug::DebugWriter::new(
-            debugger_uart,
-            &mut kernel::debug::OUTPUT_BUF,
-            &mut kernel::debug::INTERNAL_BUF,
-        )
+        kernel::debug::DebugWriter::new(&mut kernel::debug::BUF)
     );
-    hil::uart::Transmit::set_transmit_client(debugger_uart, debugger);
+    kernel::debug::set_debug_writer(debug_writer);
+    // setup uart client for debug on stack
+    let mut debug_client_space = debug::DebugClient::space();
+    let debug_client = debug::DebugClient::new_with_default_space(&mut debug_client_space);
 
-    let debug_wrapper = static_init!(
-        kernel::debug::DebugWriterWrapper,
-        kernel::debug::DebugWriterWrapper::new(debugger)
-    );
-    kernel::debug::set_debug_writer_wrapper(debug_wrapper);
+    // UART
+    let uart0_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_0);
+    let mut uart0_driver_app_space = uart::AppRequestsInProgress::space();
 
-    // Create a UartDevice for the uart.
-    let uart0_device = static_init!(UartDevice, UartDevice::new(uart0_mux, true));
-    uart0_device.setup();
-    kernel::hil::uart::Transmit::set_transmit_client(uart0_device, &DRIVER_UART0);
-    kernel::hil::uart::Receive::set_receive_client(uart0_device, &DRIVER_UART0);
+    // for each client for the driver, provide an empty TakeCell
+    let uart0_clients: [TakeCell<hil::uart::RxRequest>; 3] =
+        [TakeCell::empty(), TakeCell::empty(), TakeCell::empty()];
 
-    // the debug uart should be initialized by hand
-    cc26x2::uart::UART0.configure(hil::uart::Parameters {
-        baud_rate: 115200,
-        width: hil::uart::Width::Eight,
-        stop_bits: hil::uart::StopBits::One,
-        parity: hil::uart::Parity::None,
-        hw_flow_control: false,
-    });
+    let uart1_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_1);
+    let mut uart1_driver_app_space = uart::AppRequestsInProgress::space();
 
-    cc26x2::uart::UART1.initialize();
-    // Create a UART channel for the additional UART
-    let uart1_mux = static_init!(
-        MuxUart<'static>,
-        MuxUart::new(
-            &cc26x2::uart::UART1,
-            &mut capsules::virtual_uart::RX_BUF1,
-            115200
-        )
-    );
-    uart1_mux.initialize();
-    hil::uart::Receive::set_receive_client(&cc26x2::uart::UART1, uart1_mux);
-    hil::uart::Transmit::set_transmit_client(&cc26x2::uart::UART1, uart1_mux);
+    let board_uarts = [
+        &uart::Uart::new(
+            &uart0_hil,
+            Some(&uart0_clients),
+            uart::AppRequestsInProgress::new_with_default_space(&mut uart0_driver_app_space),
+            board_kernel.create_grant(&memory_allocation_capability),
+        ),
+        &uart::Uart::new(
+            &uart1_hil,
+            None,
+            uart::AppRequestsInProgress::new_with_default_space(&mut uart1_driver_app_space),
+            board_kernel.create_grant(&memory_allocation_capability),
+        ),
+    ];
 
-    // Create a UartDevice for the second UART
-    let uart1_device = static_init!(UartDevice, UartDevice::new(uart1_mux, true));
-    uart1_device.setup();
-
-    kernel::hil::uart::Transmit::set_transmit_client(uart1_device, &DRIVER_UART1);
-    kernel::hil::uart::Receive::set_receive_client(uart1_device, &DRIVER_UART1);
-
-    // the debug uart should be initialized by hand
-    cc26x2::uart::UART1.configure(hil::uart::Parameters {
-        baud_rate: 115200,
-        width: hil::uart::Width::Eight,
-        stop_bits: hil::uart::StopBits::One,
-        parity: hil::uart::Parity::None,
-        hw_flow_control: false,
-    });
-
-    let uart_uarts = static_init!(
-        [&'static mut capsules::uart::Uart<UartDevice>; 2],
-        [&mut DRIVER_UART0, &mut DRIVER_UART1]
-    );
-
-    let uart = static_init!(
-        capsules::uart::UartDriver<UartDevice>,
-        capsules::uart::UartDriver::new(
-            uart_uarts,
-            [
-                board_kernel.create_grant(&memory_allocation_capability),
-                board_kernel.create_grant(&memory_allocation_capability)
-            ]
-        )
-    );
-
-    uart.initialize();
-    DRIVER_UART0.initialize(
-        uart0_device,
-        &mut capsules::uart::WRITE_BUF0,
-        &mut capsules::uart::READ_BUF0,
-        uart,
-    );
-
-    DRIVER_UART1.initialize(
-        uart1_device,
-        &mut capsules::uart::WRITE_BUF1,
-        &mut capsules::uart::READ_BUF1,
-        uart,
-    );
+    let uart_driver = uart::UartDriver::new(&board_uarts);
 
     cc26x2::i2c::I2C0.initialize();
 
@@ -589,8 +555,9 @@ pub unsafe fn reset_handler() {
 
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
 
-    let launchxl = Platform {
-        uart,
+    let mut launchxl = LaunchXlPlatform {
+        uart: &uart_driver,
+        debug_client: &debug_client,
         gpio,
         led,
         button,
@@ -600,8 +567,11 @@ pub unsafe fn reset_handler() {
         adc,
         helium: radio_driver,
         pwm: &pwm,
-        ipc,
     };
+
+    events::set_event_flag(event_priority::EVENT_PRIORITY::UART0);
+
+    // prime the pump with this interaction
 
     let chip = static_init!(cc26x2::chip::Cc26X2, cc26x2::chip::Cc26X2::new(HFREQ));
 
@@ -624,5 +594,5 @@ pub unsafe fn reset_handler() {
         &process_management_capability,
     );
 
-    board_kernel.kernel_loop(&launchxl, chip, Some(&launchxl.ipc), &main_loop_capability);
+    board_kernel.kernel_loop(&mut launchxl, chip, Some(&ipc), &main_loop_capability);
 }

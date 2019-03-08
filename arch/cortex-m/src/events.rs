@@ -1,11 +1,11 @@
 //
 //  These are generic event handling routines which could be defined in cortexm
 //
-
-use crate::event_priority::{EVENT_PRIORITY, FLAGS};
+use crate::support::atomic;
 use core::ptr;
-use cortexm::support::atomic;
-use enum_primitive::cast::FromPrimitive;
+use enum_primitive::cast::{FromPrimitive, ToPrimitive};
+
+pub static mut FLAGS: usize = 0;
 
 pub fn has_event() -> bool {
     let event_flags;
@@ -13,7 +13,7 @@ pub fn has_event() -> bool {
     event_flags != 0
 }
 
-pub fn next_pending() -> Option<EVENT_PRIORITY> {
+pub fn next_pending<T: FromPrimitive>() -> Option<T> {
     let mut event_flags;
     unsafe { event_flags = ptr::read_volatile(&FLAGS) }
 
@@ -22,7 +22,7 @@ pub fn next_pending() -> Option<EVENT_PRIORITY> {
     while event_flags != 0 {
         // if flag is found, return the count
         if (event_flags & 0b1) != 0 {
-            return Some(EVENT_PRIORITY::from_u8(count).expect("Unmapped EVENT_PRIORITY"));
+            return Some(T::from_u8(count).expect("Unmapped EVENT_PRIORITY"));
         }
         // otherwise increment
         count += 1;
@@ -31,9 +31,12 @@ pub fn next_pending() -> Option<EVENT_PRIORITY> {
     None
 }
 
-pub fn set_event_flag(priority: EVENT_PRIORITY) {
+pub fn set_event_flag<T: ToPrimitive>(priority: T) {
     unsafe {
-        let bm = 0b1 << (priority as u8) as u32;
+        let bm = 0b1
+            << priority
+                .to_usize()
+                .expect("Could not cast priority enum as usize");
         atomic(|| {
             let new_value = ptr::read_volatile(&FLAGS) | bm;
             FLAGS = new_value;
@@ -42,7 +45,7 @@ pub fn set_event_flag(priority: EVENT_PRIORITY) {
 }
 
 #[naked]
-pub unsafe fn set_event_flag_from_isr(priority: EVENT_PRIORITY) {
+pub unsafe fn set_event_flag_from_isr(priority: usize) {
     // Set PRIMASK
     asm!("cpsid i" :::: "volatile");
 
@@ -52,7 +55,7 @@ pub unsafe fn set_event_flag_from_isr(priority: EVENT_PRIORITY) {
         isb
         "
         : "={r0}"(FLAGS)
-        : "{r0}"(FLAGS), "{r1}"(0b1<<(priority as u8))
+        : "{r0}"(FLAGS), "{r1}"(0b1<<(priority))
         : : "volatile" "volatile"
     );
 
@@ -60,9 +63,12 @@ pub unsafe fn set_event_flag_from_isr(priority: EVENT_PRIORITY) {
     asm!("cpsie i" :::: "volatile");
 }
 
-pub fn clear_event_flag(priority: EVENT_PRIORITY) {
+pub fn clear_event_flag<T: ToPrimitive>(priority: T) {
     unsafe {
-        let bm = !0b1 << (priority as u8) as u32;
+        let bm = !0b1
+            << priority
+                .to_usize()
+                .expect("Could not cast priority enum as usize");
         atomic(|| {
             let new_value = ptr::read_volatile(&FLAGS) & bm;
             FLAGS = new_value;

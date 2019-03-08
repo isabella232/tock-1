@@ -1,8 +1,14 @@
 //! Hardware interface layer (HIL) traits for UART communication.
 //!
 //!
-
+use crate::ikc;
 use crate::returncode::ReturnCode;
+
+use crate::ikc::DriverState::IDLE;
+
+pub type TxRequest<'a> = ikc::TxRequest<'a, u8>;
+pub type RxRequest<'a> = ikc::RxRequest<'a, u8>;
+pub type State = ikc::DriverState;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum StopBits {
@@ -33,7 +39,7 @@ pub struct Parameters {
     pub hw_flow_control: bool,
 }
 
-/// The type of error encountered during UART transaction.
+/// The type of error encountered during UART Request.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Error {
     /// No error occurred and the command completed successfully
@@ -60,8 +66,32 @@ pub enum Error {
 
 pub trait Uart<'a>: Configure + Transmit<'a> + Receive<'a> {}
 pub trait UartData<'a>: Transmit<'a> + Receive<'a> {}
+pub trait UartPeripheral<'a>:
+    Configure + Transmit<'a> + Receive<'a> + InterruptHandler<'a>
+{
+}
+
 pub trait UartAdvanced<'a>: Configure + Transmit<'a> + ReceiveAdvanced<'a> {}
-pub trait Client: ReceiveClient + TransmitClient {}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct PeripheralState {
+    pub tx: State,
+    pub rx: State,
+}
+
+impl<'a> PeripheralState {
+    pub fn new() -> PeripheralState {
+        PeripheralState { tx: IDLE, rx: IDLE }
+    }
+}
+
+/// Trait for configuring a UART.
+pub trait InterruptHandler<'a> {
+    fn handle_interrupt(
+        &self,
+        state: PeripheralState,
+    ) -> (Option<&mut TxRequest<'a>>, Option<&mut RxRequest<'a>>);
+}
 
 /// Trait for configuring a UART.
 pub trait Configure {
@@ -75,10 +105,6 @@ pub trait Configure {
 }
 
 pub trait Transmit<'a> {
-    /// Set the transmit client, which will be called when transmissions
-    /// complete.
-    fn set_transmit_client(&self, client: &'a TransmitClient);
-
     /// Transmit a buffer of data. On completion, `transmitted_buffer`
     /// in the `TransmitClient` will be called.  If the `ReturnCode`
     /// of `transmit`'s return tuple is SUCCESS, the `Option` will be
@@ -102,11 +128,7 @@ pub trait Transmit<'a> {
     ///
     /// Calling `transmit_buffer` while there is an outstanding
     /// `transmit_buffer` or `transmit_word` operation will return EBUSY.
-    fn transmit_buffer(
-        &self,
-        tx_buffer: &'static mut [u8],
-        tx_len: usize,
-    ) -> (ReturnCode, Option<&'static mut [u8]>);
+    fn transmit_buffer(&self, req: &'a mut TxRequest<'a>) -> ReturnCode;
 
     /// Transmit a single word of data asynchronously. The word length is
     /// determined by the UART configuration: it can be 6, 7, 8, or 9 bits long.
@@ -146,13 +168,10 @@ pub trait Transmit<'a> {
     ///  - FAIL if the outstanding call to either transmit operation could
     ///    not be synchronously cancelled. A callback will be made on the
     ///    client indicating whether the call was successfully cancelled.
-    fn transmit_abort(&self) -> ReturnCode;
+    fn transmit_abort(&self) -> Option<&'a mut TxRequest<'a>>;
 }
 
 pub trait Receive<'a> {
-    /// Set the receive client, which will he called when reads complete.
-    fn set_receive_client(&self, client: &'a ReceiveClient);
-
     /// Receive `rx_len` bytes into `rx_buffer`, making a callback to
     /// the `ReceiveClient` when complete.  If the `ReturnCode` of
     /// `receive_buffer`'s return tuple is SUCCESS, the `Option` will
@@ -172,11 +191,7 @@ pub trait Receive<'a> {
     /// should use `receive_word`.  Calling `receive_buffer` while
     /// there is an outstanding `receive_buffer` or `receive_word`
     /// operation will return EBUSY.
-    fn receive_buffer(
-        &self,
-        rx_buffer: &'static mut [u8],
-        rx_len: usize,
-    ) -> (ReturnCode, Option<&'static mut [u8]>);
+    fn receive_buffer(&self, req: &'a mut RxRequest<'a>) -> ReturnCode;
 
     /// Receive a single word of data. The word length is determined
     /// by the UART configuration: it can be 6, 7, 8, or 9 bits long.
@@ -203,86 +218,7 @@ pub trait Receive<'a> {
     /// of `ECANCEL`.  If there was a reception outstanding, which is
     /// not cancelled successfully, then `FAIL` will be returned and
     /// there will be a later callback.
-    fn receive_abort(&self) -> ReturnCode;
-}
-
-/// Trait implemented by a UART transmitter to receive callbacks when
-/// operations complete.
-pub trait TransmitClient {
-    /// A call to `Transmit::transmit_word` completed. The `ReturnCode`
-    /// indicates whether the word was successfully transmitted. A call
-    /// to `transmit_word` or `transmit_buffer` made within this callback
-    /// SHOULD NOT return EBUSY: when this callback is made the UART should
-    /// be ready to receive another call.
-    ///
-    /// `rval` is SUCCESS if the word was successfully transmitted, or
-    ///   - ECANCEL if the call to `transmit_word` was cancelled and
-    ///     the word was not transmitted.
-    ///   - FAIL if the transmission failed in some way.
-    fn transmitted_word(&self, _rval: ReturnCode) {}
-
-    /// A call to `Transmit::transmit_buffer` completed. The `ReturnCode`
-    /// indicates whether the buffer was successfully transmitted. A call
-    /// to `transmit_word` or `transmit_buffer` made within this callback
-    /// SHOULD NOT return EBUSY: when this callback is made the UART should
-    /// be ready to receive another call.
-    ///
-    /// The `tx_len` argument specifies how many words were transmitted.
-    /// An `rval` of SUCCESS indicates that every requested word was
-    /// transmitted: `tx_len` in the callback should be the same as
-    /// `tx_len` in the initiating call.
-    ///
-    /// `rval` is SUCCESS if the full buffer was successfully transmitted, or
-    ///   - ECANCEL if the call to `transmit_buffer` was cancelled and
-    ///     the buffer was not fully transmitted. `tx_len` contains
-    ///     how many words were transmitted.
-    ///   - ESIZE if the buffer could only be partially transmitted. `tx_len`
-    ///     contains how many words were transmitted.
-    ///   - FAIL if the transmission failed in some way.
-    fn transmitted_buffer(&self, tx_buffer: &'static mut [u8], tx_len: usize, rval: ReturnCode);
-}
-
-pub trait ReceiveClient {
-    /// A call to `Receive::receive_word` completed. The `ReturnCode`
-    /// indicates whether the word was successfully received. A call
-    /// to `receive_word` or `receive_buffer` made within this callback
-    /// SHOULD NOT return EBUSY: when this callback is made the UART should
-    /// be ready to receive another call.
-    ///
-    /// `rval` SUCCESS if the word was successfully received, or
-    ///   - ECANCEL if the call to `receive_word` was cancelled and
-    ///     the word was not received: `word` should be ignored.
-    ///   - FAIL if the reception failed in some way and `word`
-    ///     should be ignored. `error` may contain further information
-    ///     on the sort of error.
-    fn received_word(&self, _word: u32, _rval: ReturnCode, _error: Error) {}
-
-    /// A call to `Receive::receive_buffer` completed. The `ReturnCode`
-    /// indicates whether the buffer was successfully received. A call
-    /// to `receive_word` or `receive_buffer` made within this callback
-    /// SHOULD NOT return EBUSY: when this callback is made the UART should
-    /// be ready to receive another call.
-    ///
-    /// The `rx_len` argument specifies how many words were transmitted.
-    /// An `rval` of SUCCESS indicates that every requested word was
-    /// received: `rx_len` in the callback should be the same as
-    /// `rx_len` in the initiating call.
-    ///
-    /// `rval` is SUCCESS if the full buffer was successfully received, or
-    ///   - ECANCEL if the call to `received_buffer` was cancelled and
-    ///     the buffer was not fully received. `rx_len` contains
-    ///     how many words were received.
-    ///   - ESIZE if the buffer could only be partially received. `rx_len`
-    ///     contains how many words were transmitted.
-    ///   - FAIL if reception failed in some way: `error` may contain further
-    ///     information.
-    fn received_buffer(
-        &self,
-        rx_buffer: &'static mut [u8],
-        rx_len: usize,
-        rval: ReturnCode,
-        error: Error,
-    );
+    fn receive_abort(&self) -> Option<&'a mut RxRequest<'a>>;
 }
 
 /// Trait that isn't required for basic UART operation, but provides useful
@@ -310,121 +246,23 @@ pub trait ReceiveAdvanced<'a>: Receive<'a> {
     /// * `interbyte_timeout`: number of bit periods since last data received.
     fn receive_automatic(
         &self,
-        rx_buffer: &'static mut [u8],
+        rx_buffer: &'a mut [u8],
         rx_len: usize,
         interbyte_timeout: u8,
-    ) -> (ReturnCode, Option<&'static mut [u8]>);
-}
-/*
-//! Interfaces for UART communications.
-
-use crate::returncode::ReturnCode;
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum StopBits {
-    One = 0,
-    Two = 2,
+    ) -> (ReturnCode, Option<&'a mut [u8]>);
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum Parity {
-    None = 0,
-    Odd = 1,
-    Even = 2,
+pub trait Client<'a> {
+    fn has_tx_request(&self) -> bool;
+    fn get_tx_request(&self) -> Option<&mut TxRequest<'a>>;
+    // uart_num allows client to identify which uart this tx_request_complete call is originating from
+    // for the case where it is client of multiple UARTS
+    fn tx_request_complete(&self, uart_num: usize, returned_request: &'a mut TxRequest<'a>);
+
+    fn has_rx_request(&self) -> bool;
+
+    fn get_rx_request(&self) -> Option<&mut RxRequest<'a>>;
+    // uart_num allows client to identify which uart this rx_request_complete call is originating from
+    // for the case where it is client of multiple UARTS
+    fn rx_request_complete(&self, _uart_num: usize, _returned_request: &'a mut RxRequest<'a>);
 }
-
-#[derive(Copy, Clone, Debug)]
-pub struct UARTParameters {
-    pub baud_rate: u32, // baud rate in bit/s
-    pub stop_bits: StopBits,
-    pub parity: Parity,
-    pub hw_flow_control: bool,
-}
-
-/// The type of error encountered during UART transaction.
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum Error {
-    /// Parity error during receive
-    ParityError,
-
-    /// Framing error during receive
-    FramingError,
-
-    /// Overrun error during receive
-    OverrunError,
-
-    /// Repeat call of transmit or receive before initial command complete
-    RepeatCallError,
-
-    /// UART hardware was reset
-    ResetError,
-
-    /// Read or write was aborted early
-    Aborted,
-
-    /// No error occurred and the command completed successfully
-    CommandComplete,
-}
-
-pub trait UART {
-    /// Set the client for this UART peripheral. The client will be
-    /// called when events finish.
-    fn set_client(&self, client: &'static Client);
-
-    /// Configure UART
-    ///
-    /// Returns SUCCESS, or
-    ///
-    /// - EOFF: The underlying hardware is currently not available, perhaps
-    ///         because it has not been initialized or in the case of a shared
-    ///         hardware USART controller because it is set up for SPI.
-    /// - EINVAL: Impossible parameters (e.g. a `baud_rate` of 0)
-    /// - ENOSUPPORT: The underlying UART cannot satisfy this configuration.
-    fn configure(&self, params: UARTParameters) -> ReturnCode;
-
-    /// Transmit data.
-    fn transmit(&self, tx_data: &'static mut [u8], tx_len: usize);
-
-    /// Receive data until buffer is full.
-    fn receive(&self, rx_buffer: &'static mut [u8], rx_len: usize);
-
-    /// Abort any ongoing receive transfers and return what is in the
-    /// receive buffer with the `receive_complete` callback.
-    fn abort_receive(&self);
-}
-
-/// Trait that isn't required for basic UART operation, but provides useful
-/// abstractions that capsules may want to be able to leverage.
-///
-/// The interfaces are included here because some hardware platforms may be able
-/// to directly implement them, while others platforms may need to emulate them
-/// in software. The ones that can implement them in hardware should be able to
-/// leverage that efficiency, and by placing the interfaces here in the HIL they
-/// can do that.
-///
-/// Other interface ideas that have been discussed, but are not included due to
-/// the lack of a clear use case, but are noted here in case they might help
-/// someone in the future:
-/// - `receive_until_terminator`: This would read in bytes until a specified
-///   byte is received (or the buffer is full) and then return to the client.
-/// - `receive_len_then_message`: This would do a one byte read to get a length
-///   byte and then read that many more bytes from UART before returning to the
-///   client.
-pub trait UARTReceiveAdvanced: UART {
-    /// Receive data until `interbyte_timeout` bit periods have passed since the
-    /// last byte or buffer is full. Does not timeout until at least one byte
-    /// has been received.
-    ///
-    /// * `interbyte_timeout`: number of bit periods since last data received.
-    fn receive_automatic(&self, rx_buffer: &'static mut [u8], interbyte_timeout: u8);
-}
-
-/// Implement Client to receive callbacks from UART.
-pub trait Client {
-    /// UART transmit complete.
-    fn transmit_complete(&self, tx_buffer: &'static mut [u8], error: Error);
-
-    /// UART receive complete.
-    fn receive_complete(&self, rx_buffer: &'static mut [u8], rx_len: usize, error: Error);
-}
-*/

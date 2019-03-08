@@ -1,6 +1,6 @@
 use super::Pinmap;
-use crate::enum_primitive::cast::FromPrimitive;
-use crate::enum_primitive::enum_from_primitive;
+use enum_primitive::cast::{FromPrimitive, ToPrimitive};
+use enum_primitive::enum_from_primitive;
 
 pub const CHIP_ID: u32 = 0x2282f000;
 

@@ -49,9 +49,6 @@ pub unsafe extern "C" fn systick_handler() {
     : : : : "volatile" );
 }
 
-#[cfg(not(target_os = "none"))]
-pub unsafe extern "C" fn generic_isr() {}
-
 /// All ISRs are caught by this handler which disables the NVIC and switches to the kernel.
 #[naked]
 pub unsafe extern "C" fn generic_isr() {

@@ -123,13 +123,14 @@ enum TransferMode {
     TransmitThenReceive(usize),
 }
 
-const I2C0REGISTERS: StaticRef<I2CMasterRegisters> =
-    unsafe { StaticRef::new(0x4000_2800 as *const _) };
+use crate::memory_map::I2C0_BASE;
+
+const I2C0_REG: StaticRef<I2CMasterRegisters> = unsafe { StaticRef::new(I2C0_BASE as *const _) };
 
 const I2C0_NVIC: nvic::Nvic =
     unsafe { nvic::Nvic::new(peripheral_interrupts::NVIC_IRQ::I2C0 as u32) };
 
-pub static mut I2C0: I2CMaster = I2CMaster::new(I2C0REGISTERS, &I2C0_NVIC);
+pub static mut I2C0: I2CMaster = I2CMaster::new(I2C0_REG, &I2C0_NVIC);
 
 pub struct I2CMaster<'a> {
     registers: StaticRef<I2CMasterRegisters>,

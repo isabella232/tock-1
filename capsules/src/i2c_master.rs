@@ -1,4 +1,6 @@
+use enum_primitive::cast::{FromPrimitive, ToPrimitive};
 use enum_primitive::enum_from_primitive;
+
 use kernel::common::cells::{MapCell, OptionalCell, TakeCell};
 use kernel::hil::i2c;
 use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
@@ -87,8 +89,6 @@ impl<I: 'static + i2c::I2CMaster> I2CMasterDriver<I> {
         ReturnCode::ENOSUPPORT
     }
 }
-
-use enum_primitive::cast::FromPrimitive;
 
 enum_from_primitive! {
 #[derive(Debug, PartialEq, Clone, Copy)]
