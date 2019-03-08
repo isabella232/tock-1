@@ -63,18 +63,18 @@ pub static BASE_VECTORS: [unsafe extern "C" fn(); 54] = [
     unhandled_interrupt, // Reserved
     unhandled_interrupt, // PendSV
     systick_handler,     // Systick
-    gpio_nvic,         // GPIO Int handler
+    gpio_nvic,           // GPIO Int handler
     generic_isr,         // I2C
-    rfc_cpe1_isr,         // RF Core Command & Packet Engine 1
+    rfc_cpe1_isr,        // RF Core Command & Packet Engine 1
     generic_isr,         // AON SpiSplave Rx, Tx and CS
-    aon_rtc_nvic,         // AON RTC
+    aon_rtc_nvic,        // AON RTC
     uart0_nvic,          // UART0 Rx and Tx
     generic_isr,         // AUX software event 0
     generic_isr,         // SSI0 Rx and Tx
     generic_isr,         // SSI1 Rx and Tx
-    rfc_cpe0_isr,         // RF Core Command & Packet Engine 0
-    rfc_hw_isr,         // RF Core Hardware
-    rfc_cmd_ack_isr,         // RF Core Command Acknowledge
+    rfc_cpe0_isr,        // RF Core Command & Packet Engine 0
+    rfc_hw_isr,          // RF Core Hardware
+    rfc_cmd_ack_isr,     // RF Core Command Acknowledge
     generic_isr,         // I2S
     generic_isr,         // AUX software event 1
     generic_isr,         // Watchdog timer

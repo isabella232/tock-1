@@ -174,7 +174,7 @@ unsafe fn configure_pins(pin: &Pinmap) {
 
     cc26x2::gpio::PORT[pin.regulator_mode].enable_gpio();
     cc26x2::gpio::PORT[pin.regulator_mode].make_output();
-    cc26x2::gpio::PORT[pin.regulator_mode].clear();
+    cc26x2::gpio::PORT[pin.regulator_mode].set();
 
     cc26x2::gpio::PORT[pin.skyworks_csd].enable_gpio();
     cc26x2::gpio::PORT[pin.skyworks_cps].enable_gpio();
@@ -452,7 +452,6 @@ pub unsafe fn reset_handler() {
     }
 
     events::set_event_flag(event_priority::EVENT_PRIORITY::UART0);
-
 
     debug!("Loading processes");
 
