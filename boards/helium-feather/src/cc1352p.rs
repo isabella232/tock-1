@@ -25,11 +25,12 @@ pub enum PIN_FN {
     ADC0 = 23,
     ADC1 = 24,
     VBAT_SNS = 25,
-    ISL_INT = 26,
+    MODE = 26,
     BMI_INT = 27,
     SE_CSD = 28,
     SE_CPS = 29,
     SE_CTX = 30,
+
 }
 }
 
@@ -47,6 +48,7 @@ pub static PINMAP: Pinmap = Pinmap {
     skyworks_csd: PIN_FN::SE_CSD as usize,
     skyworks_cps: PIN_FN::SE_CPS as usize,
     skyworks_ctx: PIN_FN::SE_CTX as usize,
+    regulator_mode: PIN_FN::MODE as usize,
     rf_2_4: None,
     rf_high_pa: None,
     rf_subg: None,

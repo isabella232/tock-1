@@ -120,12 +120,12 @@ impl<'a> kernel::Platform for FeatherPlatform<'a> {
                 event_priority::EVENT_PRIORITY::UART1 => {
                     //capsules::uart::handle_irq(1, self.uart, None);
                 }
-                //event_priority::EVENT_PRIORITY::RF_CMD_ACK => cc26x2::radio::RFC.handle_ack_event(),
-                //event_priority::EVENT_PRIORITY::RF_CORE_CPE0 => cc26x2::radio::RFC.handle_cpe0_event(),
-                //event_priority::EVENT_PRIORITY::RF_CORE_CPE1 => cc26x2::radio::RFC.handle_cpe1_event(),
-                //event_priority::EVENT_PRIORITY::RF_CORE_HW => panic!("Unhandled RFC interupt event!"),
+                event_priority::EVENT_PRIORITY::RF_CMD_ACK => unsafe{ cc26x2::radio::RFC.handle_ack_event()},
+                event_priority::EVENT_PRIORITY::RF_CORE_CPE0 => unsafe{ cc26x2::radio::RFC.handle_cpe0_event()},
+                event_priority::EVENT_PRIORITY::RF_CORE_CPE1 => unsafe{ cc26x2::radio::RFC.handle_cpe1_event()},
+                event_priority::EVENT_PRIORITY::RF_CORE_HW => panic!("Unhandled RFC interupt event!"),
                 //event_priority::EVENT_PRIORITY::AUX_ADC => cc26x2::adc::ADC.handle_events(),
-                event_priority::EVENT_PRIORITY::OSC => cc26x2::prcm::handle_osc_interrupt(),
+                //event_priority::EVENT_PRIORITY::OSC => cc26x2::prcm::handle_osc_interrupt(),
                 event_priority::EVENT_PRIORITY::AON_PROG => (),
                 _ => panic!("unhandled event {:?} ", event),
             }
@@ -148,6 +148,7 @@ pub struct Pinmap {
     green_led: usize,
     button1: usize,
     button2: usize,
+    regulator_mode: usize,
     skyworks_csd: usize,
     skyworks_cps: usize,
     skyworks_ctx: usize,
@@ -172,6 +173,10 @@ unsafe fn configure_pins(pin: &Pinmap) {
     cc26x2::gpio::PORT[pin.button1].enable_gpio();
     cc26x2::gpio::PORT[pin.button2].enable_gpio();
 
+    // cc26x2::gpio::PORT[pin.regulator_mode].enable_gpio();
+    // cc26x2::gpio::PORT[pin.regulator_mode].make_output();
+    // cc26x2::gpio::PORT[pin.regulator_mode].set();
+
     cc26x2::gpio::PORT[pin.skyworks_csd].enable_gpio();
     cc26x2::gpio::PORT[pin.skyworks_cps].enable_gpio();
     cc26x2::gpio::PORT[pin.skyworks_ctx].enable_gpio();
@@ -186,6 +191,9 @@ unsafe fn configure_pins(pin: &Pinmap) {
         cc26x2::gpio::PORT[rf_subg].enable_subg_output();
     }
 }
+
+use kernel::hil::rf_frontend::SE2435L;
+
 
 #[no_mangle]
 pub unsafe fn reset_handler() {
@@ -385,7 +393,7 @@ pub unsafe fn reset_handler() {
         helium::virtual_rfcore::VirtualRadio<'static, cc26x2::radio::multimode::Radio>,
         helium::virtual_rfcore::VirtualRadio::new(&cc26x2::radio::MULTIMODE_RADIO)
     );
-    // Set PA option in radio based on board
+    //Set PA option in radio based on board
     &cc26x2::radio::MULTIMODE_RADIO.pa_type.set(PaType::Skyworks);
 
     // Set mode client in hil
@@ -424,12 +432,12 @@ pub unsafe fn reset_handler() {
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
 
-    //let rfc = &cc26x2::radio::MULTIMODE_RADIO;
+    let rfc = &cc26x2::radio::MULTIMODE_RADIO;
     //rfc.run_tests(0);
 
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
 
-    let mut launchxl = FeatherPlatform {
+    let mut feather = FeatherPlatform {
         uart: &uart_driver,
         debug_client: &debug_client,
         led,
@@ -447,7 +455,8 @@ pub unsafe fn reset_handler() {
         static _sapps: u8;
     }
 
-    adc::ADC.configure(adc::Source::NominalVdds, adc::SampleCycle::_170_us);
+    events::set_event_flag(event_priority::EVENT_PRIORITY::UART0);
+
 
     debug!("Loading processes");
 
@@ -461,5 +470,5 @@ pub unsafe fn reset_handler() {
         &process_management_capability,
     );
 
-    board_kernel.kernel_loop(&mut launchxl, chip, Some(&ipc), &main_loop_capability);
+    board_kernel.kernel_loop(&mut feather, chip, Some(&ipc), &main_loop_capability);
 }

@@ -36,6 +36,12 @@ unsafe extern "C" fn unhandled_interrupt() {
 
 generic_isr!(uart0_nvic, event_priority::EVENT_PRIORITY::UART0);
 generic_isr!(osc_isr, event_priority::EVENT_PRIORITY::OSC);
+generic_isr!(gpio_nvic, event_priority::EVENT_PRIORITY::GPIO);
+generic_isr!(aon_rtc_nvic, event_priority::EVENT_PRIORITY::AON_RTC);
+generic_isr!(rfc_cpe0_isr, event_priority::EVENT_PRIORITY::RF_CORE_CPE0);
+generic_isr!(rfc_cpe1_isr, event_priority::EVENT_PRIORITY::RF_CORE_CPE1);
+generic_isr!(rfc_hw_isr, event_priority::EVENT_PRIORITY::RF_CORE_HW);
+generic_isr!(rfc_cmd_ack_isr, event_priority::EVENT_PRIORITY::RF_CMD_ACK);
 
 #[link_section = ".vectors"]
 // used Ensures that the symbol is kept until the final binary
@@ -57,18 +63,18 @@ pub static BASE_VECTORS: [unsafe extern "C" fn(); 54] = [
     unhandled_interrupt, // Reserved
     unhandled_interrupt, // PendSV
     systick_handler,     // Systick
-    generic_isr,         // GPIO Int handler
+    gpio_nvic,         // GPIO Int handler
     generic_isr,         // I2C
-    generic_isr,         // RF Core Command & Packet Engine 1
+    rfc_cpe1_isr,         // RF Core Command & Packet Engine 1
     generic_isr,         // AON SpiSplave Rx, Tx and CS
-    generic_isr,         // AON RTC
+    aon_rtc_nvic,         // AON RTC
     uart0_nvic,          // UART0 Rx and Tx
     generic_isr,         // AUX software event 0
     generic_isr,         // SSI0 Rx and Tx
     generic_isr,         // SSI1 Rx and Tx
-    generic_isr,         // RF Core Command & Packet Engine 0
-    generic_isr,         // RF Core Hardware
-    generic_isr,         // RF Core Command Acknowledge
+    rfc_cpe0_isr,         // RF Core Command & Packet Engine 0
+    rfc_hw_isr,         // RF Core Hardware
+    rfc_cmd_ack_isr,         // RF Core Command Acknowledge
     generic_isr,         // I2S
     generic_isr,         // AUX software event 1
     generic_isr,         // Watchdog timer

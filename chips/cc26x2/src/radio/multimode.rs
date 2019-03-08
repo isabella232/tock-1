@@ -246,14 +246,16 @@ impl Radio {
     }
 
     pub fn run_tests(&self, test: u8) {
+        debug!("running rf test");
+
         self.rfc.set_mode(rfc::RfcMode::BLE);
 
-        osc::OSC.request_switch_to_hf_xosc();
+        //osc::OSC.request_switch_to_hf_xosc();
         self.rfc.enable();
         self.rfc.start_rat();
 
-        osc::OSC.switch_to_hf_xosc();
-
+        //osc::OSC.switch_to_hf_xosc();
+        debug!("got this far");
         self.set_pa_restriction();
         unsafe {
             let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
@@ -266,13 +268,19 @@ impl Radio {
                 self.tx_power.get(),
             );
         }
+        debug!("got this far2");
+
         self.set_radio_fs();
+
+        debug!("got this far3");
+
         if let Some(t) = TestType::from_u8(test) {
             match t {
                 TestType::Tx => self.test_radio_tx(),
                 TestType::Rx => self.test_radio_rx(),
             }
         }
+        debug!("test complete");
     }
 
     fn test_radio_tx(&self) {
@@ -472,14 +480,14 @@ impl rfc::RFCoreClient for Radio {
     }
 
     fn tx_done(&self) {
-        self.frontend_client.map(|client| client.enable_lna());
+        self.frontend_client.map(|client| client.bypass());
 
         unsafe { rtc::RTC.sync() };
 
         if self.schedule_powerdown.get() {
             // TODO Need to handle powerdown failure here or we will not be able to enter low power
             // modes
-            self.frontend_client.map(|client| client.bypass());
+            self.frontend_client.map(|client| client.sleep());
 
             self.power_down();
             osc::OSC.switch_to_hf_rcosc();
