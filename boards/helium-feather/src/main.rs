@@ -41,10 +41,10 @@ pub mod io;
 mod ccfg_test;
 #[allow(dead_code)]
 mod event_priority;
-#[allow(unused_macros)]
-mod interrupt_table;
 #[allow(dead_code)]
 mod i2c_tests;
+#[allow(unused_macros)]
+mod interrupt_table;
 
 // High frequency oscillator speed
 pub const HFREQ: u32 = 48 * 1_000_000;

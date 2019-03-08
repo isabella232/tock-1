@@ -1,9 +1,9 @@
-use cortexm4::{
-    generic_isr, hard_fault_handler, set_privileged_thread,
-    stash_process_state, svc_handler, systick_handler
-};
-use cortexm::events;
 use crate::event_priority;
+use cortexm::events;
+use cortexm4::{
+    generic_isr, hard_fault_handler, set_privileged_thread, stash_process_state, svc_handler,
+    systick_handler,
+};
 
 macro_rules! generic_isr {
     ($label:tt, $priority:expr) => {
@@ -62,7 +62,7 @@ pub static BASE_VECTORS: [unsafe extern "C" fn(); 54] = [
     generic_isr,         // RF Core Command & Packet Engine 1
     generic_isr,         // AON SpiSplave Rx, Tx and CS
     generic_isr,         // AON RTC
-    uart0_nvic,         // UART0 Rx and Tx
+    uart0_nvic,          // UART0 Rx and Tx
     generic_isr,         // AUX software event 0
     generic_isr,         // SSI0 Rx and Tx
     generic_isr,         // SSI1 Rx and Tx
