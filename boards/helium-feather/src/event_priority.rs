@@ -4,8 +4,6 @@
 use enum_primitive::cast::{FromPrimitive, ToPrimitive};
 use enum_primitive::enum_from_primitive;
 
-pub static mut FLAGS: u32 = 0;
-
 enum_from_primitive! {
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum EVENT_PRIORITY {

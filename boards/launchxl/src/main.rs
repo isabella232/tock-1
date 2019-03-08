@@ -34,7 +34,6 @@ use kernel::hil::gpio::PinCtl;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::rfcore::PaType;
 use kernel::hil::rng::Rng;
-use kernel::hil::uart::Configure;
 
 #[macro_use]
 pub mod io;
@@ -44,6 +43,7 @@ mod ccfg_test;
 mod event_priority;
 #[allow(dead_code)]
 mod i2c_tests;
+#[allow(unused_macros)]
 mod interrupt_table;
 #[allow(dead_code)]
 mod uart_test;

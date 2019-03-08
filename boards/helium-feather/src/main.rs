@@ -41,6 +41,8 @@ pub mod io;
 mod ccfg_test;
 #[allow(dead_code)]
 mod event_priority;
+#[allow(unused_macros)]
+mod interrupt_table;
 #[allow(dead_code)]
 mod i2c_tests;
 

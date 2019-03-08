@@ -2,7 +2,6 @@
 
 use crate::driver::Driver;
 use crate::syscall;
-use enum_primitive::cast::{FromPrimitive, ToPrimitive};
 
 pub mod mpu;
 crate mod systick;
