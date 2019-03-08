@@ -1,13 +1,12 @@
 //! UART driver, cc26x2 family
 use crate::prcm;
 
+use crate::peripheral_interrupts;
 use core::cell::Cell;
+use cortexm4::nvic;
 use kernel::common::cells::MapCell;
 use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite, WriteOnly};
 use kernel::debug;
-use cortexm4::nvic;
-use crate::peripheral_interrupts;
-
 
 use kernel::hil;
 use kernel::hil::uart;
@@ -107,14 +106,16 @@ static mut GRANTED: [bool; 2] = [false, false];
 use crate::memory_map::{UART0_BASE, UART1_BASE};
 
 impl<'a> UART<'a> {
-    pub fn new(num: PeripheralNum) -> UART<'a>{
+    pub fn new(num: PeripheralNum) -> UART<'a> {
         unsafe {
-            if GRANTED[num as usize] == false{
+            if GRANTED[num as usize] == false {
                 GRANTED[num as usize] = true;
                 return Self::unsafe_new(num);
-            }
-            else{
-                panic!("CC26x2: You have attempted to initialize UART {:?} more than once!", num);
+            } else {
+                panic!(
+                    "CC26x2: You have attempted to initialize UART {:?} more than once!",
+                    num
+                );
             }
         }
     }
@@ -129,7 +130,6 @@ impl<'a> UART<'a> {
         let nvic = match num {
             PeripheralNum::_0 => nvic::Nvic::new(peripheral_interrupts::NVIC_IRQ::UART0 as u32),
             PeripheralNum::_1 => nvic::Nvic::new(peripheral_interrupts::NVIC_IRQ::UART1 as u32),
-
         };
 
         let ret = UART {
@@ -226,9 +226,13 @@ impl<'a> uart::UartPeripheral<'a> for UART<'a> {}
 
 impl<'a> uart::InterruptHandler<'a> for UART<'a> {
     /// this particular implementation can use hardware to determine state
-    fn handle_interrupt(&self, _state: hil::uart::PeripheralState) 
-        -> (Option<&mut hil::uart::TxRequest<'a>>, Option<&mut hil::uart::RxRequest<'a>>) {
-        
+    fn handle_interrupt(
+        &self,
+        _state: hil::uart::PeripheralState,
+    ) -> (
+        Option<&mut hil::uart::TxRequest<'a>>,
+        Option<&mut hil::uart::RxRequest<'a>>,
+    ) {
         let (mut tx_complete, mut rx_complete) = (None, None);
 
         // Clear interrupts
@@ -324,10 +328,7 @@ impl<'a> uart::Configure for UART<'a> {
 }
 
 impl<'a> uart::Transmit<'a> for UART<'a> {
-    fn transmit_buffer(
-        &self,
-        request: &'a mut uart::TxRequest<'a>,
-    ) -> ReturnCode {
+    fn transmit_buffer(&self, request: &'a mut uart::TxRequest<'a>) -> ReturnCode {
         // we will send one byte, causing EOT interrupt
         if self.tx_fifo_not_full() {
             if let Some(item) = request.pop() {
@@ -354,12 +355,9 @@ impl<'a> uart::Transmit<'a> for UART<'a> {
 }
 
 impl<'a> uart::Receive<'a> for UART<'a> {
-    fn receive_buffer(
-        &self,
-        request: &'a mut uart::RxRequest<'a>,
-    ) -> ReturnCode {
+    fn receive_buffer(&self, request: &'a mut uart::RxRequest<'a>) -> ReturnCode {
         if self.rx.is_some() || self.receiving_word.get() {
-            ReturnCode::EBUSY 
+            ReturnCode::EBUSY
         } else {
             self.rx.put(request);
             ReturnCode::SUCCESS

@@ -15,7 +15,7 @@ pub trait Platform {
     where
         F: FnOnce(Option<&Driver>) -> R;
 
-    fn has_pending_events(&mut self)-> bool;
+    fn has_pending_events(&mut self) -> bool;
 
     fn service_pending_events(&mut self);
 }

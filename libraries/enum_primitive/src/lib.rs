@@ -4,7 +4,6 @@ pub mod cast;
 
 use core::option::Option;
 
-
 /// Helper macro for internal use by `enum_to_primitive!`.
 #[macro_export]
 macro_rules! enum_to_primitive_impl_ty {

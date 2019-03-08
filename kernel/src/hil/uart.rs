@@ -87,7 +87,10 @@ impl<'a> PeripheralState {
 
 /// Trait for configuring a UART.
 pub trait InterruptHandler<'a> {
-    fn handle_interrupt(&self, state: PeripheralState) -> (Option<&mut TxRequest<'a>>, Option<&mut RxRequest<'a>>);
+    fn handle_interrupt(
+        &self,
+        state: PeripheralState,
+    ) -> (Option<&mut TxRequest<'a>>, Option<&mut RxRequest<'a>>);
 }
 
 /// Trait for configuring a UART.
@@ -125,10 +128,7 @@ pub trait Transmit<'a> {
     ///
     /// Calling `transmit_buffer` while there is an outstanding
     /// `transmit_buffer` or `transmit_word` operation will return EBUSY.
-    fn transmit_buffer(
-        &self,
-        req: &'a mut TxRequest<'a>,
-    ) -> ReturnCode;
+    fn transmit_buffer(&self, req: &'a mut TxRequest<'a>) -> ReturnCode;
 
     /// Transmit a single word of data asynchronously. The word length is
     /// determined by the UART configuration: it can be 6, 7, 8, or 9 bits long.
@@ -191,10 +191,7 @@ pub trait Receive<'a> {
     /// should use `receive_word`.  Calling `receive_buffer` while
     /// there is an outstanding `receive_buffer` or `receive_word`
     /// operation will return EBUSY.
-    fn receive_buffer(
-        &self,
-        req: &'a mut RxRequest<'a>,
-    ) -> ReturnCode;
+    fn receive_buffer(&self, req: &'a mut RxRequest<'a>) -> ReturnCode;
 
     /// Receive a single word of data. The word length is determined
     /// by the UART configuration: it can be 6, 7, 8, or 9 bits long.
@@ -255,18 +252,17 @@ pub trait ReceiveAdvanced<'a>: Receive<'a> {
     ) -> (ReturnCode, Option<&'a mut [u8]>);
 }
 
-
 pub trait Client<'a> {
     fn has_tx_request(&self) -> bool;
     fn get_tx_request(&self) -> Option<&mut TxRequest<'a>>;
-    // uart_num allows client to identify which uart this tx_request_complete call is originating from 
+    // uart_num allows client to identify which uart this tx_request_complete call is originating from
     // for the case where it is client of multiple UARTS
     fn tx_request_complete(&self, uart_num: usize, returned_request: &'a mut TxRequest<'a>);
 
     fn has_rx_request(&self) -> bool;
 
     fn get_rx_request(&self) -> Option<&mut RxRequest<'a>>;
-    // uart_num allows client to identify which uart this rx_request_complete call is originating from 
+    // uart_num allows client to identify which uart this rx_request_complete call is originating from
     // for the case where it is client of multiple UARTS
     fn rx_request_complete(&self, _uart_num: usize, _returned_request: &'a mut RxRequest<'a>);
 }

@@ -4,8 +4,8 @@
 
 extern crate capsules;
 extern crate cc26x2;
+extern crate cortexm;
 extern crate cortexm4;
-extern crate cortexm; 
 extern crate enum_primitive;
 extern crate fixedvec;
 
@@ -16,9 +16,9 @@ use cortexm::events;
 #[allow(unused_imports)]
 use kernel::{create_capability, debug, debug_gpio, static_init};
 
-use capsules::uart;
 use capsules::helium;
 use capsules::helium::{device::Device, virtual_rfcore::RFCore};
+use capsules::uart;
 use cc26x2::adc;
 use cc26x2::osc;
 use cc26x2::radio;
@@ -40,10 +40,9 @@ pub mod io;
 #[allow(dead_code)]
 mod ccfg_test;
 #[allow(dead_code)]
-mod i2c_tests;
-#[allow(dead_code)]
 mod event_priority;
-
+#[allow(dead_code)]
+mod i2c_tests;
 
 // High frequency oscillator speed
 pub const HFREQ: u32 = 48 * 1_000_000;
@@ -64,7 +63,7 @@ static mut APP_MEMORY: [u8; 0x10000] = [0; 0x10000];
 #[link_section = ".stack_buffer"]
 pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 
-pub struct FeatherPlatform<'a>{
+pub struct FeatherPlatform<'a> {
     uart: &'a capsules::uart::UartDriver<'a>,
     debug_client: &'a debug::DebugClient<'a>,
     led: &'static capsules::led::LED<'static, cc26x2::gpio::GPIOPin>,
@@ -76,11 +75,9 @@ pub struct FeatherPlatform<'a>{
     rng: &'static capsules::rng::RngDriver<'static>,
     i2c_master: &'static capsules::i2c_master::I2CMasterDriver<cc26x2::i2c::I2CMaster<'static>>,
     helium: &'static capsules::helium::driver::Helium<'static>,
-
 }
 
 impl<'a> kernel::Platform for FeatherPlatform<'a> {
-
     fn with_driver<F, R>(&self, driver_num: usize, f: F) -> R
     where
         F: FnOnce(Option<&kernel::Driver>) -> R,
@@ -102,27 +99,25 @@ impl<'a> kernel::Platform for FeatherPlatform<'a> {
     }
 
     fn service_pending_events(&mut self) {
-        let pending_event: Option<event_priority::EVENT_PRIORITY>  = events::next_pending();
+        let pending_event: Option<event_priority::EVENT_PRIORITY> = events::next_pending();
         while let Some(event) = pending_event {
             events::clear_event_flag(event);
             match event {
-                event_priority::EVENT_PRIORITY::GPIO => {}, //unsafe {cc26x2::gpio::PORT.handle_events()},
-                event_priority::EVENT_PRIORITY::AON_RTC => {}, //unsafe {cc26x2::rtc::RTC.handle_events()},
-                event_priority::EVENT_PRIORITY::I2C0 => {}, //unsafe {cc26x2::i2c::I2C0.handle_events()},
+                event_priority::EVENT_PRIORITY::GPIO => {} //unsafe {cc26x2::gpio::PORT.handle_events()},
+                event_priority::EVENT_PRIORITY::AON_RTC => {} //unsafe {cc26x2::rtc::RTC.handle_events()},
+                event_priority::EVENT_PRIORITY::I2C0 => {} //unsafe {cc26x2::i2c::I2C0.handle_events()},
                 event_priority::EVENT_PRIORITY::UART0 => {
-
                     // pass data from static debug writer to the stack allocated debug uart client
                     unsafe {
-                        self.debug_client.with_buffer( |buf| debug::get_debug_writer().publish_str(buf));
+                        self.debug_client
+                            .with_buffer(|buf| debug::get_debug_writer().publish_str(buf));
                     }
-                    let clients = [
-                        self.debug_client as &kernel::hil::uart::Client,
-                    ];
+                    let clients = [self.debug_client as &kernel::hil::uart::Client];
                     capsules::uart::handle_irq(0, self.uart, Some(&clients));
-                },
+                }
                 event_priority::EVENT_PRIORITY::UART1 => {
                     //capsules::uart::handle_irq(1, self.uart, None);
-                },
+                }
                 //event_priority::EVENT_PRIORITY::RF_CMD_ACK => cc26x2::radio::RFC.handle_ack_event(),
                 //event_priority::EVENT_PRIORITY::RF_CORE_CPE0 => cc26x2::radio::RFC.handle_cpe0_event(),
                 //event_priority::EVENT_PRIORITY::RF_CORE_CPE1 => cc26x2::radio::RFC.handle_cpe1_event(),
@@ -296,11 +291,11 @@ pub unsafe fn reset_handler() {
     let mut uart0_driver_app_space = uart::AppRequestsInProgress::space();
 
     // for each client for the driver, provide an empty TakeCell
-    let uart0_clients: [TakeCell<hil::uart::RxRequest>; 3] = [TakeCell::empty(), TakeCell::empty(), TakeCell::empty()];
+    let uart0_clients: [TakeCell<hil::uart::RxRequest>; 3] =
+        [TakeCell::empty(), TakeCell::empty(), TakeCell::empty()];
 
     let uart1_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_1);
     let mut uart1_driver_app_space = uart::AppRequestsInProgress::space();
-
 
     let board_uarts = [
         &uart::Uart::new(

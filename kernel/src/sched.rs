@@ -17,7 +17,6 @@ use crate::process::{self, Task};
 use crate::returncode::ReturnCode;
 use crate::syscall::{ContextSwitchReason, Syscall};
 
-
 /// The time a process is permitted to run before being pre-empted
 const KERNEL_TICK_DURATION_US: u32 = 10000;
 /// Skip re-scheduling a process if its quanta is nearly exhausted
@@ -245,7 +244,6 @@ impl Kernel {
         systick.enable(false);
 
         loop {
-
             if systick.overflowed() || !systick.greater_than(MIN_QUANTA_THRESHOLD_US) {
                 process.debug_timeslice_expired();
                 break;

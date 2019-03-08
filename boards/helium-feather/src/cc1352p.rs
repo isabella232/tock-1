@@ -1,6 +1,6 @@
 use super::Pinmap;
-use enum_primitive::cast::{FromPrimitive, ToPrimitive};
 use crate::enum_primitive::enum_from_primitive;
+use enum_primitive::cast::{FromPrimitive, ToPrimitive};
 
 enum_from_primitive! {
 pub enum PIN_FN {

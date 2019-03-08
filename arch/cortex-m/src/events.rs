@@ -1,8 +1,8 @@
 //
 //  These are generic event handling routines which could be defined in cortexm
 //
-use core::ptr;
 use crate::support::atomic;
+use core::ptr;
 use enum_primitive::cast::{FromPrimitive, ToPrimitive};
 
 pub static mut FLAGS: usize = 0;
@@ -33,7 +33,10 @@ pub fn next_pending<T: FromPrimitive>() -> Option<T> {
 
 pub fn set_event_flag<T: ToPrimitive>(priority: T) {
     unsafe {
-        let bm = 0b1 << priority.to_usize().expect("Could not cast priority enum as usize");
+        let bm = 0b1
+            << priority
+                .to_usize()
+                .expect("Could not cast priority enum as usize");
         atomic(|| {
             let new_value = ptr::read_volatile(&FLAGS) | bm;
             FLAGS = new_value;
@@ -62,7 +65,10 @@ pub unsafe fn set_event_flag_from_isr(priority: usize) {
 
 pub fn clear_event_flag<T: ToPrimitive>(priority: T) {
     unsafe {
-        let bm = !0b1 << priority.to_usize().expect("Could not cast priority enum as usize");
+        let bm = !0b1
+            << priority
+                .to_usize()
+                .expect("Could not cast priority enum as usize");
         atomic(|| {
             let new_value = ptr::read_volatile(&FLAGS) & bm;
             FLAGS = new_value;

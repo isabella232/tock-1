@@ -80,7 +80,11 @@ impl<'a> hil::uart::Client<'a> for TestClient<'a> {
         self.tx_request.take()
     }
 
-    fn tx_request_complete(&self, _uart_num: usize, returned_request: &'a mut hil::uart::TxRequest<'a>) {
+    fn tx_request_complete(
+        &self,
+        _uart_num: usize,
+        returned_request: &'a mut hil::uart::TxRequest<'a>,
+    ) {
         self.state.take().map(|mut state| {
             match state {
                 State::FirstMsg => {
@@ -113,7 +117,11 @@ impl<'a> hil::uart::Client<'a> for TestClient<'a> {
         self.rx_request.take()
     }
 
-    fn rx_request_complete(&self, _uart_num: usize,returned_request: &'a mut hil::uart::RxRequest<'a>) {
+    fn rx_request_complete(
+        &self,
+        _uart_num: usize,
+        returned_request: &'a mut hil::uart::RxRequest<'a>,
+    ) {
         self.state.take().map(|state| {
             match state {
                 State::Echo => {
