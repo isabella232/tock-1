@@ -19,7 +19,6 @@ use kernel::{create_capability, debug, debug_gpio, static_init};
 use capsules::helium;
 use capsules::helium::{device::Device, virtual_rfcore::RFCore};
 use capsules::uart;
-use cc26x2::adc;
 use cc26x2::osc;
 use cc26x2::radio;
 
@@ -173,9 +172,9 @@ unsafe fn configure_pins(pin: &Pinmap) {
     cc26x2::gpio::PORT[pin.button1].enable_gpio();
     cc26x2::gpio::PORT[pin.button2].enable_gpio();
 
-    // cc26x2::gpio::PORT[pin.regulator_mode].enable_gpio();
-    // cc26x2::gpio::PORT[pin.regulator_mode].make_output();
-    // cc26x2::gpio::PORT[pin.regulator_mode].set();
+    cc26x2::gpio::PORT[pin.regulator_mode].enable_gpio();
+    cc26x2::gpio::PORT[pin.regulator_mode].make_output();
+    cc26x2::gpio::PORT[pin.regulator_mode].clear();
 
     cc26x2::gpio::PORT[pin.skyworks_csd].enable_gpio();
     cc26x2::gpio::PORT[pin.skyworks_cps].enable_gpio();
@@ -191,9 +190,6 @@ unsafe fn configure_pins(pin: &Pinmap) {
         cc26x2::gpio::PORT[rf_subg].enable_subg_output();
     }
 }
-
-use kernel::hil::rf_frontend::SE2435L;
-
 
 #[no_mangle]
 pub unsafe fn reset_handler() {
@@ -432,7 +428,7 @@ pub unsafe fn reset_handler() {
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
 
-    let rfc = &cc26x2::radio::MULTIMODE_RADIO;
+    //let rfc = &cc26x2::radio::MULTIMODE_RADIO;
     //rfc.run_tests(0);
 
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
