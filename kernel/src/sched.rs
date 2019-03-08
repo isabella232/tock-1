@@ -2,7 +2,6 @@
 
 use core::cell::Cell;
 use core::ptr::NonNull;
-use enum_primitive::cast::{FromPrimitive, ToPrimitive};
 
 use crate::callback::Callback;
 use crate::capabilities;
