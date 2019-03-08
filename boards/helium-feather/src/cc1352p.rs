@@ -1,5 +1,5 @@
 use super::Pinmap;
-use crate::enum_primitive::cast::FromPrimitive;
+use enum_primitive::cast::{FromPrimitive, ToPrimitive};
 use crate::enum_primitive::enum_from_primitive;
 
 enum_from_primitive! {

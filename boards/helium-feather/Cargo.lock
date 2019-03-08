@@ -43,6 +43,7 @@ dependencies = [
 name = "cortexm"
 version = "0.1.0"
 dependencies = [
+ "enum_primitive 0.1.0",
  "kernel 0.1.0",
 ]
 
@@ -85,6 +86,7 @@ version = "0.1.0"
 dependencies = [
  "capsules 0.1.0",
  "cc26x2 0.1.0",
+ "cortexm 0.1.0",
  "cortexm4 0.1.0",
  "enum_primitive 0.1.0",
  "fixedvec 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -95,6 +97,7 @@ dependencies = [
 name = "kernel"
 version = "0.1.0"
 dependencies = [
+ "enum_primitive 0.1.0",
  "tock-cells 0.1.0",
  "tock-registers 0.3.0",
 ]

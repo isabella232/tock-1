@@ -1,3 +1,4 @@
+use crate::setup;
 use cortexm4::{generic_isr, hard_fault_handler, nvic, svc_handler, systick_handler};
 use tock_rt0;
 
@@ -17,6 +18,7 @@ extern "C" {
 
 #[no_mangle]
 pub unsafe extern "C" fn init() {
+    setup::perform();
     tock_rt0::init_data(&mut _etext, &mut _srelocate, &mut _erelocate);
     tock_rt0::zero_bss(&mut _szero, &mut _ezero);
     nvic::enable_all();

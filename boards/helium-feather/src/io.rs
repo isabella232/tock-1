@@ -15,11 +15,13 @@ static mut WRITER: Writer = Writer { initialized: false };
 
 impl Write for Writer {
     fn write_str(&mut self, s: &str) -> ::core::fmt::Result {
-        let uart = unsafe { &mut cc26x2::uart::UART0 };
+        let uart = unsafe {
+            cc26x2::uart::UART::unsafe_new(cc26x2::uart::PeripheralNum::_0)
+        };
         if !self.initialized {
             self.initialized = true;
             uart::Configure::configure(
-                uart,
+                &uart,
                 uart::Parameters {
                     baud_rate: 115200,
                     stop_bits: uart::StopBits::One,
@@ -30,7 +32,7 @@ impl Write for Writer {
             );
         }
         for c in s.bytes() {
-            uart.send_byte(c as u8);
+            uart.write(c as u32);
             while !uart.tx_fifo_not_full() {}
         }
         Ok(())

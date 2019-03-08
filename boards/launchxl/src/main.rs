@@ -10,12 +10,10 @@ extern crate enum_primitive;
 extern crate fixedvec;
 
 use cc26x2::aon;
-use cc26x2::peripheral_interrupts::NVIC_IRQ;
 use cc26x2::prcm;
 use cc26x2::pwm;
 use cortexm::events;
 
-use enum_primitive::cast::FromPrimitive;
 #[allow(unused_imports)]
 use kernel::{create_capability, debug, debug_gpio, static_init};
 
@@ -25,7 +23,6 @@ use capsules::helium::{device::Device, virtual_rfcore::RFCore};
 use cc26x2::adc;
 use cc26x2::osc;
 use cc26x2::radio;
-
 
 use kernel::capabilities;
 use kernel::common::cells::TakeCell;
@@ -37,9 +34,6 @@ use kernel::hil::gpio::PinCtl;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::rfcore::PaType;
 use kernel::hil::rng::Rng;
-
-use kernel::platform::Platform;
-
 use kernel::hil::uart::Configure;
 
 
@@ -53,6 +47,7 @@ mod i2c_tests;
 #[allow(dead_code)]
 mod uart_test;
 mod event_priority;
+mod interrupt_table;
 
 
 // High frequency oscillator speed
@@ -143,7 +138,7 @@ impl<'a> kernel::Platform for LaunchXlPlatform<'a> {
                 //event_priority::EVENT_PRIORITY::RF_CORE_CPE1 => cc26x2::radio::RFC.handle_cpe1_event(),
                 //event_priority::EVENT_PRIORITY::RF_CORE_HW => panic!("Unhandled RFC interupt event!"),
                 //event_priority::EVENT_PRIORITY::AUX_ADC => cc26x2::adc::ADC.handle_events(),
-                //event_priority::EVENT_PRIORITY::OSC => cc26x2::prcm::handle_osc_interrupt(),
+                event_priority::EVENT_PRIORITY::OSC => cc26x2::prcm::handle_osc_interrupt(),
                 event_priority::EVENT_PRIORITY::AON_PROG => (),
                 _ => panic!("unhandled event {:?} ", event),
             }
@@ -256,8 +251,8 @@ pub unsafe fn reset_handler() {
 
     while !prcm::Power::is_enabled(prcm::PowerDomain::Serial) {}
 
-    // osc::OSC.request_switch_to_hf_xosc();
-    // osc::OSC.switch_to_hf_xosc();
+    osc::OSC.request_switch_to_hf_xosc();
+    osc::OSC.switch_to_hf_xosc();
 
     let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&PROCESSES));
 
@@ -606,103 +601,3 @@ pub unsafe fn reset_handler() {
 
     board_kernel.kernel_loop(&mut launchxl, chip, Some(&ipc), &main_loop_capability);
 }
-
-
-use cortexm4::{
-    disable_specific_nvic, generic_isr, hard_fault_handler, nvic, set_privileged_thread,
-    stash_process_state, svc_handler, systick_handler
-};
-
-macro_rules! generic_isr {
-    ($label:tt, $priority:expr) => {
-        #[cfg(target_os = "none")]
-        #[naked]
-        unsafe extern "C" fn $label() {
-
-            stash_process_state();
-            set_privileged_thread();
-            events::set_event_flag_from_isr($priority as usize);
-        }
-    };
-}
-
-macro_rules! custom_isr {
-    ($label:tt, $priority:expr, $isr:ident) => {
-        #[cfg(target_os = "none")]
-        #[naked]
-        unsafe extern "C" fn $label() {
-            stash_process_state();
-            events::set_event_flag_from_isr($priority);
-            $isr();
-            set_privileged_thread();
-        }
-    };
-}
-
-unsafe extern "C" fn unhandled_interrupt() {
-    'loop0: loop {}
-}
-
-generic_isr!(uart0_nvic, event_priority::EVENT_PRIORITY::UART0);
-
-#[link_section = ".vectors"]
-// used Ensures that the symbol is kept until the final binary
-#[used]
-pub static BASE_VECTORS: [unsafe extern "C" fn(); 54] = [
-    cc26x2::crt1::_estack,
-    cc26x2::crt1::reset_handler,
-    unhandled_interrupt, // NMI
-    hard_fault_handler,  // Hard Fault
-    unhandled_interrupt, // MPU fault
-    unhandled_interrupt, // Bus fault
-    unhandled_interrupt, // Usage fault
-    unhandled_interrupt, // Reserved
-    unhandled_interrupt, // Reserved
-    unhandled_interrupt, // Reserved
-    unhandled_interrupt, // Reserved
-    svc_handler,         // SVC
-    unhandled_interrupt, // Debug monitor,
-    unhandled_interrupt, // Reserved
-    unhandled_interrupt, // PendSV
-    systick_handler,     // Systick
-    generic_isr,         // GPIO Int handler
-    generic_isr,         // I2C
-    generic_isr,         // RF Core Command & Packet Engine 1
-    generic_isr,         // AON SpiSplave Rx, Tx and CS
-    generic_isr,         // AON RTC
-    uart0_nvic,         // UART0 Rx and Tx
-    generic_isr,         // AUX software event 0
-    generic_isr,         // SSI0 Rx and Tx
-    generic_isr,         // SSI1 Rx and Tx
-    generic_isr,         // RF Core Command & Packet Engine 0
-    generic_isr,         // RF Core Hardware
-    generic_isr,         // RF Core Command Acknowledge
-    generic_isr,         // I2S
-    generic_isr,         // AUX software event 1
-    generic_isr,         // Watchdog timer
-    generic_isr,         // Timer 0 subtimer A
-    generic_isr,         // Timer 0 subtimer B
-    generic_isr,         // Timer 1 subtimer A
-    generic_isr,         // Timer 1 subtimer B
-    generic_isr,         // Timer 2 subtimer A
-    generic_isr,         // Timer 2 subtimer B
-    generic_isr,         // Timer 3 subtimer A
-    generic_isr,         // Timer 3 subtimer B
-    generic_isr,         // Crypto Core Result available
-    generic_isr,         // uDMA Software
-    generic_isr,         // uDMA Error
-    generic_isr,         // Flash controller
-    generic_isr,         // Software Event 0
-    generic_isr,         // AUX combined event
-    generic_isr,         // AON programmable 0
-    generic_isr,         // Dynamic Programmable interrupt
-    // source (Default: PRCM)
-    generic_isr, // AUX Comparator A
-    generic_isr, // AUX ADC new sample or ADC DMA
-    // done, ADC underflow, ADC overflow
-    generic_isr, // TRNG event
-    generic_isr,
-    generic_isr,
-    generic_isr,
-    generic_isr,
-];
