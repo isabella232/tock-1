@@ -1,5 +1,5 @@
 use crate::setup;
-use cortexm4::{generic_isr, hard_fault_handler, nvic, svc_handler, systick_handler};
+use cortexm4::nvic;
 use tock_rt0;
 
 extern "C" {

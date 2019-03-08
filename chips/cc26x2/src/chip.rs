@@ -1,4 +1,4 @@
-use cortexm4::{self, nvic};
+use cortexm4;
 
 pub struct Cc26X2 {
     mpu: cortexm4::mpu::MPU,
