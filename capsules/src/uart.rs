@@ -62,12 +62,12 @@ pub fn handle_irq(
             }
             // otherwise, it is a kernel client request
             else if let Some(clients) = clients {
-                let client_id = request.client_id;
+                let client_id = request.req.client_id;
                 clients[client_id].rx_request_complete(num, request);
 
                 // if the muxing out completed any other rx'es, return them as well
                 while let Some(next_request) = driver.uart[num].get_other_completed_rx() {
-                    let client_id = next_request.client_id;
+                    let client_id = next_request.req.client_id;
                     clients[client_id].rx_request_complete(num, next_request);
                 }
             }
@@ -135,7 +135,7 @@ fn take_new_rx_requests<'a>(
         let client = clients[index];
         if client.has_rx_request() {
             if let Some(rx) = client.get_rx_request() {
-                rx.client_id = index;
+                rx.req.client_id = index;
                 driver.uart[num].stash_rx_request(rx);
             }
         }
@@ -197,12 +197,12 @@ impl<'a> AppRequestsInProgress<'a> {
 
     pub fn new(
         tx_request_buffer: &'a mut [u8],
-        tx_request: &'a mut kernel::ikc::TxRequest<'a, u8>,
+        tx_request: &'a mut hil::uart::TxRequest<'a>,
         rx_request_buffer: &'a mut [u8],
-        rx_request: &'a mut kernel::ikc::RxRequest<'a, u8>,
+        rx_request: &'a mut hil::uart::RxRequest<'a>,
     ) -> AppRequestsInProgress<'a> {
         tx_request.set_with_mut_ref(tx_request_buffer);
-        rx_request.set_buf(rx_request_buffer);
+        rx_request.req.set_buf(rx_request_buffer);
 
         AppRequestsInProgress {
             tx_in_progress: OptionalCell::empty(),
@@ -315,7 +315,7 @@ impl<'a> Uart<'a> {
     }
 
     fn stash_rx_request(&self, rx: &'a mut hil::uart::RxRequest<'a>) {
-        let index = rx.client_id;
+        let index = rx.req.client_id;
         if let Some(requests_stash) = self.rx_requests {
             if let Some(_existing_request) = requests_stash[index].take() {
                 panic!(
@@ -335,16 +335,16 @@ impl<'a> Uart<'a> {
         completed_rx: &'a mut hil::uart::RxRequest<'a>,
     ) -> &'a mut hil::uart::RxRequest<'a> {
         if let Some(requests_stash) = self.rx_requests {
-            match &completed_rx.buf {
+            match &completed_rx.req.buf {
                 ikc::RxBuf::MUT(buf) => {
                     // for every item in the compeleted_rx
-                    for i in 0..completed_rx.items_pushed() {
+                    for i in 0..completed_rx.req.items_pushed() {
                         let item = buf[i];
                         // copy it into any existing requests in the requests_stash
                         for j in 0..requests_stash.len() {
                             if let Some(request) = requests_stash[j].take() {
-                                if request.has_room(){
-                                    request.push(item);
+                                if request.req.has_room(){
+                                    request.req.push(item);
                                 }
                                 requests_stash[j].put(Some(request));
                             }
@@ -382,7 +382,7 @@ impl<'a> Uart<'a> {
         if let Some(requests_stash) = self.rx_requests {
             for i in 0..requests_stash.len() {
                 if let Some(request) = requests_stash[i].take() {
-                    if request.request_completed() {
+                    if request.req.request_completed() {
                         return Some(request);
                     } else {
                         requests_stash[i].put(Some(request));
@@ -405,7 +405,7 @@ impl<'a> Uart<'a> {
 
             for i in 0..requests_stash.len() {
                 if let Some(request) = requests_stash[i].take() {
-                    let request_remaining = request.request_remaining();
+                    let request_remaining = request.req.request_remaining();
 
                     // if there is a minimum already, compare to see if this is shorter
                     if let Some(mut min) = min {
@@ -460,8 +460,8 @@ impl<'a> Uart<'a> {
     fn transmit_app_rx_request(&self, app_id: AppId) -> ReturnCode {
         if let Some(request) = self.app_requests.rx.take() {
             if let Err(_err) = self.apps.enter(app_id, |app, _| {
-                request.reset();
-                request.initialize_from_app_request(&mut app.rx);
+                request.req.reset();
+                request.req.initialize_from_app_request(&mut app.rx);
             }) {
                 return ReturnCode::FAIL;
             };

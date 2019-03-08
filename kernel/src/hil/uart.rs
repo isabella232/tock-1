@@ -7,7 +7,22 @@ use crate::returncode::ReturnCode;
 use crate::ikc::DriverState::IDLE;
 
 pub type TxRequest<'a> = ikc::TxRequest<'a, u8>;
-pub type RxRequest<'a> = ikc::RxRequest<'a, u8>;
+pub struct RxRequest<'a> {
+    pub req: ikc::RxRequest<'a, u8>,
+    // client may request to return at end of transmission (buffer may not be full)
+    pub eot_return: bool,
+}
+
+impl RxRequest<'a>{
+    pub fn new() -> RxRequest<'a>{
+        RxRequest {
+            req: ikc::RxRequest::new(),
+            eot_return: false,
+        }
+    }
+}
+
+
 pub type State = ikc::DriverState;
 
 #[derive(Copy, Clone, Debug, PartialEq)]

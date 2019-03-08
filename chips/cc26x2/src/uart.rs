@@ -244,12 +244,12 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
             if self.rx.is_some() {
                 self.rx.take().map(|rx| {
                     // read in a byte
-                    if !rx.request_completed() {
+                    if !rx.req.request_completed() {
                         let byte = self.read() as u8;
-                        rx.push(byte);
+                        rx.req.push(byte);
                     }
 
-                    if rx.request_completed() {
+                    if rx.req.request_completed() {
                         rx_complete = Some(rx);
                     } else {
                         self.rx.put(rx);
