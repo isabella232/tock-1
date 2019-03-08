@@ -124,7 +124,7 @@ impl<'a> kernel::Platform for FeatherPlatform<'a> {
                 event_priority::EVENT_PRIORITY::RF_CORE_CPE1 => unsafe{ cc26x2::radio::RFC.handle_cpe1_event()},
                 event_priority::EVENT_PRIORITY::RF_CORE_HW => panic!("Unhandled RFC interupt event!"),
                 //event_priority::EVENT_PRIORITY::AUX_ADC => cc26x2::adc::ADC.handle_events(),
-                //event_priority::EVENT_PRIORITY::OSC => cc26x2::prcm::handle_osc_interrupt(),
+                event_priority::EVENT_PRIORITY::OSC => cc26x2::prcm::handle_osc_interrupt(),
                 event_priority::EVENT_PRIORITY::AON_PROG => (),
                 _ => panic!("unhandled event {:?} ", event),
             }
@@ -190,6 +190,8 @@ unsafe fn configure_pins(pin: &Pinmap) {
         cc26x2::gpio::PORT[rf_subg].enable_subg_output();
     }
 }
+
+use kernel::hil::rf_frontend::SE2435L;
 
 #[no_mangle]
 pub unsafe fn reset_handler() {
@@ -428,8 +430,10 @@ pub unsafe fn reset_handler() {
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
 
-    //let rfc = &cc26x2::radio::MULTIMODE_RADIO;
-    //rfc.run_tests(0);
+    let rfc = &cc26x2::radio::MULTIMODE_RADIO;
+    rfc.run_tests(0);
+
+    // sky.sleep();
 
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
 

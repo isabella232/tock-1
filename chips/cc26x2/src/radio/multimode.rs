@@ -246,16 +246,13 @@ impl Radio {
     }
 
     pub fn run_tests(&self, test: u8) {
-        debug!("running rf test");
-
         self.rfc.set_mode(rfc::RfcMode::BLE);
 
-        //osc::OSC.request_switch_to_hf_xosc();
+        osc::OSC.request_switch_to_hf_xosc();
         self.rfc.enable();
         self.rfc.start_rat();
 
-        //osc::OSC.switch_to_hf_xosc();
-        debug!("got this far");
+        osc::OSC.switch_to_hf_xosc();
         self.set_pa_restriction();
         unsafe {
             let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
@@ -268,12 +265,9 @@ impl Radio {
                 self.tx_power.get(),
             );
         }
-        debug!("got this far2");
-
         self.set_radio_fs();
 
-        debug!("got this far3");
-
+        debug!("test radio tx/rx");
         if let Some(t) = TestType::from_u8(test) {
             match t {
                 TestType::Tx => self.test_radio_tx(),
