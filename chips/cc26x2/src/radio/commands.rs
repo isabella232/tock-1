@@ -346,7 +346,7 @@ pub mod prop_commands {
         fn guard(&mut self) {}
     }
 
-    #[repr(C)]
+    #[repr(C, align(32))]
     #[derive(Copy, Clone)]
     pub struct CommandTx {
         pub command_no: u16, // 0x3801
