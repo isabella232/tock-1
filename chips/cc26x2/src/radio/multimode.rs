@@ -1,8 +1,9 @@
 use crate::enum_primitive::cast::{FromPrimitive, ToPrimitive};
 use crate::osc;
+use crate::radio::commands as cmd;
 use crate::radio::commands::{
-    prop_commands as prop, DirectCommand, RadioCommand, RfcCondition, RfcTrigger, LR_RFPARAMS,
-    TX_20_PARAMS, TX_STD_PARAMS,
+    prop_commands as prop, DirectCommand, RadioCommand, RfcCondition, RfcTrigger, CWM_RFPARAMS,
+    LR_RFPARAMS, TX_20_PARAMS, TX_STD_PARAMS_2,
 };
 use crate::radio::queue;
 use crate::radio::rfc;
@@ -21,6 +22,7 @@ enum_from_primitive! {
 pub enum TestType {
     Tx = 0,
     Rx = 1,
+    Cwm = 2,
 }
 }
 
@@ -78,7 +80,7 @@ impl Radio {
             can_sleep: Cell::new(false),
             tx_buf: TakeCell::empty(),
             rx_buf: TakeCell::empty(),
-            tx_power: Cell::new(0x3248),
+            tx_power: Cell::new(0x12C9),
             pa_type: Cell::new(PaType::None),
         }
     }
@@ -103,7 +105,7 @@ impl Radio {
         // Need to match on patches here but for now, just default to genfsk patches
         unsafe {
             let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
-            let tx_std_overrides: u32 = TX_STD_PARAMS.as_mut_ptr() as u32;
+            let tx_std_overrides: u32 = TX_STD_PARAMS_2.as_mut_ptr() as u32;
             let tx_20_overrides: u32 = TX_20_PARAMS.as_mut_ptr() as u32;
             self.rfc.setup(
                 reg_overrides,
@@ -268,23 +270,56 @@ impl Radio {
         self.rfc.start_rat();
 
         osc::OSC.switch_to_hf_xosc();
+
         self.set_pa_restriction();
-        unsafe {
-            let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
-            let tx_std_overrides: u32 = TX_STD_PARAMS.as_mut_ptr() as u32;
-            let tx_20_overrides: u32 = TX_20_PARAMS.as_mut_ptr() as u32;
-            self.rfc.setup(
-                reg_overrides,
-                tx_std_overrides,
-                tx_20_overrides,
-                self.tx_power.get(),
-            );
-        }
-        self.set_radio_fs();
+
         if let Some(t) = TestType::from_u8(test) {
             match t {
-                TestType::Tx => self.test_radio_tx(),
-                TestType::Rx => self.test_radio_rx(),
+                TestType::Tx => {
+                    unsafe {
+                        let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
+                        let tx_std_overrides: u32 = TX_STD_PARAMS_2.as_mut_ptr() as u32;
+                        let tx_20_overrides: u32 = TX_20_PARAMS.as_mut_ptr() as u32;
+                        self.rfc.setup(
+                            reg_overrides,
+                            tx_std_overrides,
+                            tx_20_overrides,
+                            self.tx_power.get(),
+                        );
+                    }
+                    self.set_radio_fs();
+                    self.test_radio_tx();
+                }
+                TestType::Rx => {
+                    unsafe {
+                        let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
+                        let tx_std_overrides: u32 = TX_STD_PARAMS_2.as_mut_ptr() as u32;
+                        let tx_20_overrides: u32 = TX_20_PARAMS.as_mut_ptr() as u32;
+                        self.rfc.setup(
+                            reg_overrides,
+                            tx_std_overrides,
+                            tx_20_overrides,
+                            self.tx_power.get(),
+                        );
+                    }
+                    self.set_radio_fs();
+                    self.test_radio_rx();
+                }
+                TestType::Cwm => {
+                    unsafe {
+                        let reg_overrides: u32 = CWM_RFPARAMS.as_mut_ptr() as u32;
+                        let tx_std_overrides: u32 = TX_STD_PARAMS_2.as_mut_ptr() as u32;
+                        let tx_20_overrides: u32 = TX_20_PARAMS.as_mut_ptr() as u32;
+                        self.setup_cwm(
+                            reg_overrides,
+                            tx_std_overrides,
+                            tx_20_overrides,
+                            self.tx_power.get(),
+                        );
+                    }
+                    self.set_radio_fs();
+                    self.test_radio_cwm();
+                }
             }
         }
     }
@@ -447,6 +482,120 @@ impl Radio {
         self.rfc
             .send_sync(&cmd_fs)
             .and_then(|_| self.rfc.wait(&cmd_fs))
+            .ok();
+    }
+
+    fn test_radio_cwm(&self) {
+        self.frontend_client.map(|client| client.bypass());
+
+        let mut cmd_cwm = prop::CommandTxTest {
+            command_no: 0x808,
+            status: 0,
+            p_nextop: 0,
+            start_time: 0,
+            start_trigger: 0,
+            condition: {
+                let mut cond = RfcCondition(0);
+                cond.set_rule(0x01);
+                cond
+            },
+            config: {
+                let mut conf = prop::RfcTxTestConf(0);
+                conf.set_use_cw(true);
+                conf.set_fs_off(false);
+                conf.set_whiten_mode(0x0);
+                conf
+            },
+            _reserved0: 0,
+            tx_word: 0xAAAA,
+            _reserved1: 0,
+            end_trigger: {
+                let mut trig = cmd::RfcTrigger(0);
+                trig.set_trigger_type(0x01);
+                trig.set_enable_cmd(false);
+                trig.set_trigger_no(0x0);
+                trig.set_past_trigger(false);
+                trig
+            },
+            sync_word: 0x930B51DE,
+            end_time: 0x00000000,
+        };
+
+        RadioCommand::guard(&mut cmd_cwm);
+        self.rfc
+            .send_sync(&cmd_cwm)
+            .and_then(|_| self.rfc.wait(&cmd_cwm))
+            .ok();
+    }
+    // Call commands to setup RFCore with optional register overrides and power output
+    pub fn setup_cwm(
+        &self,
+        reg_overrides: u32,
+        tx_std_overrides: u32,
+        tx_20_overrides: u32,
+        tx_power: u16,
+    ) {
+        let mut setup_cmd = prop::CommandRadioDivSetup {
+            command_no: 0x3807,
+            status: 0,
+            p_nextop: 0,
+            start_time: 0,
+            start_trigger: 0,
+            condition: {
+                let mut cond = cmd::RfcCondition(0);
+                cond.set_rule(0x01);
+                cond
+            },
+            modulation: {
+                let mut mdl = prop::RfcModulation(0);
+                mdl.set_mod_type(0x01);
+                mdl.set_deviation(0x64);
+                mdl.set_deviation_step(0x0);
+                mdl
+            },
+            symbol_rate: {
+                let mut sr = prop::RfcSymbolRate(0);
+                sr.set_prescale(0xF);
+                sr.set_rate_word(0x8000);
+                sr
+            },
+            rx_bandwidth: 0x52,
+            preamble_conf: {
+                let mut preamble = prop::RfcPreambleConf(0);
+                preamble.set_num_preamble_bytes(0x4);
+                preamble.set_pream_mode(0x0);
+                preamble
+            },
+            format_conf: {
+                let mut format = prop::RfcFormatConf(0);
+                format.set_num_syncword_bits(0x20);
+                format.set_bit_reversal(false);
+                format.set_msb_first(true);
+                format.set_fec_mode(0x0);
+                format.set_whiten_mode(0x0);
+                format
+            },
+            config: {
+                let mut cfg = cmd::RfcSetupConfig(0);
+                cfg.set_frontend_mode(0);
+                cfg.set_bias_mode(true);
+                cfg.set_analog_config_mode(0x0);
+                cfg.set_no_fs_powerup(false);
+                cfg
+            },
+            tx_power: tx_power,
+            reg_overrides: reg_overrides,
+            center_freq: 0x0395,
+            int_freq: 0x8000,
+            lo_divider: 0x05,
+            reg_override_tx_std: tx_std_overrides,
+            reg_override_tx_20: tx_20_overrides,
+        };
+        RadioCommand::guard(&mut setup_cmd);
+
+        self.rfc
+            .send_sync(&setup_cmd)
+            .and_then(|_| self.rfc.wait(&setup_cmd))
             .ok();
     }
 
