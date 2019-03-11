@@ -32,7 +32,7 @@ struct _32BitAlignedU8Array {
 }
 
 impl _32BitAlignedU8Array {
-    pub const fn new() -> _32BitAlignedU8Array{
+    pub const fn new() -> _32BitAlignedU8Array {
         _32BitAlignedU8Array {
             buf: [0; 256],
             _alignment: [],
@@ -134,7 +134,6 @@ impl Radio {
         for i in 0..COMMAND.buf.len() {
             COMMAND.buf[i] = 0;
         }
-
 
         for i in 0..TX_BUF.len() {
             TX_BUF[i] = 0;

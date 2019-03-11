@@ -13,15 +13,14 @@ pub struct RxRequest<'a> {
     pub eot_return: bool,
 }
 
-impl RxRequest<'a>{
-    pub fn new() -> RxRequest<'a>{
+impl RxRequest<'a> {
+    pub fn new() -> RxRequest<'a> {
         RxRequest {
             req: ikc::RxRequest::new(),
             eot_return: false,
         }
     }
 }
-
 
 pub type State = ikc::DriverState;
 

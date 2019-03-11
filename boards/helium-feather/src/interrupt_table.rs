@@ -1,8 +1,8 @@
 use crate::event_priority;
 use cortexm::events;
 use cortexm4::{
-    generic_isr, hard_fault_handler, disable_specific_nvic, set_privileged_thread, stash_process_state, svc_handler,
-    systick_handler,
+    disable_specific_nvic, generic_isr, hard_fault_handler, set_privileged_thread,
+    stash_process_state, svc_handler, systick_handler,
 };
 
 macro_rules! generic_isr {

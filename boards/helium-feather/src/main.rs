@@ -191,8 +191,6 @@ unsafe fn configure_pins(pin: &Pinmap) {
     }
 }
 
-use kernel::hil::rf_frontend::SE2435L;
-
 #[no_mangle]
 pub unsafe fn reset_handler() {
     cc26x2::init();
@@ -430,7 +428,7 @@ pub unsafe fn reset_handler() {
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
 
-    let rfc = &cc26x2::radio::MULTIMODE_RADIO;
+    //let rfc = &cc26x2::radio::MULTIMODE_RADIO;
     //rfc.run_tests(0);
 
     //sky.sleep();
