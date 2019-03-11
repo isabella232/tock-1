@@ -431,9 +431,9 @@ pub unsafe fn reset_handler() {
     virtual_device.set_receive_client(radio_driver);
 
     let rfc = &cc26x2::radio::MULTIMODE_RADIO;
-    rfc.run_tests(0);
+    //rfc.run_tests(0);
 
-    // sky.sleep();
+    //sky.sleep();
 
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
 
