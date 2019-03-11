@@ -16,7 +16,7 @@ use kernel::hil::rfcore::PaType;
 use kernel::ReturnCode;
 
 // Fields for testing
-const TEST_PAYLOAD: [u8; 30] = [0; 30];
+const TEST_PAYLOAD: [u8; 32] = [0; 32];
 enum_from_primitive! {
 pub enum TestType {
     Tx = 0,
@@ -25,12 +25,27 @@ pub enum TestType {
 }
 
 const MAX_RX_LENGTH: u16 = 255;
-static mut COMMAND_BUF: [u8; 256] = [0; 256];
-static mut TX_BUF: [u8; 250] = [0; 250];
 
-static mut RX_BUF: [u8; 600] = [0; 600];
+struct _32BitAlignedU8Array {
+    buf: [u8; 256],
+    _alignment: [u32; 0],
+}
+
+impl _32BitAlignedU8Array {
+    pub const fn new() -> _32BitAlignedU8Array {
+        _32BitAlignedU8Array {
+            buf: [0; 256],
+            _alignment: [],
+        }
+    }
+}
+
+static mut COMMAND: _32BitAlignedU8Array = _32BitAlignedU8Array::new();
+static mut TX_BUF: [u8; 256] = [0; 256];
+
+static mut RX_BUF: [u8; 512] = [0; 512];
 static mut RX_DAT: [u8; 16] = [0; 16];
-static mut RX_PAYLOAD: [u8; 255] = [0; 255];
+static mut RX_PAYLOAD: [u8; 256] = [0; 256];
 
 #[allow(unused)]
 // TODO Implement update config for changing radio modes and tie in the WIP power client to manage
@@ -116,8 +131,8 @@ impl Radio {
     unsafe fn replace_and_send_tx_buffer(&self, buf: &'static mut [u8], len: usize) {
         self.frontend_client.map(|client| client.enable_pa());
 
-        for i in 0..COMMAND_BUF.len() {
-            COMMAND_BUF[i] = 0;
+        for i in 0..COMMAND.buf.len() {
+            COMMAND.buf[i] = 0;
         }
 
         for i in 0..TX_BUF.len() {
@@ -134,7 +149,7 @@ impl Radio {
             let p_packet = buf.as_mut_ptr() as u32;
 
             let cmd: &mut prop::CommandTx =
-                &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandTx);
+                &mut *(COMMAND.buf.as_mut_ptr() as *mut prop::CommandTx);
             cmd.command_no = 0x3801;
             cmd.status = 0;
             cmd.p_nextop = 0;
@@ -176,15 +191,15 @@ impl Radio {
     unsafe fn start_rx_cmd(&self) -> ReturnCode {
         self.frontend_client.map(|client| client.enable_lna());
 
-        for i in 0..COMMAND_BUF.len() {
-            COMMAND_BUF[i] = 0;
+        for i in 0..COMMAND.buf.len() {
+            COMMAND.buf[i] = 0;
         }
 
         for i in 0..RX_BUF.len() {
             RX_BUF[i] = 0;
         }
 
-        let cmd: &mut prop::CommandRx = &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandRx);
+        let cmd: &mut prop::CommandRx = &mut *(COMMAND.buf.as_mut_ptr() as *mut prop::CommandRx);
 
         let mut data_queue = queue::DataQueue::new(RX_BUF.as_mut_ptr(), RX_BUF.as_mut_ptr());
 
@@ -246,16 +261,13 @@ impl Radio {
     }
 
     pub fn run_tests(&self, test: u8) {
-        debug!("running rf test");
-
         self.rfc.set_mode(rfc::RfcMode::BLE);
 
-        //osc::OSC.request_switch_to_hf_xosc();
+        osc::OSC.request_switch_to_hf_xosc();
         self.rfc.enable();
         self.rfc.start_rat();
 
-        //osc::OSC.switch_to_hf_xosc();
-        debug!("got this far");
+        osc::OSC.switch_to_hf_xosc();
         self.set_pa_restriction();
         unsafe {
             let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
@@ -268,24 +280,17 @@ impl Radio {
                 self.tx_power.get(),
             );
         }
-        debug!("got this far2");
-
         self.set_radio_fs();
-
-        debug!("got this far3");
-
         if let Some(t) = TestType::from_u8(test) {
             match t {
                 TestType::Tx => self.test_radio_tx(),
                 TestType::Rx => self.test_radio_rx(),
             }
         }
-        debug!("test complete");
     }
 
     fn test_radio_tx(&self) {
         self.frontend_client.map(|client| client.enable_pa());
-
         let mut packet = TEST_PAYLOAD;
         let mut seq: u8 = 0;
         for p in packet.iter_mut() {
@@ -295,14 +300,14 @@ impl Radio {
         let p_packet = packet.as_mut_ptr() as u32;
 
         unsafe {
-            for i in 0..COMMAND_BUF.len() {
-                COMMAND_BUF[i] = 0;
+            for i in 0..COMMAND.buf.len() {
+                COMMAND.buf[i] = 0;
             }
         }
 
         unsafe {
             let cmd: &mut prop::CommandTx =
-                &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandTx);
+                &mut *(COMMAND.buf.as_mut_ptr() as *mut prop::CommandTx);
             cmd.command_no = 0x3801;
             cmd.status = 0;
             cmd.p_nextop = 0;
@@ -315,11 +320,13 @@ impl Radio {
                 trig.set_past_trigger(true);
                 trig
             };
+
             cmd.condition = {
                 let mut cond = RfcCondition(0);
                 cond.set_rule(0x01);
                 cond
             };
+
             cmd.packet_conf = {
                 let mut packet = prop::RfcPacketConfTx(0);
                 packet.set_fs_off(false);
@@ -345,12 +352,12 @@ impl Radio {
         self.frontend_client.map(|client| client.enable_lna());
 
         unsafe {
-            for i in 0..COMMAND_BUF.len() {
-                COMMAND_BUF[i] = 0;
+            for i in 0..COMMAND.buf.len() {
+                COMMAND.buf[i] = 0;
             }
 
             let cmd: &mut prop::CommandRx =
-                &mut *(COMMAND_BUF.as_mut_ptr() as *mut prop::CommandRx);
+                &mut *(COMMAND.buf.as_mut_ptr() as *mut prop::CommandRx);
 
             let mut data_queue = queue::DataQueue::new(RX_BUF.as_mut_ptr(), RX_BUF.as_mut_ptr());
 

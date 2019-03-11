@@ -48,12 +48,12 @@ impl<'a> TestClient<'a> {
 
     pub fn new(
         tx_request_buffer: &'a mut [u8],
-        tx_request: &'a mut kernel::ikc::TxRequest<'a, u8>,
+        tx_request: &'a mut hil::uart::TxRequest<'a>,
         rx_request_buffer: &'a mut [u8],
-        rx_request: &'a mut kernel::ikc::RxRequest<'a, u8>,
+        rx_request: &'a mut hil::uart::RxRequest<'a>,
     ) -> TestClient<'a> {
         tx_request.set_with_const_ref(MSG1);
-        rx_request.set_buf(rx_request_buffer);
+        rx_request.req.set_buf(rx_request_buffer);
 
         TestClient {
             state: MapCell::new(State::FirstMsg),
@@ -129,8 +129,8 @@ impl<'a> hil::uart::Client<'a> for TestClient<'a> {
                     self.tx_request.take().map(|tx| {
                         tx.reset();
                         // if there is data
-                        for _i in 0..returned_request.items_pushed() {
-                            if let Some(data) = returned_request.pop() {
+                        for _i in 0..returned_request.req.items_pushed() {
+                            if let Some(data) = returned_request.req.pop() {
                                 tx.push(data);
                                 if data == b'\r' {
                                     tx.push(b'\n')
@@ -147,7 +147,7 @@ impl<'a> hil::uart::Client<'a> for TestClient<'a> {
         });
 
         // reset the request so it is ready to be used again
-        returned_request.reset();
+        returned_request.req.reset();
         self.rx_request.put(Some(returned_request));
     }
 }
