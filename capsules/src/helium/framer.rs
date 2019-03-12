@@ -29,6 +29,20 @@ impl Frame {
         self.buf
     }
 
+    pub fn frame_payload(&mut self, payload: &[u8]) -> ReturnCode {
+        let total_len = payload.len();
+        if total_len > 240 {
+            return ReturnCode::ENOMEM;
+        }
+
+        for i in 0..total_len as usize {
+            self.buf[i] = payload.as_ref()[i];
+        }
+
+        self.info.header.data_len = total_len;
+        ReturnCode::SUCCESS
+    }
+
     pub fn append_payload(&mut self, payload: &[u8]) -> ReturnCode {
         let head = "{\"team\":\"";
         let fill = "\",\"payload\":";

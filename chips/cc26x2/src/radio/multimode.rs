@@ -3,7 +3,7 @@ use crate::osc;
 use crate::radio::commands as cmd;
 use crate::radio::commands::{
     prop_commands as prop, DirectCommand, RadioCommand, RfcCondition, RfcTrigger, CWM_RFPARAMS,
-    LR_RFPARAMS, TX_20_PARAMS, TX_STD_PARAMS_2,
+    LR_RFPARAMS, TX_20_PARAMS, TX_STD_PARAMS_10, TX_STD_PARAMS_2, TX_STD_PARAMS_9,
 };
 use crate::radio::queue;
 use crate::radio::rfc;
@@ -67,6 +67,8 @@ pub struct Radio {
     pub pa_type: Cell<PaType>,
 }
 
+// 2 dB PWR 0x12C9
+// 9 dB PWR 0x3248
 impl Radio {
     pub const fn new(rfc: &'static rfc::RFCore) -> Radio {
         Radio {
@@ -262,7 +264,7 @@ impl Radio {
         ReturnCode::SUCCESS
     }
 
-    pub fn run_tests(&self, test: u8) {
+    pub fn run_tests(&self, test: u8, power: u8) {
         self.rfc.set_mode(rfc::RfcMode::BLE);
 
         osc::OSC.request_switch_to_hf_xosc();
@@ -271,15 +273,38 @@ impl Radio {
 
         osc::OSC.switch_to_hf_xosc();
 
-        self.set_pa_restriction();
-
         if let Some(t) = TestType::from_u8(test) {
             match t {
                 TestType::Tx => {
                     unsafe {
-                        let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
-                        let tx_std_overrides: u32 = TX_STD_PARAMS_2.as_mut_ptr() as u32;
-                        let tx_20_overrides: u32 = TX_20_PARAMS.as_mut_ptr() as u32;
+                        let reg_overrides: u32;
+                        let tx_std_overrides: u32;
+                        let tx_20_overrides: u32;
+                        match power {
+                            2 => {
+                                self.tx_power.set(0x12C9);
+                                reg_overrides = LR_RFPARAMS.as_mut_ptr() as u32;
+                                tx_std_overrides = TX_STD_PARAMS_2.as_mut_ptr() as u32;
+                                tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
+                            }
+                            9 => {
+                                self.tx_power.set(0x3248);
+                                reg_overrides = LR_RFPARAMS.as_mut_ptr() as u32;
+                                tx_std_overrides = TX_STD_PARAMS_9.as_mut_ptr() as u32;
+                                tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
+                            }
+                            10 => {
+                                reg_overrides = LR_RFPARAMS.as_mut_ptr() as u32;
+                                tx_std_overrides = TX_STD_PARAMS_10.as_mut_ptr() as u32;
+                                tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
+                            }
+                            _ => {
+                                reg_overrides = LR_RFPARAMS.as_mut_ptr() as u32;
+                                tx_std_overrides = TX_STD_PARAMS_2.as_mut_ptr() as u32;
+                                tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
+                                debug!("Invalid power parameter");
+                            }
+                        }
                         self.rfc.setup(
                             reg_overrides,
                             tx_std_overrides,
@@ -292,9 +317,34 @@ impl Radio {
                 }
                 TestType::Rx => {
                     unsafe {
-                        let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
-                        let tx_std_overrides: u32 = TX_STD_PARAMS_2.as_mut_ptr() as u32;
-                        let tx_20_overrides: u32 = TX_20_PARAMS.as_mut_ptr() as u32;
+                        let reg_overrides: u32;
+                        let tx_std_overrides: u32;
+                        let tx_20_overrides: u32;
+                        match power {
+                            2 => {
+                                self.tx_power.set(0x12C9);
+                                reg_overrides = LR_RFPARAMS.as_mut_ptr() as u32;
+                                tx_std_overrides = TX_STD_PARAMS_2.as_mut_ptr() as u32;
+                                tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
+                            }
+                            9 => {
+                                self.tx_power.set(0x3248);
+                                reg_overrides = LR_RFPARAMS.as_mut_ptr() as u32;
+                                tx_std_overrides = TX_STD_PARAMS_9.as_mut_ptr() as u32;
+                                tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
+                            }
+                            10 => {
+                                reg_overrides = LR_RFPARAMS.as_mut_ptr() as u32;
+                                tx_std_overrides = TX_STD_PARAMS_10.as_mut_ptr() as u32;
+                                tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
+                            }
+                            _ => {
+                                reg_overrides = LR_RFPARAMS.as_mut_ptr() as u32;
+                                tx_std_overrides = TX_STD_PARAMS_2.as_mut_ptr() as u32;
+                                tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
+                                debug!("Invalid power parameter");
+                            }
+                        }
                         self.rfc.setup(
                             reg_overrides,
                             tx_std_overrides,
@@ -307,9 +357,34 @@ impl Radio {
                 }
                 TestType::Cwm => {
                     unsafe {
-                        let reg_overrides: u32 = CWM_RFPARAMS.as_mut_ptr() as u32;
-                        let tx_std_overrides: u32 = TX_STD_PARAMS_2.as_mut_ptr() as u32;
-                        let tx_20_overrides: u32 = TX_20_PARAMS.as_mut_ptr() as u32;
+                        let reg_overrides: u32;
+                        let tx_std_overrides: u32;
+                        let tx_20_overrides: u32;
+                        match power {
+                            2 => {
+                                self.tx_power.set(0x12C9);
+                                reg_overrides = CWM_RFPARAMS.as_mut_ptr() as u32;
+                                tx_std_overrides = TX_STD_PARAMS_2.as_mut_ptr() as u32;
+                                tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
+                            }
+                            9 => {
+                                self.tx_power.set(0x3248);
+                                reg_overrides = CWM_RFPARAMS.as_mut_ptr() as u32;
+                                tx_std_overrides = TX_STD_PARAMS_9.as_mut_ptr() as u32;
+                                tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
+                            }
+                            10 => {
+                                reg_overrides = CWM_RFPARAMS.as_mut_ptr() as u32;
+                                tx_std_overrides = TX_STD_PARAMS_10.as_mut_ptr() as u32;
+                                tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
+                            }
+                            _ => {
+                                reg_overrides = CWM_RFPARAMS.as_mut_ptr() as u32;
+                                tx_std_overrides = TX_STD_PARAMS_2.as_mut_ptr() as u32;
+                                tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
+                                debug!("Invalid power parameter");
+                            }
+                        }
                         self.setup_cwm(
                             reg_overrides,
                             tx_std_overrides,
