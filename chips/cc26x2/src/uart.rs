@@ -238,7 +238,7 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
         self.registers.icr.write(Interrupts::ALL_INTERRUPTS::SET);
 
         // Hardware RX FIFO is not empty
-        if self.rx_fifo_not_empty() {
+        while self.rx_fifo_not_empty() {
             // buffer read request was made
             if self.rx.is_some() {
                 self.rx.take().map(|rx| {
@@ -258,14 +258,14 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
             // no current read request
             else {
                 // read bytes into the void to avoid hardware RX buffer overflow
-                debug!("{}", self.read());
+                self.read();
             }
         }
 
         //if we have a request, handle it
         self.tx.take().map(|tx| {
             // send out one byte at a time, IRQ when TX FIFO empty will bring us back
-            if self.tx_fifo_not_full() && !tx.request_completed() {
+            while self.tx_fifo_not_full() && !tx.request_completed() {
                 if let Some(item) = tx.pop() {
                     self.write(item as u32);
                 }

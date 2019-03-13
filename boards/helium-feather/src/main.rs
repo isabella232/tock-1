@@ -117,7 +117,6 @@ impl<'a> kernel::Platform for FeatherPlatform<'a> {
                     capsules::uart::handle_irq(0, self.uart, Some(&clients));
                 }
                 event_priority::EVENT_PRIORITY::UART1 => {
-                    debug!("UART1");
                     capsules::uart::handle_irq(1, self.uart, None);
                 }
                 event_priority::EVENT_PRIORITY::RF_CMD_ACK => unsafe{ debug!("RF_CMD_ACK");cc26x2::radio::RFC.handle_ack_event()},

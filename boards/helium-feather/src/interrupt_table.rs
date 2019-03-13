@@ -32,10 +32,11 @@ macro_rules! custom_isr {
 }
 
 unsafe extern "C" fn unhandled_interrupt() {
-    'loop0: loop {}
+   panic!("Unhandled interrupt fired!");
 }
 
 generic_isr!(uart0_nvic, event_priority::EVENT_PRIORITY::UART0);
+generic_isr!(uart1_nvic, event_priority::EVENT_PRIORITY::UART1);
 generic_isr!(osc_isr, event_priority::EVENT_PRIORITY::OSC);
 generic_isr!(gpio_nvic, event_priority::EVENT_PRIORITY::GPIO);
 generic_isr!(aon_rtc_nvic, event_priority::EVENT_PRIORITY::AON_RTC);
@@ -96,12 +97,12 @@ pub static BASE_VECTORS: [unsafe extern "C" fn(); 54] = [
     generic_isr,         // AON programmable 0
     generic_isr,         // Dynamic Programmable interrupt
     // source (Default: PRCM)
-    generic_isr, // AUX Comparator A
-    generic_isr, // AUX ADC new sample or ADC DMA
+    generic_isr,         // AUX Comparator A
+    generic_isr,         // AUX ADC new sample or ADC DMA
     // done, ADC underflow, ADC overflow
-    generic_isr, // TRNG event
+    generic_isr,        // TRNG event
     osc_isr,
     generic_isr,
-    generic_isr, //uart1
+    uart1_nvic,         //uart1
     generic_isr,
 ];
