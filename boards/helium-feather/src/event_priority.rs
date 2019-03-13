@@ -7,7 +7,7 @@ use enum_primitive::enum_from_primitive;
 enum_from_primitive! {
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum EVENT_PRIORITY {
-    GPIO = 0,
+    GPIO = 14,
     UART0 = 2,
     UART1 = 1,
     AON_RTC = 3,

@@ -16,21 +16,21 @@ const MCU_CLOCK: u32 = 48_000_000;
 
 #[repr(C)]
 struct UartRegisters {
-    dr: ReadWrite<u32>,
-    rsr_ecr: ReadWrite<u32>,
-    _reserved0: [u32; 0x4],
-    fr: ReadOnly<u32, Flags::Register>,
+    dr: ReadWrite<u32>, //Data Section 21.7.1.1
+    rsr_ecr: ReadWrite<u32>, //Error Clear Section 21.7.1.3
+    _reserved0: [u32; 0x4], 
+    fr: ReadOnly<u32, Flags::Register>, //Flag Section 21.7.1.4
     _reserved1: [u32; 0x2],
-    ibrd: ReadWrite<u32, IntDivisor::Register>,
-    fbrd: ReadWrite<u32, FracDivisor::Register>,
-    lcrh: ReadWrite<u32, LineControl::Register>,
-    ctl: ReadWrite<u32, Control::Register>,
-    ifls: ReadWrite<u32>,
-    imsc: ReadWrite<u32, Interrupts::Register>,
-    ris: ReadOnly<u32, Interrupts::Register>,
-    mis: ReadOnly<u32, Interrupts::Register>,
-    icr: WriteOnly<u32, Interrupts::Register>,
-    dmactl: ReadWrite<u32>,
+    ibrd: ReadWrite<u32, IntDivisor::Register>, //Integer Baud-Rate Divisor Section 21.7.1.5
+    fbrd: ReadWrite<u32, FracDivisor::Register>, //Fractional Baud-Rate Divisor Section 21.7.1.6
+    lcrh: ReadWrite<u32, LineControl::Register>, //Line Control Section 21.7.1.7
+    ctl: ReadWrite<u32, Control::Register>, //Control Section 21.7.1.8
+    ifls: ReadWrite<u32>, //Interrupt FIFO Level Select Section 21.7.1.9
+    imsc: ReadWrite<u32, Interrupts::Register>, //Interrupt Mask Set/Clear Section 21.7.1.10
+    ris: ReadOnly<u32, Interrupts::Register>, // Raw Interrupt Status Section 21.7.1.11
+    mis: ReadOnly<u32, Interrupts::Register>, //Masked Interrupt Status Section 21.7.1.12
+    icr: WriteOnly<u32, Interrupts::Register>, //Interrupt Clear Section 21.7.1.13
+    dmactl: ReadWrite<u32>, // DMA Control Section 2
 }
 
 register_bitfields![
@@ -234,12 +234,11 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
         Option<&mut hil::uart::RxRequest<'a>>,
     ) {
         let (mut tx_complete, mut rx_complete) = (None, None);
-
         // Clear interrupts
         self.registers.icr.write(Interrupts::ALL_INTERRUPTS::SET);
 
         // Hardware RX FIFO is not empty
-        while self.rx_fifo_not_empty() {
+        if self.rx_fifo_not_empty() {
             // buffer read request was made
             if self.rx.is_some() {
                 self.rx.take().map(|rx| {
@@ -266,7 +265,7 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
         //if we have a request, handle it
         self.tx.take().map(|tx| {
             // send out one byte at a time, IRQ when TX FIFO empty will bring us back
-            while self.tx_fifo_not_full() && !tx.request_completed() {
+            if self.tx_fifo_not_full() && !tx.request_completed() {
                 if let Some(item) = tx.pop() {
                     self.write(item as u32);
                 }

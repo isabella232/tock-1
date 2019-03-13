@@ -100,13 +100,13 @@ impl<'a> kernel::Platform for FeatherPlatform<'a> {
     }
 
     fn service_pending_events(&mut self) {
-        let pending_event: Option<event_priority::EVENT_PRIORITY> = events::next_pending();
-        while let Some(event) = pending_event {
+        //let mut pending_event: Option<event_priority::EVENT_PRIORITY> = 
+        while let Some(event) = events::next_pending() {
             events::clear_event_flag(event);
             match event {
-                event_priority::EVENT_PRIORITY::GPIO => {} //unsafe {cc26x2::gpio::PORT.handle_events()},
-                event_priority::EVENT_PRIORITY::AON_RTC => {} //unsafe {cc26x2::rtc::RTC.handle_events()},
-                event_priority::EVENT_PRIORITY::I2C0 => {} //unsafe {cc26x2::i2c::I2C0.handle_events()},
+                event_priority::EVENT_PRIORITY::GPIO => {debug!("GPIO");} //unsafe {cc26x2::gpio::PORT.handle_events()},
+                event_priority::EVENT_PRIORITY::AON_RTC => {debug!("AON_RTC");} //unsafe {cc26x2::rtc::RTC.handle_events()},
+                event_priority::EVENT_PRIORITY::I2C0 => {debug!("I2C0");} //unsafe {cc26x2::i2c::I2C0.handle_events()},
                 event_priority::EVENT_PRIORITY::UART0 => {
                     // pass data from static debug writer to the stack allocated debug uart client
                     unsafe {
@@ -117,15 +117,16 @@ impl<'a> kernel::Platform for FeatherPlatform<'a> {
                     capsules::uart::handle_irq(0, self.uart, Some(&clients));
                 }
                 event_priority::EVENT_PRIORITY::UART1 => {
-                    //capsules::uart::handle_irq(1, self.uart, None);
+                    debug!("UART1");
+                    capsules::uart::handle_irq(1, self.uart, None);
                 }
-                event_priority::EVENT_PRIORITY::RF_CMD_ACK => unsafe{ cc26x2::radio::RFC.handle_ack_event()},
-                event_priority::EVENT_PRIORITY::RF_CORE_CPE0 => unsafe{ cc26x2::radio::RFC.handle_cpe0_event()},
-                event_priority::EVENT_PRIORITY::RF_CORE_CPE1 => unsafe{ cc26x2::radio::RFC.handle_cpe1_event()},
+                event_priority::EVENT_PRIORITY::RF_CMD_ACK => unsafe{ debug!("RF_CMD_ACK");cc26x2::radio::RFC.handle_ack_event()},
+                event_priority::EVENT_PRIORITY::RF_CORE_CPE0 => unsafe{ debug!("RF_CORE_CPE0");cc26x2::radio::RFC.handle_cpe0_event()},
+                event_priority::EVENT_PRIORITY::RF_CORE_CPE1 => unsafe{ debug!("RF_CORE_CPE1");cc26x2::radio::RFC.handle_cpe1_event()},
                 event_priority::EVENT_PRIORITY::RF_CORE_HW => panic!("Unhandled RFC interupt event!"),
                 //event_priority::EVENT_PRIORITY::AUX_ADC => cc26x2::adc::ADC.handle_events(),
-                event_priority::EVENT_PRIORITY::OSC => cc26x2::prcm::handle_osc_interrupt(),
-                event_priority::EVENT_PRIORITY::AON_PROG => (),
+                event_priority::EVENT_PRIORITY::OSC => {debug!("OSC"); cc26x2::prcm::handle_osc_interrupt();},
+                event_priority::EVENT_PRIORITY::AON_PROG => debug!("AON_PROG"),
                 _ => panic!("unhandled event {:?} ", event),
             }
         }
@@ -174,7 +175,7 @@ unsafe fn configure_pins(pin: &Pinmap) {
 
     cc26x2::gpio::PORT[pin.regulator_mode].enable_gpio();
     cc26x2::gpio::PORT[pin.regulator_mode].make_output();
-    cc26x2::gpio::PORT[pin.regulator_mode].set();
+    cc26x2::gpio::PORT[pin.regulator_mode].clear();
 
     cc26x2::gpio::PORT[pin.skyworks_csd].enable_gpio();
     cc26x2::gpio::PORT[pin.skyworks_cps].enable_gpio();
@@ -190,6 +191,18 @@ unsafe fn configure_pins(pin: &Pinmap) {
         cc26x2::gpio::PORT[rf_subg].enable_subg_output();
     }
 }
+
+use kernel::hil::rf_frontend::SE2435L;
+
+use kernel::hil::uart::Configure; 
+
+static GPS_PARAMS: hil::uart::Parameters = hil::uart::Parameters {
+    baud_rate: 115200, // baud rate in bit/s
+    width: hil::uart::Width::Eight,
+    parity: hil::uart::Parity::None,
+    stop_bits: hil::uart::StopBits::One,
+    hw_flow_control: false,
+};
 
 #[no_mangle]
 pub unsafe fn reset_handler() {
@@ -257,11 +270,11 @@ pub unsafe fn reset_handler() {
         [
             (
                 &cc26x2::gpio::PORT[pinmap.button1],
-                capsules::button::GpioMode::LowWhenPressed
+                capsules::button::GpioMode::HighWhenPressed
             ), // Button 1
             (
                 &cc26x2::gpio::PORT[pinmap.button2],
-                capsules::button::GpioMode::LowWhenPressed
+                capsules::button::GpioMode::HighWhenPressed
             ), // Button 2
         ]
     );
@@ -275,8 +288,8 @@ pub unsafe fn reset_handler() {
 
     let mut count = 0;
     for &(btn, _) in button_pins.iter() {
-        btn.set_input_mode(hil::gpio::InputMode::PullUp);
-        btn.enable_interrupt(count, InterruptMode::FallingEdge);
+        btn.set_input_mode(hil::gpio::InputMode::PullDown);
+        btn.enable_interrupt(count, InterruptMode::RisingEdge);
         btn.set_client(button);
         count += 1;
     }
@@ -319,6 +332,9 @@ pub unsafe fn reset_handler() {
     ];
 
     let uart_driver = uart::UartDriver::new(&board_uarts);
+
+    // uart driver default initializes to 115200, but GPS requires 9600
+    // uart_driver.uart[1].configure(GPS_PARAMS);
 
     cc26x2::i2c::I2C0.initialize();
 
@@ -428,10 +444,9 @@ pub unsafe fn reset_handler() {
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
 
-    //let rfc = &cc26x2::radio::MULTIMODE_RADIO;
-    //rfc.run_tests(0);
+    let rfc = &cc26x2::radio::MULTIMODE_RADIO;
 
-    //sky.sleep();
+    sky.sleep();
 
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
 

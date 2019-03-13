@@ -270,6 +270,7 @@ impl Kernel {
                         Some(ContextSwitchReason::SyscallFired) => {
                             // Handle each of the syscalls.
                             match process.get_syscall() {
+
                                 Some(Syscall::MEMOP { operand, arg0 }) => {
                                     let res = memop::memop(process, operand, arg0);
                                     process.set_syscall_return_value(res.into());

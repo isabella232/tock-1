@@ -4,6 +4,7 @@
 use crate::support::atomic;
 use core::ptr;
 use enum_primitive::cast::{FromPrimitive, ToPrimitive};
+use kernel::debug;
 
 pub static mut FLAGS: usize = 0;
 
@@ -65,10 +66,10 @@ pub unsafe fn set_event_flag_from_isr(priority: usize) {
 
 pub fn clear_event_flag<T: ToPrimitive>(priority: T) {
     unsafe {
-        let bm = !0b1
+        let bm = !(0b1
             << priority
                 .to_usize()
-                .expect("Could not cast priority enum as usize");
+                .expect("Could not cast priority enum as usize"));
         atomic(|| {
             let new_value = ptr::read_volatile(&FLAGS) & bm;
             FLAGS = new_value;

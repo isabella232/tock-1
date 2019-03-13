@@ -5,7 +5,7 @@ use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
 
 /// Syscall driver number.
 use crate::driver;
-pub const DRIVER_NUM: usize = driver::NUM::CONSOLE as usize;
+pub const DRIVER_NUM: usize = driver::NUM::UART as usize;
 
 use kernel::ikc;
 use kernel::ikc::DriverState::{BUSY, IDLE};
@@ -285,6 +285,10 @@ impl<'a> Uart<'a> {
         }
     }
 
+    pub fn configure(&self, params: hil::uart::Parameters){
+        self.uart.configure(params);
+    }
+
     fn app_tx_update(&self, app_id: AppId) -> Option<AppId> {
         self.apps
             .enter(app_id, |app, _| {
@@ -368,8 +372,6 @@ impl<'a> Uart<'a> {
                             });
                         }
                     }
-
-
                 },
                 _ => panic!("A null buffer has become a completed request? It should have never been dispatched in the first place! Shame on console/uart.rs"),
             }
