@@ -44,6 +44,8 @@ mod event_priority;
 mod i2c_tests;
 #[allow(unused_macros)]
 mod interrupt_table;
+#[allow(dead_code)]
+mod uart_test;
 
 // High frequency oscillator speed
 pub const HFREQ: u32 = 48 * 1_000_000;
@@ -66,6 +68,7 @@ pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 
 pub struct FeatherPlatform<'a> {
     uart: &'a capsules::uart::UartDriver<'a>,
+    echo: &'a uart_test::TestClient<'a>,
     debug_client: &'a debug::DebugClient<'a>,
     led: &'static capsules::led::LED<'static, cc26x2::gpio::GPIOPin>,
     button: &'static capsules::button::Button<'static, cc26x2::gpio::GPIOPin>,
@@ -100,35 +103,46 @@ impl<'a> kernel::Platform for FeatherPlatform<'a> {
     }
 
     fn service_pending_events(&mut self) {
-        //let mut pending_event: Option<event_priority::EVENT_PRIORITY> = 
-        while let Some(event) = events::next_pending() {
-            events::clear_event_flag(event);
-            match event {
-                event_priority::EVENT_PRIORITY::GPIO => {debug!("GPIO");} //unsafe {cc26x2::gpio::PORT.handle_events()},
-                event_priority::EVENT_PRIORITY::AON_RTC => {debug!("AON_RTC");} //unsafe {cc26x2::rtc::RTC.handle_events()},
-                event_priority::EVENT_PRIORITY::I2C0 => {debug!("I2C0");} //unsafe {cc26x2::i2c::I2C0.handle_events()},
-                event_priority::EVENT_PRIORITY::UART0 => {
-                    // pass data from static debug writer to the stack allocated debug uart client
-                    unsafe {
-                        self.debug_client
-                            .with_buffer(|buf| debug::get_debug_writer().publish_str(buf));
+
+
+
+        while events::has_event() {
+
+            // pass data from static debug writer to the stack allocated debug uart client
+            // trigger event on appropriate UART to let it know to check client for data
+            unsafe{
+                if self.debug_client
+                    .with_buffer(|buf| debug::get_debug_writer().publish_str(buf)){
+                        events::set_event_flag(event_priority::EVENT_PRIORITY::UART0);
                     }
-                    let clients = [self.debug_client as &kernel::hil::uart::Client];
-                    capsules::uart::handle_irq(0, self.uart, Some(&clients));
-                }
-                event_priority::EVENT_PRIORITY::UART1 => {
-                    capsules::uart::handle_irq(1, self.uart, None);
-                }
-                event_priority::EVENT_PRIORITY::RF_CMD_ACK => unsafe{ debug!("RF_CMD_ACK");cc26x2::radio::RFC.handle_ack_event()},
-                event_priority::EVENT_PRIORITY::RF_CORE_CPE0 => unsafe{ debug!("RF_CORE_CPE0");cc26x2::radio::RFC.handle_cpe0_event()},
-                event_priority::EVENT_PRIORITY::RF_CORE_CPE1 => unsafe{ debug!("RF_CORE_CPE1");cc26x2::radio::RFC.handle_cpe1_event()},
-                event_priority::EVENT_PRIORITY::RF_CORE_HW => panic!("Unhandled RFC interupt event!"),
-                //event_priority::EVENT_PRIORITY::AUX_ADC => cc26x2::adc::ADC.handle_events(),
-                event_priority::EVENT_PRIORITY::OSC => {debug!("OSC"); cc26x2::prcm::handle_osc_interrupt();},
-                event_priority::EVENT_PRIORITY::AON_PROG => debug!("AON_PROG"),
-                _ => panic!("unhandled event {:?} ", event),
             }
-        }
+
+            if let Some(event) = events::next_pending() {
+                events::clear_event_flag(event);
+                match event {
+                    event_priority::EVENT_PRIORITY::GPIO => unsafe {cc26x2::gpio::PORT.handle_events()},
+                    event_priority::EVENT_PRIORITY::AON_RTC => unsafe {cc26x2::rtc::RTC.handle_events()},
+                    event_priority::EVENT_PRIORITY::I2C0 => unsafe {cc26x2::i2c::I2C0.handle_events()},
+                    event_priority::EVENT_PRIORITY::UART0 => {
+                       
+                        let clients = [self.debug_client as &kernel::hil::uart::Client];
+                        capsules::uart::handle_irq(0, self.uart, Some(&clients));
+                    }
+                    event_priority::EVENT_PRIORITY::UART1 => {
+                        let clients = [self.echo as &kernel::hil::uart::Client];
+                        capsules::uart::handle_irq(1, self.uart, Some(&clients));
+                    }
+                    event_priority::EVENT_PRIORITY::RF_CMD_ACK => unsafe{ cc26x2::radio::RFC.handle_ack_event()},
+                    event_priority::EVENT_PRIORITY::RF_CORE_CPE0 => unsafe{ cc26x2::radio::RFC.handle_cpe0_event()},
+                    event_priority::EVENT_PRIORITY::RF_CORE_CPE1 => unsafe{ cc26x2::radio::RFC.handle_cpe1_event()},
+                    event_priority::EVENT_PRIORITY::RF_CORE_HW => panic!("Unhandled RFC interupt event!"),
+                    //event_priority::EVENT_PRIORITY::AUX_ADC => cc26x2::adc::ADC.handle_events(),
+                    event_priority::EVENT_PRIORITY::OSC => cc26x2::prcm::handle_osc_interrupt(),
+                    event_priority::EVENT_PRIORITY::AON_PROG => (),
+                    _ => panic!("unhandled event {:?} ", event),
+                }
+            }
+        }   
     }
 }
 
@@ -196,7 +210,7 @@ use kernel::hil::rf_frontend::SE2435L;
 use kernel::hil::uart::Configure; 
 
 static GPS_PARAMS: hil::uart::Parameters = hil::uart::Parameters {
-    baud_rate: 115200, // baud rate in bit/s
+    baud_rate: 9600, // baud rate in bit/s
     width: hil::uart::Width::Eight,
     parity: hil::uart::Parity::None,
     stop_bits: hil::uart::StopBits::One,
@@ -312,6 +326,10 @@ pub unsafe fn reset_handler() {
     let uart0_clients: [TakeCell<hil::uart::RxRequest>; 3] =
         [TakeCell::empty(), TakeCell::empty(), TakeCell::empty()];
 
+    // for each client for the driver, provide an empty TakeCell
+    let uart1_clients: [TakeCell<hil::uart::RxRequest>; 3] =
+        [TakeCell::empty(), TakeCell::empty(), TakeCell::empty()];
+
     let uart1_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_1);
     let mut uart1_driver_app_space = uart::AppRequestsInProgress::space();
 
@@ -324,7 +342,7 @@ pub unsafe fn reset_handler() {
         ),
         &uart::Uart::new(
             &uart1_hil,
-            None,
+            Some(&uart1_clients),
             uart::AppRequestsInProgress::new_with_default_space(&mut uart1_driver_app_space),
             board_kernel.create_grant(&memory_allocation_capability),
         ),
@@ -333,7 +351,7 @@ pub unsafe fn reset_handler() {
     let uart_driver = uart::UartDriver::new(&board_uarts);
 
     // uart driver default initializes to 115200, but GPS requires 9600
-    // uart_driver.uart[1].configure(GPS_PARAMS);
+    uart_driver.uart[1].configure(GPS_PARAMS);
 
     cc26x2::i2c::I2C0.initialize();
 
@@ -449,9 +467,14 @@ pub unsafe fn reset_handler() {
 
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
 
+
+    let mut uart_test_space = uart_test::TestClient::space();
+    let uart_test_client = uart_test::TestClient::new_with_default_space(&mut uart_test_space);
+
     let mut feather = FeatherPlatform {
         uart: &uart_driver,
         debug_client: &debug_client,
+        echo: &uart_test_client,
         led,
         button,
         alarm,
@@ -467,8 +490,7 @@ pub unsafe fn reset_handler() {
         static _sapps: u8;
     }
 
-    events::set_event_flag(event_priority::EVENT_PRIORITY::UART0);
-
+    events::set_event_flag(event_priority::EVENT_PRIORITY::UART1);
     debug!("Loading processes");
 
     kernel::procs::load_processes(

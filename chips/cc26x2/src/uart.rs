@@ -14,6 +14,8 @@ use kernel::ReturnCode;
 
 const MCU_CLOCK: u32 = 48_000_000;
 
+static mut requested: bool = false;
+
 #[repr(C)]
 struct UartRegisters {
     dr: ReadWrite<u32>, //Data Section 21.7.1.1
@@ -189,12 +191,7 @@ impl<'a> UART<'a> {
     }
 
     fn enable_interrupts(&self) {
-        // set only interrupts used
-        self.registers.imsc.modify(
-            Interrupts::RX::SET
-                + Interrupts::RX_TIMEOUT::SET
-                + Interrupts::END_OF_TRANSMISSION::SET,
-        );
+
     }
 
     pub fn write(&self, c: u32) {
@@ -233,6 +230,10 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
         Option<&mut hil::uart::TxRequest<'a>>,
         Option<&mut hil::uart::RxRequest<'a>>,
     ) {
+        // clear and enable interrupts in the beginning as actions might trigger more
+        self.nvic.clear_pending();
+        self.nvic.enable();
+        
         let (mut tx_complete, mut rx_complete) = (None, None);
         // Clear interrupts
         self.registers.icr.write(Interrupts::ALL_INTERRUPTS::SET);
@@ -249,8 +250,15 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
                     }
 
                     if rx.req.request_completed() {
+                        self.registers.imsc.modify(
+                            Interrupts::RX::CLEAR
+                                + Interrupts::RX_TIMEOUT::CLEAR
+                        );
                         rx_complete = Some(rx);
                     } else {
+
+
+           
                         self.rx.put(rx);
                     }
                 });
@@ -260,6 +268,7 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
                 // read bytes into the void to avoid hardware RX buffer overflow
                 self.read();
             }
+
         }
 
         //if we have a request, handle it
@@ -272,14 +281,16 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
             }
 
             if tx.request_completed() {
+                self.registers.imsc.modify(
+                    Interrupts::END_OF_TRANSMISSION::CLEAR,
+                );
                 tx_complete = Some(tx);
             } else {
                 self.tx.put(tx);
             }
         });
 
-        self.nvic.clear_pending();
-        self.nvic.enable();
+
 
         (tx_complete, rx_complete)
     }
@@ -327,15 +338,22 @@ impl<'a> uart::Configure for UART<'a> {
 }
 
 impl<'a> uart::Transmit<'a> for UART<'a> {
-    fn transmit_buffer(&self, request: &'a mut uart::TxRequest<'a>) -> ReturnCode {
+    fn transmit_buffer(&self, tx: &'a mut uart::TxRequest<'a>) -> ReturnCode {
+        self.registers.imsc.modify(
+            Interrupts::END_OF_TRANSMISSION::SET,
+        );
+
         // we will send one byte, causing EOT interrupt
-        if self.tx_fifo_not_full() {
-            if let Some(item) = request.pop() {
+        while self.tx_fifo_not_full() && !tx.request_completed(){
+            if let Some(item) = tx.pop() {
                 self.write(item as u32);
             }
         }
-        // Request will be continued in interrupt bottom half
-        self.tx.put(request);
+
+
+
+        self.tx.put(tx);
+        
         ReturnCode::SUCCESS
     }
 
@@ -358,7 +376,13 @@ impl<'a> uart::Receive<'a> for UART<'a> {
         if self.rx.is_some() || self.receiving_word.get() {
             ReturnCode::EBUSY
         } else {
+
+            self.registers.imsc.modify(
+            Interrupts::RX::SET
+                + Interrupts::RX_TIMEOUT::SET
+            );
             self.rx.put(request);
+
             ReturnCode::SUCCESS
         }
     }

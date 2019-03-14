@@ -535,14 +535,17 @@ impl<'a> DebugClient<'a> {
         Self::new(tx_request_buffer, tx_request)
     }
 
-    pub fn with_buffer<F>(&self, f: F)
+    pub fn with_buffer<F>(&self, f: F) -> bool
     where
         F: Fn(&'a mut hil::uart::TxRequest<'a>) -> &'a mut hil::uart::TxRequest<'a>,
     {
+        let mut ret = false;
         self.tx_request.take().map(|mut tx| {
+            ret = tx.has_some();
             tx = f(tx);
             self.tx_request.put(Some(tx));
         });
+        ret
     }
 
     pub fn new(

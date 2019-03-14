@@ -247,12 +247,7 @@ impl<'a> UartDriver<'a> {
                 request.reset();
                 request.copy_from_app_request(&mut app.tx);
             }) {
-                debug!("womp womp");
-
                 return ReturnCode::FAIL;
-            }
-            if uart_num == 1 {
-                debug!("transmitting");
             }
 
             self.uart[uart_num].app_requests.tx_in_progress.set(app_id);
@@ -260,7 +255,6 @@ impl<'a> UartDriver<'a> {
 
 
         } else {
-            debug!("womp womp");
             //transmit_app_request invoked but no request_tx buffer available
             ReturnCode::FAIL
         }
@@ -470,6 +464,7 @@ impl<'a> Uart<'a> {
     fn transmit_app_rx_request(&self, app_id: AppId) -> ReturnCode {
         if let Some(request) = self.app_requests.rx.take() {
             if let Err(_err) = self.apps.enter(app_id, |app, _| {
+
                 request.req.reset();
                 request.req.initialize_from_app_request(&mut app.rx);
             }) {
@@ -495,8 +490,6 @@ impl Driver for UartDriver<'a> {
     fn allow(&self, appid: AppId, arg2: usize, slice: Option<AppSlice<Shared, u8>>) -> ReturnCode {
         let allow_num = arg2 as u16;
         let uart_num = (arg2 >> 16) as usize;
-        debug!("allow uart_num {}", uart_num);
-
         match allow_num {
             1 => self.uart[uart_num]
                 .apps
@@ -524,8 +517,6 @@ impl Driver for UartDriver<'a> {
     fn subscribe(&self, arg1: usize, callback: Option<Callback>, app_id: AppId) -> ReturnCode {
         let subscribe_num = arg1 as u16;
         let uart_num = (arg1 >> 16) as usize;
-        debug!("subscribe uart_num {}", uart_num);
-
         match subscribe_num {
             1 /* putstr/write_done */ => {
                 self.uart[uart_num].apps.enter(app_id, |app, _| {
@@ -557,7 +548,6 @@ impl Driver for UartDriver<'a> {
     fn command(&self, arg0: usize, arg1: usize, _: usize, appid: AppId) -> ReturnCode {
         let cmd_num = arg0 as u16;
         let uart_num = (arg0 >> 16) as usize;
-        debug!("command uart_num {}", uart_num);
         match cmd_num {
             0 /* check if present */ => ReturnCode::SUCCESS,
             1 /* transmit request */ => {
@@ -585,11 +575,15 @@ impl Driver for UartDriver<'a> {
                     let len = arg1;
                     app.rx.set_len(len);
                 }){ return  ReturnCode::FAIL }
-
+                if uart_num == 1 {
+                    debug!("dispatching rx request!!");
+                }
                 self.uart[uart_num].state.map_or(ReturnCode::ENOSUPPORT,
                     |state| {
                     if state.rx == IDLE {
                         state.rx = BUSY;
+                        debug!("dispatching rx request!!!");
+
                         self.uart[uart_num].transmit_app_rx_request(appid)
                     }
                     else {
