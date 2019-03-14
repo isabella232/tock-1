@@ -13,14 +13,13 @@ use cc26x2::aon;
 use cc26x2::prcm;
 use cortexm::events;
 
-#[allow(unused_imports)]
-use kernel::{create_capability, debug, debug_gpio, static_init};
-
 use capsules::helium;
 use capsules::helium::{device::Device, virtual_rfcore::RFCore};
 use capsules::uart;
 use cc26x2::osc;
 use cc26x2::radio;
+#[allow(unused_imports)]
+use kernel::{create_capability, debug, debug_gpio, static_init};
 
 use kernel::capabilities;
 use kernel::common::cells::TakeCell;
@@ -174,7 +173,7 @@ unsafe fn configure_pins(pin: &Pinmap) {
 
     cc26x2::gpio::PORT[pin.regulator_mode].enable_gpio();
     cc26x2::gpio::PORT[pin.regulator_mode].make_output();
-    cc26x2::gpio::PORT[pin.regulator_mode].set();
+    cc26x2::gpio::PORT[pin.regulator_mode].clear();
 
     cc26x2::gpio::PORT[pin.skyworks_csd].enable_gpio();
     cc26x2::gpio::PORT[pin.skyworks_cps].enable_gpio();
@@ -429,9 +428,7 @@ pub unsafe fn reset_handler() {
     virtual_device.set_receive_client(radio_driver);
 
     //let rfc = &cc26x2::radio::MULTIMODE_RADIO;
-    //rfc.run_tests(0);
-
-    //sky.sleep();
+    //rfc.run_tests(2, 2);
 
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
 

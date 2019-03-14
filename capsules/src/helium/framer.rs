@@ -12,7 +12,7 @@ use kernel::ReturnCode;
 /// where the payload should be placed in the buffer.
 #[derive(Eq, PartialEq, Debug)]
 pub struct Frame {
-    info: FrameInfo,
+    pub info: FrameInfo,
     buf: &'static mut [u8],
 }
 
@@ -133,24 +133,64 @@ impl Frame {
 pub struct FrameInfo {
     pub header: Header,
 
-    caut_type: Option<CauterizeType>,
+    pub payload_type: Option<PayloadType>,
+
+    pub encode_type: Option<EncodeType>,
 }
 
-pub const CAUT_TYPE_MASK: u8 = 0b111;
+pub const ENCODE_TYPE_MASK: u8 = 0b111;
+
 #[repr(u8)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum CauterizeType {
+pub enum EncodeType {
     None = 0b00,
-    Standard = 0b001,
-    Custom = 0b010,
+    Ldpc1 = 0b001, // Dont know what we will be encodeing with yet so these are dummys
+    Ldpc2 = 0b010,
 }
 
-impl CauterizeType {
-    pub fn from_slice(ct: u8) -> Option<CauterizeType> {
-        match ct & CAUT_TYPE_MASK {
-            0b00 => Some(CauterizeType::None),
-            0b01 => Some(CauterizeType::Standard),
-            0b10 => Some(CauterizeType::Custom),
+impl EncodeType {
+    pub fn from_slice(et: u8) -> Option<EncodeType> {
+        match et & ENCODE_TYPE_MASK {
+            0b00 => Some(EncodeType::None),
+            0b01 => Some(EncodeType::Ldpc1),
+            0b10 => Some(EncodeType::Ldpc2),
+            _ => None,
+        }
+    }
+
+    pub fn from_cmd(et: usize) -> Option<EncodeType> {
+        match et & ENCODE_TYPE_MASK as usize {
+            0b00 => Some(EncodeType::None),
+            0b01 => Some(EncodeType::Ldpc1),
+            0b10 => Some(EncodeType::Ldpc2),
+            _ => None,
+        }
+    }
+}
+
+pub const PAYLOAD_TYPE_MASK: u8 = 0b111;
+#[repr(u8)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum PayloadType {
+    None = 0b00,
+    Packetizer = 0b001,
+    Cauterize = 0b010,
+}
+
+impl PayloadType {
+    pub fn from_slice(pt: u8) -> Option<PayloadType> {
+        match pt & PAYLOAD_TYPE_MASK {
+            0b00 => Some(PayloadType::None),
+            0b01 => Some(PayloadType::Packetizer),
+            0b10 => Some(PayloadType::Cauterize),
+            _ => None,
+        }
+    }
+    pub fn from_cmd(pt: usize) -> Option<PayloadType> {
+        match pt & PAYLOAD_TYPE_MASK as usize {
+            0b00 => Some(PayloadType::None),
+            0b01 => Some(PayloadType::Packetizer),
+            0b10 => Some(PayloadType::Cauterize),
             _ => None,
         }
     }
@@ -201,10 +241,10 @@ impl<D: virtual_rfcore::RFCore> Framer<'a, D> {
     }
 
     fn outgoing_frame(&self, buf: &'static mut [u8], frame_info: FrameInfo) -> TxState {
-        match frame_info.caut_type {
-            Some(CauterizeType::None) => TxState::ReadyToTransmit(frame_info, buf),
-            Some(CauterizeType::Custom) => TxState::ReadyToEncode(frame_info, buf),
-            Some(CauterizeType::Standard) => TxState::ReadyToTransmit(frame_info, buf),
+        match frame_info.encode_type {
+            Some(EncodeType::None) => TxState::ReadyToTransmit(frame_info, buf),
+            Some(EncodeType::Ldpc1) => TxState::ReadyToEncode(frame_info, buf),
+            Some(EncodeType::Ldpc2) => TxState::ReadyToTransmit(frame_info, buf),
             None => TxState::ReadyToTransmit(frame_info, buf),
         }
     }
@@ -260,13 +300,13 @@ impl<D: virtual_rfcore::RFCore> Framer<'a, D> {
             let (next_state, buf) = match state {
                 RxState::Idle => (RxState::Idle, None),
                 RxState::ReadyToDecode(info, buf) => {
-                    match info.caut_type {
-                        Some(CauterizeType::None) => (RxState::Idle, Some(buf)),
-                        Some(CauterizeType::Standard) => {
+                    match info.payload_type {
+                        Some(PayloadType::None) => (RxState::Idle, Some(buf)),
+                        Some(PayloadType::Packetizer) => {
                             // Do decode for LDPC TC128 here then return success for fail
                             (RxState::Idle, Some(buf))
                         }
-                        Some(CauterizeType::Custom) => {
+                        Some(PayloadType::Cauterize) => {
                             // Same as above
                             (RxState::Idle, Some(buf))
                         }
@@ -327,7 +367,7 @@ impl<D: virtual_rfcore::RFCore> device::Device<'a> for Framer<'a, D> {
         buf: &'static mut [u8],
         seq: u8,
         id: u16,
-        caut_type: Option<CauterizeType>,
+        payload_type: Option<PayloadType>,
     ) -> Result<Frame, &'static mut [u8]> {
         let header = Header {
             id: id,
@@ -340,7 +380,8 @@ impl<D: virtual_rfcore::RFCore> device::Device<'a> for Framer<'a, D> {
         let frame = Frame {
             info: FrameInfo {
                 header: header,
-                caut_type: caut_type,
+                payload_type: payload_type,
+                encode_type: None,
             },
             buf: buf,
         };
