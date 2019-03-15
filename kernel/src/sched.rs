@@ -243,8 +243,7 @@ impl Kernel {
         systick.enable(true);
 
         loop {
-
-             if platform.has_pending_events() {
+            if platform.has_pending_events() {
                 break;
             }
 

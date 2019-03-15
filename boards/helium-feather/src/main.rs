@@ -103,42 +103,56 @@ impl<'a> kernel::Platform for FeatherPlatform<'a> {
 
     fn service_pending_events(&mut self) {
         while events::has_event() {
-
             // pass data from static debug writer to the stack allocated debug uart client
             // trigger event on appropriate UART to let it know to check client for data
-            unsafe{
-                if self.debug_client
-                    .with_buffer(|buf| debug::get_debug_writer().publish_str(buf)){
-                        events::set_event_flag(event_priority::EVENT_PRIORITY::UART0);
-                    }
+            unsafe {
+                if self
+                    .debug_client
+                    .with_buffer(|buf| debug::get_debug_writer().publish_str(buf))
+                {
+                    events::set_event_flag(event_priority::EVENT_PRIORITY::UART0);
+                }
             }
 
             if let Some(event) = events::next_pending() {
                 events::clear_event_flag(event);
                 match event {
-                    event_priority::EVENT_PRIORITY::GPIO => unsafe {cc26x2::gpio::PORT.handle_events()},
-                    event_priority::EVENT_PRIORITY::AON_RTC => unsafe {cc26x2::rtc::RTC.handle_events()},
-                    event_priority::EVENT_PRIORITY::I2C0 => unsafe {cc26x2::i2c::I2C0.handle_events()},
+                    event_priority::EVENT_PRIORITY::GPIO => unsafe {
+                        cc26x2::gpio::PORT.handle_events()
+                    },
+                    event_priority::EVENT_PRIORITY::AON_RTC => unsafe {
+                        cc26x2::rtc::RTC.handle_events()
+                    },
+                    event_priority::EVENT_PRIORITY::I2C0 => unsafe {
+                        cc26x2::i2c::I2C0.handle_events()
+                    },
                     event_priority::EVENT_PRIORITY::UART0 => {
-                       
                         let clients = [self.debug_client as &kernel::hil::uart::Client];
                         capsules::uart::handle_irq(0, self.uart, Some(&clients));
                     }
                     event_priority::EVENT_PRIORITY::UART1 => {
                         //let clients = [self.echo as &kernel::hil::uart::Client];
-                        capsules::uart::handle_irq(1, self.uart, None);//Some(&clients));
+                        capsules::uart::handle_irq(1, self.uart, None); //Some(&clients));
                     }
-                    event_priority::EVENT_PRIORITY::RF_CMD_ACK => unsafe{ cc26x2::radio::RFC.handle_ack_event()},
-                    event_priority::EVENT_PRIORITY::RF_CORE_CPE0 => unsafe{ cc26x2::radio::RFC.handle_cpe0_event()},
-                    event_priority::EVENT_PRIORITY::RF_CORE_CPE1 => unsafe{ cc26x2::radio::RFC.handle_cpe1_event()},
-                    event_priority::EVENT_PRIORITY::RF_CORE_HW => panic!("Unhandled RFC interupt event!"),
+                    event_priority::EVENT_PRIORITY::RF_CMD_ACK => unsafe {
+                        cc26x2::radio::RFC.handle_ack_event()
+                    },
+                    event_priority::EVENT_PRIORITY::RF_CORE_CPE0 => unsafe {
+                        cc26x2::radio::RFC.handle_cpe0_event()
+                    },
+                    event_priority::EVENT_PRIORITY::RF_CORE_CPE1 => unsafe {
+                        cc26x2::radio::RFC.handle_cpe1_event()
+                    },
+                    event_priority::EVENT_PRIORITY::RF_CORE_HW => {
+                        panic!("Unhandled RFC interupt event!")
+                    }
                     //event_priority::EVENT_PRIORITY::AUX_ADC => cc26x2::adc::ADC.handle_events(),
                     event_priority::EVENT_PRIORITY::OSC => cc26x2::prcm::handle_osc_interrupt(),
                     event_priority::EVENT_PRIORITY::AON_PROG => (),
                     _ => panic!("unhandled event {:?} ", event),
                 }
             }
-        }   
+        }
     }
 }
 
@@ -203,7 +217,7 @@ unsafe fn configure_pins(pin: &Pinmap) {
 
 use kernel::hil::rf_frontend::SE2435L;
 
-use kernel::hil::uart::Configure; 
+use kernel::hil::uart::Configure;
 
 static GPS_PARAMS: hil::uart::Parameters = hil::uart::Parameters {
     baud_rate: 9600, // baud rate in bit/s
@@ -457,13 +471,12 @@ pub unsafe fn reset_handler() {
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
 
-    //let rfc = &cc26x2::radio::MULTIMODE_RADIO;
-    //rfc.run_tests(2, 2);
+    let rfc = &cc26x2::radio::MULTIMODE_RADIO;
+    rfc.run_tests(0, 9);
 
     //sky.sleep();
 
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
-
 
     let mut uart_test_space = uart_test::TestClient::space();
     let uart_test_client = uart_test::TestClient::new_with_default_space(&mut uart_test_space);

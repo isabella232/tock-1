@@ -455,7 +455,7 @@ impl Radio {
                 .ok();
         }
 
-        self.frontend_client.map(|client| client.bypass());
+        //self.frontend_client.map(|client| client.bypass());
     }
 
     fn test_radio_rx(&self) {
@@ -597,10 +597,9 @@ impl Radio {
         };
 
         RadioCommand::guard(&mut cmd_cwm);
-        self.rfc
-            .send_sync(&cmd_cwm)
-            .and_then(|_| self.rfc.wait(&cmd_cwm))
-            .ok();
+        self.rfc.send_async(&cmd_cwm);
+        //.and_then(|_| self.rfc.wait(&cmd_cwm))
+        //.ok();
     }
     // Call commands to setup RFCore with optional register overrides and power output
     pub fn setup_cwm(

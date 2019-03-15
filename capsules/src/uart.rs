@@ -254,8 +254,6 @@ impl<'a> UartDriver<'a> {
 
             self.uart[uart_num].app_requests.tx_in_progress.set(app_id);
             self.uart[uart_num].uart.transmit_buffer(request)
-
-
         } else {
             //transmit_app_request invoked but no request_tx buffer available
             ReturnCode::FAIL
@@ -289,7 +287,7 @@ impl<'a> Uart<'a> {
         }
     }
 
-    pub fn configure(&self, params: hil::uart::Parameters){
+    pub fn configure(&self, params: hil::uart::Parameters) {
         self.uart.configure(params);
     }
 
@@ -559,7 +557,6 @@ impl Driver for UartDriver<'a> {
     /// - `3`: Cancel any in progress receives and return (via callback)
     ///        what has been received so far.
     fn command(&self, arg0: usize, arg1: usize, _: usize, appid: AppId) -> ReturnCode {
-
         let cmd_num = arg0 as u16;
         let uart_num = (arg0 >> 16) as usize;
         match cmd_num {

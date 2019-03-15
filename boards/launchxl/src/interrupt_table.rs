@@ -97,6 +97,6 @@ pub static BASE_VECTORS: [unsafe extern "C" fn(); 54] = [
     generic_isr, // TRNG event
     osc_isr,
     generic_isr,
-    uart1_nvic,         //uart1
+    uart1_nvic, //uart1
     generic_isr,
 ];
