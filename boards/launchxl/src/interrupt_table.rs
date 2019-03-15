@@ -35,6 +35,8 @@ unsafe extern "C" fn unhandled_interrupt() {
 }
 
 generic_isr!(uart0_nvic, event_priority::EVENT_PRIORITY::UART0);
+generic_isr!(uart1_nvic, event_priority::EVENT_PRIORITY::UART1);
+
 generic_isr!(osc_isr, event_priority::EVENT_PRIORITY::OSC);
 
 #[link_section = ".vectors"]
@@ -95,6 +97,6 @@ pub static BASE_VECTORS: [unsafe extern "C" fn(); 54] = [
     generic_isr, // TRNG event
     osc_isr,
     generic_isr,
-    generic_isr, //uart1
+    uart1_nvic,         //uart1
     generic_isr,
 ];

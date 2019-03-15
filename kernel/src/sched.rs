@@ -220,18 +220,18 @@ impl Kernel {
                     }
                 }
 
-                chip.atomic(|| {
-                    if !platform.has_pending_events() && self.processes_blocked() {
-                        chip.sleep();
-                    }
-                });
+                // chip.atomic(|| {
+                //     if !platform.has_pending_events() && self.processes_blocked() {
+                //         chip.sleep();
+                //     }
+                // });
             };
         }
     }
 
     unsafe fn do_process<P: Platform, C: Chip>(
         &self,
-        platform: &P,
+        platform: &mut P,
         chip: &C,
         process: &process::ProcessType,
         ipc: Option<&crate::ipc::IPC>,
@@ -240,9 +240,14 @@ impl Kernel {
         let systick = chip.systick();
         systick.reset();
         systick.set_timer(KERNEL_TICK_DURATION_US);
-        systick.enable(false);
+        systick.enable(true);
 
         loop {
+
+             if platform.has_pending_events() {
+                break;
+            }
+
             if systick.overflowed() || !systick.greater_than(MIN_QUANTA_THRESHOLD_US) {
                 process.debug_timeslice_expired();
                 break;
@@ -277,7 +282,6 @@ impl Kernel {
                                 Some(Syscall::YIELD) => {
                                     process.set_yielded_state();
                                     process.pop_syscall_stack_frame();
-
                                     // There might be already enqueued callbacks
                                     continue;
                                 }
@@ -371,6 +375,7 @@ impl Kernel {
                             process.push_function_call(ccb);
                         }
                         Task::IPC((otherapp, ipc_type)) => {
+                            panic!("This never happens to us");
                             ipc.map_or_else(
                                 || {
                                     assert!(

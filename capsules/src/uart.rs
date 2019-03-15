@@ -5,7 +5,7 @@ use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
 
 /// Syscall driver number.
 use crate::driver;
-pub const DRIVER_NUM: usize = driver::NUM::CONSOLE as usize;
+pub const DRIVER_NUM: usize = driver::NUM::UART as usize;
 
 use kernel::ikc;
 use kernel::ikc::DriverState::{BUSY, IDLE};
@@ -103,6 +103,8 @@ pub fn handle_irq(
         if state.rx == IDLE {
             if driver.uart[num].dispatch_shortest_rx_request() {
                 state.rx = BUSY;
+                debug!("BUSY RX'ing");
+                //while(true) {}
             }
         }
     });
@@ -169,24 +171,24 @@ pub struct AppRequestsInProgress<'a> {
 
 impl<'a> AppRequestsInProgress<'a> {
     pub fn space() -> (
-        [u8; 8],
+        [u8; 128],
         hil::uart::TxRequest<'a>,
-        [u8; 8],
+        [u8; 128],
         hil::uart::RxRequest<'a>,
     ) {
         (
-            [0; 8],
+            [0; 128],
             hil::uart::TxRequest::new(),
-            [0; 8],
+            [0; 128],
             hil::uart::RxRequest::new(),
         )
     }
 
     pub fn new_with_default_space(
         space: &'a mut (
-            [u8; 8],
+            [u8; 128],
             hil::uart::TxRequest<'a>,
-            [u8; 8],
+            [u8; 128],
             hil::uart::RxRequest<'a>,
         ),
     ) -> AppRequestsInProgress<'a> {
@@ -252,6 +254,8 @@ impl<'a> UartDriver<'a> {
 
             self.uart[uart_num].app_requests.tx_in_progress.set(app_id);
             self.uart[uart_num].uart.transmit_buffer(request)
+
+
         } else {
             //transmit_app_request invoked but no request_tx buffer available
             ReturnCode::FAIL
@@ -283,6 +287,10 @@ impl<'a> Uart<'a> {
             app_requests,
             apps: grant,
         }
+    }
+
+    pub fn configure(&self, params: hil::uart::Parameters){
+        self.uart.configure(params);
     }
 
     fn app_tx_update(&self, app_id: AppId) -> Option<AppId> {
@@ -360,7 +368,7 @@ impl<'a> Uart<'a> {
                                 // //enqueue callback if it's completed requested
                                 if app.rx.remaining == 0 {
                                     // Enqueue the application callback
-                                    let read = app.rx.len();
+                                    let read = app.rx.items_pushed();
                                     app.rx.callback.map(|mut cb| {
                                         cb.schedule(From::from(ReturnCode::SUCCESS), read, 0);
                                     });
@@ -368,8 +376,19 @@ impl<'a> Uart<'a> {
                             });
                         }
                     }
+                    if completed_rx.new_lines == 2 {
+                        for app in self.apps.iter() {
+                            app.enter(|app, _| {
+                                let read = app.rx.items_pushed();
+                                app.rx.remaining = 0;
+                                app.rx.callback.map(|mut cb| {
+                                    cb.schedule(From::from(ReturnCode::SUCCESS), read, 0);
+                                });
+                            });
+                        }
 
 
+                    }
                 },
                 _ => panic!("A null buffer has become a completed request? It should have never been dispatched in the first place! Shame on console/uart.rs"),
             }
@@ -453,14 +472,13 @@ impl<'a> Uart<'a> {
                 return true;
             }
         }
-
         false
     }
 
     fn transmit_app_rx_request(&self, app_id: AppId) -> ReturnCode {
         if let Some(request) = self.app_requests.rx.take() {
             if let Err(_err) = self.apps.enter(app_id, |app, _| {
-                request.req.reset();
+                request.reset();
                 request.req.initialize_from_app_request(&mut app.rx);
             }) {
                 return ReturnCode::FAIL;
@@ -541,6 +559,7 @@ impl Driver for UartDriver<'a> {
     /// - `3`: Cancel any in progress receives and return (via callback)
     ///        what has been received so far.
     fn command(&self, arg0: usize, arg1: usize, _: usize, appid: AppId) -> ReturnCode {
+
         let cmd_num = arg0 as u16;
         let uart_num = (arg0 >> 16) as usize;
         match cmd_num {
@@ -578,7 +597,7 @@ impl Driver for UartDriver<'a> {
                         self.uart[uart_num].transmit_app_rx_request(appid)
                     }
                     else {
-                        ReturnCode::SUCCESS
+                        ReturnCode::FAIL
                     }
                 })
             },

@@ -10,15 +10,20 @@ pub type TxRequest<'a> = ikc::TxRequest<'a, u8>;
 pub struct RxRequest<'a> {
     pub req: ikc::RxRequest<'a, u8>,
     // client may request to return at end of transmission (buffer may not be full)
-    pub eot_return: bool,
+    pub new_lines: u8,
 }
 
 impl RxRequest<'a> {
     pub fn new() -> RxRequest<'a> {
         RxRequest {
             req: ikc::RxRequest::new(),
-            eot_return: false,
+            new_lines: 0,
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.req.reset();
+        self.new_lines = 0;
     }
 }
 

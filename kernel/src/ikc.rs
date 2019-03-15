@@ -24,6 +24,10 @@ impl<T: Copy> AppRequest<T> {
         self.length
     }
 
+    pub fn items_pushed(&self) -> usize {
+        self.length - self.remaining
+    }
+
     pub fn push<'a>(&mut self, element: T) {
         if let Some(ref mut buf) = self.slice {
             let offset = self.length - self.remaining;
@@ -309,8 +313,9 @@ impl<'a, T: Copy> RxRequest<'a, T> {
     pub fn reset(&mut self) {
         self.pushed = 0;
         self.popped = 0;
+        //self.requested = 0;
         match &self.buf {
-            RxBuf::MUT(buf) => self.requested = buf.len(),
+            RxBuf::MUT(buf) => self.requested = 0,
             RxBuf::None => self.requested = 0,
         }
     }
@@ -327,6 +332,10 @@ impl<'a, T: Copy> RxRequest<'a, T> {
 
     pub fn request_remaining(&self) -> usize {
         self.requested - self.pushed
+    }
+
+    pub fn set_complete(&mut self) {
+        self.requested = self.pushed
     }
 
     pub fn has_room(&self) -> bool {

@@ -30,7 +30,6 @@ pub enum PIN_FN {
     SE_CSD = 28,
     SE_CPS = 29,
     SE_CTX = 30,
-
 }
 }
 
