@@ -103,9 +103,6 @@ impl<'a> kernel::Platform for FeatherPlatform<'a> {
     }
 
     fn service_pending_events(&mut self) {
-
-
-
         while events::has_event() {
 
             // pass data from static debug writer to the stack allocated debug uart client
@@ -129,8 +126,8 @@ impl<'a> kernel::Platform for FeatherPlatform<'a> {
                         capsules::uart::handle_irq(0, self.uart, Some(&clients));
                     }
                     event_priority::EVENT_PRIORITY::UART1 => {
-                        let clients = [self.echo as &kernel::hil::uart::Client];
-                        capsules::uart::handle_irq(1, self.uart, Some(&clients));
+                        //let clients = [self.echo as &kernel::hil::uart::Client];
+                        capsules::uart::handle_irq(1, self.uart, None);//Some(&clients));
                     }
                     event_priority::EVENT_PRIORITY::RF_CMD_ACK => unsafe{ cc26x2::radio::RFC.handle_ack_event()},
                     event_priority::EVENT_PRIORITY::RF_CORE_CPE0 => unsafe{ cc26x2::radio::RFC.handle_cpe0_event()},
@@ -490,7 +487,8 @@ pub unsafe fn reset_handler() {
         static _sapps: u8;
     }
 
-    events::set_event_flag(event_priority::EVENT_PRIORITY::UART1);
+    events::set_event_flag(event_priority::EVENT_PRIORITY::UART0);
+
     debug!("Loading processes");
 
     kernel::procs::load_processes(

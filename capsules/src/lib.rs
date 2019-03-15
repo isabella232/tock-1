@@ -32,6 +32,7 @@ pub mod fm25cl;
 pub mod fxos8700cq;
 pub mod gpio;
 pub mod gpio_async;
+pub mod gps;
 pub mod helium;
 pub mod humidity;
 pub mod i2c_master;

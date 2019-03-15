@@ -27,7 +27,7 @@ struct UartRegisters {
     fbrd: ReadWrite<u32, FracDivisor::Register>, //Fractional Baud-Rate Divisor Section 21.7.1.6
     lcrh: ReadWrite<u32, LineControl::Register>, //Line Control Section 21.7.1.7
     ctl: ReadWrite<u32, Control::Register>, //Control Section 21.7.1.8
-    ifls: ReadWrite<u32>, //Interrupt FIFO Level Select Section 21.7.1.9
+    ifls: ReadWrite<u32, FifoLevelSelect::Register>, //Interrupt FIFO Level Select Section 21.7.1.9
     imsc: ReadWrite<u32, Interrupts::Register>, //Interrupt Mask Set/Clear Section 21.7.1.10
     ris: ReadOnly<u32, Interrupts::Register>, // Raw Interrupt Status Section 21.7.1.11
     mis: ReadOnly<u32, Interrupts::Register>, //Masked Interrupt Status Section 21.7.1.12
@@ -50,6 +50,22 @@ register_bitfields![
             Len6 = 0x1,
             Len7 = 0x2,
             Len8 = 0x3
+        ]
+    ],
+    FifoLevelSelect [
+        RXSEL OFFSET(3) NUMBITS(3) [
+            OneEighth = 0,
+            OneQuarter = 1,
+            Half = 2,
+            ThreeQuarters = 3,
+            SevenEights = 4
+        ],
+        TXSEL OFFSET(0) NUMBITS(3) [
+            OneEighth = 0,
+            OneQuarter = 1,
+            Half = 2,
+            ThreeQuarters = 3,
+            SevenEights = 4
         ]
     ],
     IntDivisor [
@@ -191,7 +207,7 @@ impl<'a> UART<'a> {
     }
 
     fn enable_interrupts(&self) {
-
+        self.registers.ifls.modify(FifoLevelSelect::RXSEL::OneEighth);
     }
 
     pub fn write(&self, c: u32) {
@@ -235,41 +251,52 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
         self.nvic.enable();
         
         let (mut tx_complete, mut rx_complete) = (None, None);
-        // Clear interrupts
-        self.registers.icr.write(Interrupts::ALL_INTERRUPTS::SET);
 
-        // Hardware RX FIFO is not empty
-        while self.rx_fifo_not_empty() {
+        // // Hardware RX FIFO is not empty
+        //while self.rx_fifo_not_empty() {
+
             // buffer read request was made
             if self.rx.is_some() {
                 self.rx.take().map(|rx| {
-                    // read in a byte
-                    if !rx.req.request_completed() {
-                        let byte = self.read() as u8;
-                        rx.req.push(byte);
-                    }
+                    // if self.registers.mis.read(Interrupts::RX_TIMEOUT) == 1 {
+                    //     rx.timeout_return = true;
+                    // }
 
-                    if rx.req.request_completed() {
+                    // read in a byte
+                    // Hardware RX FIFO is not empty
+                    while self.rx_fifo_not_empty() {
+                        let byte = self.read() as u8;
+        
+                        if byte == b'\r' {
+                            rx.new_lines += 1;
+                        }
+                        rx.req.push(byte);
+
+
+                        if rx.req.request_completed() || rx.new_lines == 2 {
+                            if rx.new_lines == 2 {
+                                //rx.req.push(b'\0');
+                            }
+                            break;   
+                        }
+                    }
+                    if rx.req.request_completed() || rx.new_lines == 2 {
                         self.registers.imsc.modify(
                             Interrupts::RX::CLEAR
                                 + Interrupts::RX_TIMEOUT::CLEAR
                         );
                         rx_complete = Some(rx);
                     } else {
-
-
-           
                         self.rx.put(rx);
                     }
                 });
             }
             // no current read request
-            else {
-                // read bytes into the void to avoid hardware RX buffer overflow
-                self.read();
-            }
-
-        }
+            // else {
+            //     // read bytes into the void to avoid hardware RX buffer overflow
+            //     self.read();
+            // }
+       // }
 
         //if we have a request, handle it
         self.tx.take().map(|tx| {
@@ -290,7 +317,8 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
             }
         });
 
-
+        // Clear interrupts
+        self.registers.icr.write(Interrupts::ALL_INTERRUPTS::SET);
 
         (tx_complete, rx_complete)
     }
@@ -350,8 +378,6 @@ impl<'a> uart::Transmit<'a> for UART<'a> {
             }
         }
 
-
-
         self.tx.put(tx);
         
         ReturnCode::SUCCESS
@@ -374,9 +400,9 @@ impl<'a> uart::Transmit<'a> for UART<'a> {
 impl<'a> uart::Receive<'a> for UART<'a> {
     fn receive_buffer(&self, request: &'a mut uart::RxRequest<'a>) -> ReturnCode {
         if self.rx.is_some() || self.receiving_word.get() {
+
             ReturnCode::EBUSY
         } else {
-
             self.registers.imsc.modify(
             Interrupts::RX::SET
                 + Interrupts::RX_TIMEOUT::SET
