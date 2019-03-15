@@ -455,7 +455,7 @@ impl Radio {
                 .ok();
         }
 
-        //self.frontend_client.map(|client| client.bypass());
+        self.frontend_client.map(|client| client.bypass());
     }
 
     fn test_radio_rx(&self) {
