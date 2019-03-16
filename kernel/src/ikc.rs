@@ -64,11 +64,11 @@ impl<'a, T: Copy> Default for TxBuf<'a, T> {
 pub struct TxRequest<'a, T: Copy> {
     buf: TxBuf<'a, T>,
     // The total amount of data written in
-    pushed: usize,
+    pub pushed: usize, //UNDO
     // The total amount of data read out
-    popped: usize,
+    pub popped: usize, //UNDO
     // The total size of the request
-    requested: usize,
+    pub requested: usize, //UNDO
     // Identifier to route response to owner
     pub client_id: usize,
 }
@@ -102,7 +102,7 @@ impl<'a, T: Copy> TxRequest<'a, T> {
         let ret = match &self.buf {
             TxBuf::CONST(s) => Some(s[self.popped]),
             TxBuf::MUT(ref s) => Some(s[self.popped]),
-            TxBuf::None => None,
+            TxBuf::None => panic!("Trying to pop from TxRequest with no data!"),
         };
         self.popped += 1;
         ret
@@ -282,8 +282,9 @@ impl<'a, T: Copy> RxRequest<'a, T> {
                 if let Some(ref _slice) = app_request.slice {
                     self.requested = num_elements;
                 }
+                
             }
-            _ => panic!("Can only copy_from_app_slice if self is RxBuf::MUT"),
+            _ => panic!("Can only initialize_from_app_request if self is RxBuf::MUT"),
         };
     }
 

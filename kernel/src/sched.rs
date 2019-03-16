@@ -338,7 +338,9 @@ impl Kernel {
                                                     Ok(oslice) => {
                                                         d.allow(appid, subdriver_number, oslice)
                                                     }
-                                                    Err(err) => err, /* memory not valid */
+                                                    Err(err) => {
+                                                        err
+                                                    }, /* memory not valid */
                                                 }
                                             }
                                             None => ReturnCode::ENODEVICE,

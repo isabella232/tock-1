@@ -96,8 +96,13 @@ impl<'a> kernel::Platform for FeatherPlatform<'a> {
             capsules::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules::i2c_master::DRIVER_NUM => f(Some(self.i2c_master)),
             capsules::helium::driver::DRIVER_NUM => f(Some(self.helium)),
-            capsules::gps::DRIVER_NUM => f(Some(self.gps)),
-            _ => f(None),
+            capsules::gps::DRIVER_NUM => {
+                f(Some(self.gps))
+            },
+            _ => {
+                debug!("invalid driver request: {}\r\n", driver_num);
+                f(None)
+            },
         }
     }
 
@@ -480,7 +485,7 @@ pub unsafe fn reset_handler() {
 
     events::set_event_flag(event_priority::EVENT_PRIORITY::UART0);
 
-    debug!("Loading processes\r\n");
+    //debug!("Loading processes\r\n\r\n");
 
     kernel::procs::load_processes(
         board_kernel,

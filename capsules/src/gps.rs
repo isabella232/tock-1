@@ -18,6 +18,10 @@ static GPS_PARAMS: hil::uart::Parameters = hil::uart::Parameters {
     hw_flow_control: false,
 };
 
+const PMTK_SET_NMEA_OUTPUT_RMCGGA: &'static [u8; 49] = b"$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28";
+const PMTK_SET_NMEA_UPDATE_1HZ: &'static [u8; 16] = b"$PMTK220,1000*1F";
+
+
 use enum_primitive::cast::{FromPrimitive, ToPrimitive};
 use enum_primitive::enum_from_primitive;
 
@@ -36,7 +40,15 @@ pub struct App {
     tx: AppRequest,
 }
 
+enum State {
+    Init,
+    ReceivedOne,
+    SentOne,
+    Ready,
+}
+
 pub struct Gps<'a> {
+    state: MapCell<State>,
     uart: &'a hil::uart::UartPeripheral<'a>,
     uart_state: MapCell<hil::uart::PeripheralState>,
     rx_request: TakeCell<'a, hil::uart::RxRequest<'a>>,
@@ -68,6 +80,22 @@ impl<'a> Gps<'a> {
         	let (tx_complete, rx_complete) = self.uart.handle_interrupt(*state);
 
         	if let Some(rx) = rx_complete {
+                self.state.take().map(|mut state| {
+                    match state {
+                        State::Init => state = State::ReceivedOne,
+                        State::ReceivedOne => {
+                            state = State::SentOne;
+                            self.tx_request.take().map(|tx| 
+                            {
+                                tx.set_with_const_ref(PMTK_SET_NMEA_OUTPUT_RMCGGA);
+                                self.uart.transmit_buffer(tx);
+                            });
+                            
+                        }
+                        _ => (),
+                    }
+                    self.state.put(state);
+                });
 
         		match &rx.req.buf {
 	                ikc::RxBuf::MUT(buf) => {
@@ -77,32 +105,32 @@ impl<'a> Gps<'a> {
 	                    }
 
 	                },
-	                _ => {},
+	                _ => (),
         		}
-                debug!("received line\r\n");
+
         		rx.reset();
         		self.uart.receive_buffer(rx);
         	}
 
             if let Some(tx) = tx_complete {
-                self.tx_request.put(Some(tx));
-                if let Some(app_id) = self.tx_in_progress.take() {
-                    self.apps.enter(app_id, |app, _| {
-                        // if app tx request has no data left
-                        if app.tx.remaining == 0 {
-                            // Enqueue the application callback
-                            let written = app.tx.len();
-                            app.tx.callback.map(|mut cb| {
-                                cb.schedule(written, 0, 0);
-                            });
-                            None
-                        } else {
-                            // Otherwise, return app_id
-                            Some(app_id)
-                        }
-                    })
-                    .unwrap();
+                self.state.take().map(|mut state| {
+                    match state {
+                        State::SentOne => {
+                            tx.set_with_const_ref(PMTK_SET_NMEA_UPDATE_1HZ);
+                            state = State::Ready;
+                        },
+                        _=> (),
+                    }
+                    self.state.put(state);
+                });
+                if tx.has_some() {
+                    self.uart.transmit_buffer(tx);
                 }
+                else{
+                    self.tx_request.put(Some(tx));
+                }
+                
+                
             }
     	 });        
     }
@@ -125,19 +153,20 @@ impl<'a> Gps<'a> {
         rx_request: &'a mut hil::uart::RxRequest<'a>,
         tx_request: &'a mut hil::uart::TxRequest<'a>,
     ) {
-        tx_request.set_with_mut_ref(tx_buf);
         self.tx_request.put(Some(tx_request));
+
 
         rx_request.req.set_buf(rx_buf);
         // TODO: set state?
         self.uart.receive_buffer(rx_request);
-    
+
     }
 
     pub fn new(uart: &'a hil::uart::UartPeripheral<'a>, grant: Grant<App>) -> Gps<'a> {
         uart.configure(GPS_PARAMS);
 
         Gps {
+            state: MapCell::new(State::Init),
             rx_request: TakeCell::empty(),
             tx_request: TakeCell::empty(),
             tx_in_progress: OptionalCell::empty(),
@@ -151,17 +180,15 @@ impl<'a> Gps<'a> {
 
 impl Driver for Gps<'a> {
     fn allow(&self, appid: AppId, arg2: usize, slice: Option<AppSlice<Shared, u8>>) -> ReturnCode {
-        debug!("allow");
-
         let cmd = COMMAND::from_usize(arg2).expect("Invalid command passed by userspace driver");
         match cmd {
-            WRITESTR => self.apps
+            COMMAND::WRITESTR => self.apps
                 .enter(appid, |app, _| {
                     app.tx.slice = slice;
                     ReturnCode::SUCCESS
                 })
                 .unwrap_or_else(|err| err.into()),
-            READLINE => self.apps
+            COMMAND::READLINE => self.apps
                 .enter(appid, |app, _| {
                     //app.rx.slice = slice;
                     ReturnCode::SUCCESS
@@ -171,17 +198,17 @@ impl Driver for Gps<'a> {
         }
     }
     fn subscribe(&self, arg1: usize, callback: Option<Callback>, app_id: AppId) -> ReturnCode {
-        debug!("subscribe");
-
         let cmd = COMMAND::from_usize(arg1).expect("Invalid command passed by userspace driver");
+        //debug!("subscribe: {:?}\r\n", cmd);
+
         match cmd {
-            WRITESTR /* putstr/write_done */ => {
+            COMMAND::WRITESTR /* putstr/write_done */ => {
                 self.apps.enter(app_id, |app, _| {
                     app.tx.callback = callback;
                     ReturnCode::SUCCESS
                 }).unwrap_or_else(|err| err.into())
             },
-            READLINE /* getnstr done */ => {
+            COMMAND::READLINE /* getnstr done */ => {
                 self.apps.enter(app_id, |app, _| {
                     //app.rx.callback = callback;
                     ReturnCode::SUCCESS
@@ -192,27 +219,29 @@ impl Driver for Gps<'a> {
     }
 
     fn command(&self, arg0: usize, len: usize, _: usize, appid: AppId) -> ReturnCode {
-        debug!("cmd");
+
 
         let cmd = COMMAND::from_usize(arg0).expect("Invalid command passed by userspace driver");
+        //debug!("cmd: {:?}\r\n", cmd);
+
         // let uart_num = (arg0 >> 16) as usize;
         match cmd {
-            DRIVER_CHECK /* check if present */ => ReturnCode::SUCCESS,
-            WRITESTR /* transmit request */ => {
+            COMMAND::DRIVER_CHECK /* check if present */ => ReturnCode::SUCCESS,
+            COMMAND::WRITESTR /* transmit request */ => {
                 //update the request with length
-                debug!("writestr cmd");
                 if let Err(_err) = self.apps.enter(appid, |app, _| {
                     app.tx.set_len(len);
                     if let Some(request) = self.tx_request.take(){
                         request.reset();
                         request.copy_from_app_request(&mut app.tx);
+                        //debug!("transmitting!!!");
                         self.uart.transmit_buffer(request);
                         self.tx_in_progress.set(appid);
                     }            
                 }){ return ReturnCode::FAIL }
                 ReturnCode::SUCCESS
             },
-            READLINE /* get lines */ => {
+            COMMAND::READLINE /* get lines */ => {
                 ReturnCode::SUCCESS
             },
             _ => ReturnCode::ENOSUPPORT

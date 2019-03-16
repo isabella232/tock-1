@@ -103,6 +103,7 @@ register_bitfields![
 
 pub struct UART<'a> {
     nvic: nvic::Nvic,
+    num: PeripheralNum,
     registers: &'a UartRegisters,
     tx: MapCell<&'a mut uart::TxRequest<'a>>,
     rx: MapCell<&'a mut uart::RxRequest<'a>>,
@@ -152,6 +153,7 @@ impl<'a> UART<'a> {
 
         let ret = UART {
             nvic,
+            num,
             registers,
             tx: MapCell::empty(),
             rx: MapCell::empty(),
@@ -207,6 +209,7 @@ impl<'a> UART<'a> {
     }
 
     fn enable_interrupts(&self) {
+        self.registers.ifls.modify(FifoLevelSelect::TXSEL::OneEighth);
         self.registers.ifls.modify(FifoLevelSelect::RXSEL::OneEighth);
     }
 
@@ -298,14 +301,18 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
         //if we have a request, handle it
         self.tx.take().map(|tx| {
             // send out one byte at a time, IRQ when TX FIFO empty will bring us back
-            while self.tx_fifo_not_full() && !tx.request_completed() {
+            if self.tx_fifo_not_full() && !tx.request_completed() {
                 if let Some(item) = tx.pop() {
                     self.write(item as u32);
+                    if self.num == PeripheralNum::_1 {
+                        //debug!("{}", item as char);
+                    }
                 }
             }
 
             if tx.request_completed() {
                 self.registers.imsc.modify(
+                    Interrupts::TX::CLEAR +
                     Interrupts::END_OF_TRANSMISSION::CLEAR,
                 );
                 tx_complete = Some(tx);
@@ -365,16 +372,32 @@ impl<'a> uart::Configure for UART<'a> {
 impl<'a> uart::Transmit<'a> for UART<'a> {
     fn transmit_buffer(&self, tx: &'a mut uart::TxRequest<'a>) -> ReturnCode {
         self.registers.imsc.modify(
-            Interrupts::END_OF_TRANSMISSION::SET,
+            Interrupts::TX::SET + 
+            Interrupts::END_OF_TRANSMISSION::SET
         );
 
+        if self.num == PeripheralNum::_1 {
+            //debug!("transmit_buffer begin");
+        }
+        let mut count = 0;
         // we will send one byte, causing EOT interrupt
-        while self.tx_fifo_not_full() && !tx.request_completed(){
+        if self.tx_fifo_not_full() && !tx.request_completed(){
             if let Some(item) = tx.pop() {
                 self.write(item as u32);
+
+                if self.num == PeripheralNum::_1 {
+                    //debug!("{}", item as char);
+                }
             }
+            
+
         }
 
+        if self.num == PeripheralNum::_1 {
+            //debug!("transmit_buffer end");
+        }
+
+        
         self.tx.put(tx);
         
         ReturnCode::SUCCESS
