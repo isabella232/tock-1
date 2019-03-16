@@ -103,7 +103,6 @@ pub fn handle_irq(
         if state.rx == IDLE {
             if driver.uart[num].dispatch_shortest_rx_request() {
                 state.rx = BUSY;
-                debug!("BUSY RX'ing");
                 //while(true) {}
             }
         }
@@ -376,7 +375,7 @@ impl<'a> Uart<'a> {
                             });
                         }
                     }
-                    if completed_rx.new_lines == 2 {
+                    if completed_rx.new_line_return {
                         for app in self.apps.iter() {
                             app.enter(|app, _| {
                                 let read = app.rx.items_pushed();

@@ -258,29 +258,26 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
             // buffer read request was made
             if self.rx.is_some() {
                 self.rx.take().map(|rx| {
-                    // if self.registers.mis.read(Interrupts::RX_TIMEOUT) == 1 {
-                    //     rx.timeout_return = true;
-                    // }
-
                     // read in a byte
                     // Hardware RX FIFO is not empty
                     while self.rx_fifo_not_empty() {
                         let byte = self.read() as u8;
         
-                        if byte == b'\r' {
-                            rx.new_lines += 1;
+                        if byte == b'\n' {
+                            rx.new_line_return = true;
                         }
                         rx.req.push(byte);
 
 
-                        if rx.req.request_completed() || rx.new_lines == 2 {
-                            if rx.new_lines == 2 {
-                                //rx.req.push(b'\0');
+                        if rx.req.request_completed() || rx.new_line_return {
+                            if rx.new_line_return {
+                                rx.req.push(b'\0');
                             }
                             break;   
                         }
                     }
-                    if rx.req.request_completed() || rx.new_lines == 2 {
+
+                    if rx.req.request_completed() || rx.new_line_return {
                         self.registers.imsc.modify(
                             Interrupts::RX::CLEAR
                                 + Interrupts::RX_TIMEOUT::CLEAR
@@ -296,7 +293,7 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
             //     // read bytes into the void to avoid hardware RX buffer overflow
             //     self.read();
             // }
-       // }
+       //}
 
         //if we have a request, handle it
         self.tx.take().map(|tx| {

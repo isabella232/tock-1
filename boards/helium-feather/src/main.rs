@@ -16,6 +16,7 @@ use cortexm::events;
 #[allow(unused_imports)]
 use kernel::{create_capability, debug, debug_gpio, static_init};
 
+use capsules::gps;
 use capsules::helium;
 use capsules::helium::{device::Device, virtual_rfcore::RFCore};
 use capsules::uart;
@@ -69,6 +70,7 @@ pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 pub struct FeatherPlatform<'a> {
     uart: &'a capsules::uart::UartDriver<'a>,
     echo: &'a uart_test::TestClient<'a>,
+    gps: &'a capsules::gps::Gps<'a>,
     debug_client: &'a debug::DebugClient<'a>,
     led: &'static capsules::led::LED<'static, cc26x2::gpio::GPIOPin>,
     button: &'static capsules::button::Button<'static, cc26x2::gpio::GPIOPin>,
@@ -94,6 +96,7 @@ impl<'a> kernel::Platform for FeatherPlatform<'a> {
             capsules::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules::i2c_master::DRIVER_NUM => f(Some(self.i2c_master)),
             capsules::helium::driver::DRIVER_NUM => f(Some(self.helium)),
+            capsules::gps::DRIVER_NUM => f(Some(self.gps)),
             _ => f(None),
         }
     }
@@ -115,19 +118,22 @@ impl<'a> kernel::Platform for FeatherPlatform<'a> {
             }
 
             if let Some(event) = events::next_pending() {
+                // match event {
+                //     event_priority::EVENT_PRIORITY::UART0 => (),
+                //     _ =>  debug!("event {:?}\r\n", event),
+                // }
+               
                 events::clear_event_flag(event);
                 match event {
                     event_priority::EVENT_PRIORITY::GPIO => unsafe {cc26x2::gpio::PORT.handle_events()},
                     event_priority::EVENT_PRIORITY::AON_RTC => unsafe {cc26x2::rtc::RTC.handle_events()},
                     event_priority::EVENT_PRIORITY::I2C0 => unsafe {cc26x2::i2c::I2C0.handle_events()},
                     event_priority::EVENT_PRIORITY::UART0 => {
-                       
                         let clients = [self.debug_client as &kernel::hil::uart::Client];
                         capsules::uart::handle_irq(0, self.uart, Some(&clients));
                     }
                     event_priority::EVENT_PRIORITY::UART1 => {
-                        //let clients = [self.echo as &kernel::hil::uart::Client];
-                        capsules::uart::handle_irq(1, self.uart, None);//Some(&clients));
+                        self.gps.handle_irq();
                     }
                     event_priority::EVENT_PRIORITY::RF_CMD_ACK => unsafe{ cc26x2::radio::RFC.handle_ack_event()},
                     event_priority::EVENT_PRIORITY::RF_CORE_CPE0 => unsafe{ cc26x2::radio::RFC.handle_cpe0_event()},
@@ -139,8 +145,9 @@ impl<'a> kernel::Platform for FeatherPlatform<'a> {
                     _ => panic!("unhandled event {:?} ", event),
                 }
             }
-        }   
+        }
     }
+
 }
 
 static mut HELIUM_BUF: [u8; 240] = [0x00; 240];
@@ -205,14 +212,6 @@ unsafe fn configure_pins(pin: &Pinmap) {
 use kernel::hil::rf_frontend::SE2435L;
 
 use kernel::hil::uart::Configure; 
-
-static GPS_PARAMS: hil::uart::Parameters = hil::uart::Parameters {
-    baud_rate: 9600, // baud rate in bit/s
-    width: hil::uart::Width::Eight,
-    parity: hil::uart::Parity::None,
-    stop_bits: hil::uart::StopBits::One,
-    hw_flow_control: false,
-};
 
 #[no_mangle]
 pub unsafe fn reset_handler() {
@@ -323,13 +322,6 @@ pub unsafe fn reset_handler() {
     let uart0_clients: [TakeCell<hil::uart::RxRequest>; 3] =
         [TakeCell::empty(), TakeCell::empty(), TakeCell::empty()];
 
-    // for each client for the driver, provide an empty TakeCell
-    let uart1_clients: [TakeCell<hil::uart::RxRequest>; 3] =
-        [TakeCell::empty(), TakeCell::empty(), TakeCell::empty()];
-
-    let uart1_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_1);
-    let mut uart1_driver_app_space = uart::AppRequestsInProgress::space();
-
     let board_uarts = [
         &uart::Uart::new(
             &uart0_hil,
@@ -337,18 +329,16 @@ pub unsafe fn reset_handler() {
             uart::AppRequestsInProgress::new_with_default_space(&mut uart0_driver_app_space),
             board_kernel.create_grant(&memory_allocation_capability),
         ),
-        &uart::Uart::new(
-            &uart1_hil,
-            Some(&uart1_clients),
-            uart::AppRequestsInProgress::new_with_default_space(&mut uart1_driver_app_space),
-            board_kernel.create_grant(&memory_allocation_capability),
-        ),
     ];
 
     let uart_driver = uart::UartDriver::new(&board_uarts);
 
-    // uart driver default initializes to 115200, but GPS requires 9600
-    uart_driver.uart[1].configure(GPS_PARAMS);
+    let uart1_hil = cc26x2::uart::UART::new(cc26x2::uart::PeripheralNum::_1);
+
+
+    let mut gps_space = gps::Gps::space();
+    let gps = gps::Gps::new(&uart1_hil, board_kernel.create_grant(&memory_allocation_capability));
+    gps.set_with_default_space(&mut gps_space);
 
     cc26x2::i2c::I2C0.initialize();
 
@@ -472,6 +462,7 @@ pub unsafe fn reset_handler() {
         uart: &uart_driver,
         debug_client: &debug_client,
         echo: &uart_test_client,
+        gps: &gps,
         led,
         button,
         alarm,
@@ -489,7 +480,7 @@ pub unsafe fn reset_handler() {
 
     events::set_event_flag(event_priority::EVENT_PRIORITY::UART0);
 
-    debug!("Loading processes");
+    debug!("Loading processes\r\n");
 
     kernel::procs::load_processes(
         board_kernel,

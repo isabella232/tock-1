@@ -313,9 +313,8 @@ impl<'a, T: Copy> RxRequest<'a, T> {
     pub fn reset(&mut self) {
         self.pushed = 0;
         self.popped = 0;
-        //self.requested = 0;
         match &self.buf {
-            RxBuf::MUT(buf) => self.requested = 0,
+            RxBuf::MUT(buf) => self.requested = buf.len(),
             RxBuf::None => self.requested = 0,
         }
     }

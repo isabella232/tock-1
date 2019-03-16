@@ -421,7 +421,7 @@ pub fn begin_debug_fmt(args: Arguments) {
     unsafe {
         let writer = get_debug_writer();
         let _ = write(writer, args);
-        let _ = writer.write_str("\r\n");
+        //let _ = writer.write_str("\r\n");
     }
 }
 

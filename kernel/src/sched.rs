@@ -244,9 +244,9 @@ impl Kernel {
 
         loop {
 
-             if platform.has_pending_events() {
-                break;
-            }
+            //  if platform.has_pending_events() {
+            //     break;
+            // }
 
             if systick.overflowed() || !systick.greater_than(MIN_QUANTA_THRESHOLD_US) {
                 process.debug_timeslice_expired();
