@@ -29,8 +29,7 @@ enum_from_primitive! {
 #[derive(Debug, PartialEq)]
 pub enum COMMAND {
     DRIVER_CHECK = 0,
-    WRITESTR = 1,
-    READLINE = 2,
+    READLINE = 1,
 }
 }
 
@@ -38,6 +37,10 @@ pub enum COMMAND {
 #[derive(Default)]
 pub struct App {
     tx: AppRequest,
+    rx_slice: Option<AppSlice<Shared, u8>>,
+    rx_callback: Option<Callback>,
+    read: usize,
+    write: usize,
 }
 
 enum State {
@@ -80,29 +83,58 @@ impl<'a> Gps<'a> {
         	let (tx_complete, rx_complete) = self.uart.handle_interrupt(*state);
 
         	if let Some(rx) = rx_complete {
-                self.state.take().map(|mut state| {
-                    match state {
-                        State::Init => state = State::ReceivedOne,
-                        State::ReceivedOne => {
-                            state = State::SentOne;
-                            self.tx_request.take().map(|tx| 
-                            {
-                                tx.set_with_const_ref(PMTK_SET_NMEA_OUTPUT_RMCGGA);
-                                self.uart.transmit_buffer(tx);
-                            });
+                // self.state.take().map(|mut state| {
+                //     match state {
+                //         State::Init => state = State::ReceivedOne,
+                //         State::ReceivedOne => {
+                //             state = State::SentOne;
+                //             self.tx_request.take().map(|tx| 
+                //             {
+                //                 tx.set_with_const_ref(PMTK_SET_NMEA_OUTPUT_RMCGGA);
+                //                 self.uart.transmit_buffer(tx);
+                //             });
                             
-                        }
-                        _ => (),
-                    }
-                    self.state.put(state);
-                });
+                //         }
+                //         _ => (),
+                //     }
+                //     self.state.put(state);
+                // });
 
         		match &rx.req.buf {
+
 	                ikc::RxBuf::MUT(buf) => {
-	                    // for every item in the compeleted_rx
-	                    for i in 0..rx.req.items_pushed() {
-	                        debug!("{}", buf[i] as char);
-	                    }
+                        //for every item in the compeleted_rx
+                        for i in 0..rx.req.items_pushed() {
+                            debug!("{}", buf[i] as char);
+                        }
+
+                        // for app in self.apps.iter() {
+
+                        //     app.enter(|app, _| {
+                        //         let mut offset = app.write;
+
+                        //         if let Some(ref mut slice) = app.rx_slice {
+
+                        //             if offset + rx.req.items_pushed() > slice.len() {
+                        //                 offset = 0;
+                        //             }
+
+                        //             for i in 0..rx.req.items_pushed() {
+                        //                     slice.as_mut()[offset + i] = buf[i];
+                        //             }
+
+                        //             app.write = offset + rx.req.items_pushed();
+     
+
+                        //             app.rx_callback.map(|mut cb| {
+                        //                 cb.schedule(From::from(ReturnCode::SUCCESS), offset, 0);
+                        //             });
+
+                        //         }
+                                
+                        //     });
+
+                        // }               
 
 	                },
 	                _ => (),
@@ -112,26 +144,24 @@ impl<'a> Gps<'a> {
         		self.uart.receive_buffer(rx);
         	}
 
-            if let Some(tx) = tx_complete {
-                self.state.take().map(|mut state| {
-                    match state {
-                        State::SentOne => {
-                            tx.set_with_const_ref(PMTK_SET_NMEA_UPDATE_1HZ);
-                            state = State::Ready;
-                        },
-                        _=> (),
-                    }
-                    self.state.put(state);
-                });
-                if tx.has_some() {
-                    self.uart.transmit_buffer(tx);
-                }
-                else{
-                    self.tx_request.put(Some(tx));
-                }
-                
-                
-            }
+            // if let Some(tx) = tx_complete {
+            //     self.state.take().map(|mut state| {
+            //         match state {
+            //             State::SentOne => {
+            //                 tx.set_with_const_ref(PMTK_SET_NMEA_UPDATE_1HZ);
+            //                 state = State::Ready;
+            //             },
+            //             _=> (),
+            //         }
+            //         self.state.put(state);
+            //     });
+            //     if tx.has_some() {
+            //         self.uart.transmit_buffer(tx);
+            //     }
+            //     else{
+            //         self.tx_request.put(Some(tx));
+            //     }
+            // }
     	 });        
     }
 
@@ -182,35 +212,23 @@ impl Driver for Gps<'a> {
     fn allow(&self, appid: AppId, arg2: usize, slice: Option<AppSlice<Shared, u8>>) -> ReturnCode {
         let cmd = COMMAND::from_usize(arg2).expect("Invalid command passed by userspace driver");
         match cmd {
-            COMMAND::WRITESTR => self.apps
-                .enter(appid, |app, _| {
-                    app.tx.slice = slice;
-                    ReturnCode::SUCCESS
-                })
-                .unwrap_or_else(|err| err.into()),
             COMMAND::READLINE => self.apps
                 .enter(appid, |app, _| {
-                    //app.rx.slice = slice;
+                    app.rx_slice = slice;
                     ReturnCode::SUCCESS
                 })
                 .unwrap_or_else(|err| err.into()),
             _ => ReturnCode::ENOSUPPORT,
         }
     }
-    fn subscribe(&self, arg1: usize, callback: Option<Callback>, app_id: AppId) -> ReturnCode {
+    fn subscribe(&self, arg1: usize, callback: Option<Callback>, appid: AppId) -> ReturnCode {
         let cmd = COMMAND::from_usize(arg1).expect("Invalid command passed by userspace driver");
         //debug!("subscribe: {:?}\r\n", cmd);
 
         match cmd {
-            COMMAND::WRITESTR /* putstr/write_done */ => {
-                self.apps.enter(app_id, |app, _| {
-                    app.tx.callback = callback;
-                    ReturnCode::SUCCESS
-                }).unwrap_or_else(|err| err.into())
-            },
             COMMAND::READLINE /* getnstr done */ => {
-                self.apps.enter(app_id, |app, _| {
-                    //app.rx.callback = callback;
+                self.apps.enter(appid, |app, _| {
+                    app.rx_callback = callback;
                     ReturnCode::SUCCESS
                 }).unwrap_or_else(|err| err.into())
             },
@@ -218,31 +236,15 @@ impl Driver for Gps<'a> {
         }
     }
 
-    fn command(&self, arg0: usize, len: usize, _: usize, appid: AppId) -> ReturnCode {
-
-
+    fn command(&self, arg0: usize, read: usize, _: usize, appid: AppId) -> ReturnCode {
         let cmd = COMMAND::from_usize(arg0).expect("Invalid command passed by userspace driver");
-        //debug!("cmd: {:?}\r\n", cmd);
-
-        // let uart_num = (arg0 >> 16) as usize;
         match cmd {
             COMMAND::DRIVER_CHECK /* check if present */ => ReturnCode::SUCCESS,
-            COMMAND::WRITESTR /* transmit request */ => {
-                //update the request with length
-                if let Err(_err) = self.apps.enter(appid, |app, _| {
-                    app.tx.set_len(len);
-                    if let Some(request) = self.tx_request.take(){
-                        request.reset();
-                        request.copy_from_app_request(&mut app.tx);
-                        //debug!("transmitting!!!");
-                        self.uart.transmit_buffer(request);
-                        self.tx_in_progress.set(appid);
-                    }            
-                }){ return ReturnCode::FAIL }
-                ReturnCode::SUCCESS
-            },
             COMMAND::READLINE /* get lines */ => {
-                ReturnCode::SUCCESS
+                self.apps.enter(appid, |app, _| {
+                    app.read += read;
+                    ReturnCode::SUCCESS
+                }).unwrap_or_else(|err| err.into())
             },
             _ => ReturnCode::ENOSUPPORT
         }

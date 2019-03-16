@@ -270,8 +270,6 @@ impl<'a> uart::InterruptHandler<'a> for UART<'a> {
                             rx.new_line_return = true;
                         }
                         rx.req.push(byte);
-
-
                         if rx.req.request_completed() || rx.new_line_return {
                             if rx.new_line_return {
                                 rx.req.push(b'\0');
