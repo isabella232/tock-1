@@ -69,6 +69,7 @@ pub struct Platform {
     >,
     rng: &'static capsules::rng::RngDriver<'static>,
     i2c_master: &'static capsules::i2c_master::I2CMasterDriver<cc26x2::i2c::I2CMaster<'static>>,
+    gps: &'static capsules::gps::Gps<'static>,
     helium: &'static capsules::helium::driver::Helium<'static>,
     ipc: kernel::ipc::IPC,
 }
@@ -85,6 +86,7 @@ impl<'a> kernel::Platform for Platform {
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules::i2c_master::DRIVER_NUM => f(Some(self.i2c_master)),
+            capsules::gps::DRIVER_NUM => f(Some(self.gps)),
             capsules::helium::driver::DRIVER_NUM => f(Some(self.helium)),
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             _ => f(None),
@@ -147,7 +149,6 @@ unsafe fn configure_pins(pin: &Pinmap) {
 }
 
 static mut DRIVER_UART0: capsules::uart::Uart<UartDevice> = capsules::uart::Uart::new(0);
-static mut DRIVER_UART1: capsules::uart::Uart<UartDevice> = capsules::uart::Uart::new(1);
 
 #[no_mangle]
 pub unsafe fn reset_handler() {
@@ -270,20 +271,6 @@ pub unsafe fn reset_handler() {
         hw_flow_control: false,
     });
 
-    cc26x2::uart::UART1.initialize();
-    // Create a UART channel for the additional UART
-    let uart1_mux = static_init!(
-        MuxUart<'static>,
-        MuxUart::new(
-            &cc26x2::uart::UART1,
-            &mut capsules::virtual_uart::RX_BUF1,
-            115200
-        )
-    );
-    uart1_mux.initialize();
-    hil::uart::Receive::set_receive_client(&cc26x2::uart::UART1, uart1_mux);
-    hil::uart::Transmit::set_transmit_client(&cc26x2::uart::UART1, uart1_mux);
-
     // Create virtual device for kernel debug.
     let debugger_uart = static_init!(UartDevice, UartDevice::new(uart0_mux, false));
     debugger_uart.setup();
@@ -303,25 +290,9 @@ pub unsafe fn reset_handler() {
     );
     kernel::debug::set_debug_writer_wrapper(debug_wrapper);
 
-    // Create a UartDevice for the second UART
-    let uart1_device = static_init!(UartDevice, UartDevice::new(uart1_mux, true));
-    uart1_device.setup();
-
-    kernel::hil::uart::Transmit::set_transmit_client(uart1_device, &DRIVER_UART1);
-    kernel::hil::uart::Receive::set_receive_client(uart1_device, &DRIVER_UART1);
-
-    // the debug uart should be initialized by hand
-    cc26x2::uart::UART1.configure(hil::uart::Parameters {
-        baud_rate: 115200,
-        width: hil::uart::Width::Eight,
-        stop_bits: hil::uart::StopBits::One,
-        parity: hil::uart::Parity::None,
-        hw_flow_control: false,
-    });
-
     let uart_uarts = static_init!(
-        [&'static mut capsules::uart::Uart<UartDevice>; 2],
-        [&mut DRIVER_UART0, &mut DRIVER_UART1]
+        [&'static mut capsules::uart::Uart<UartDevice>; 1],
+        [&mut DRIVER_UART0]
     );
 
     let uart = static_init!(
@@ -330,7 +301,7 @@ pub unsafe fn reset_handler() {
             uart_uarts,
             [
                 board_kernel.create_grant(&memory_allocation_capability),
-                board_kernel.create_grant(&memory_allocation_capability)
+                board_kernel.create_grant(&memory_allocation_capability),
             ]
         )
     );
@@ -343,12 +314,26 @@ pub unsafe fn reset_handler() {
         uart,
     );
 
-    DRIVER_UART1.initialize(
-        uart1_device,
-        &mut capsules::uart::WRITE_BUF1,
-        &mut capsules::uart::READ_BUF1,
-        uart,
+    cc26x2::uart::UART1.initialize();
+    // the debug uart should be initialized by hand
+    cc26x2::uart::UART1.configure(hil::uart::Parameters {
+        baud_rate: 9600,
+        width: hil::uart::Width::Eight,
+        stop_bits: hil::uart::StopBits::One,
+        parity: hil::uart::Parity::None,
+        hw_flow_control: false,
+    });
+
+    let gps = static_init!(
+        capsules::gps::Gps<'static>,
+        capsules::gps::Gps::new(
+            &cc26x2::uart::UART1,
+            board_kernel.create_grant(&memory_allocation_capability)
+        )
     );
+    gps.initialize(&mut capsules::gps::TX_BUF, &mut capsules::gps::RX_BUF);
+    hil::uart::Transmit::set_transmit_client(&cc26x2::uart::UART1, gps);
+    hil::uart::Receive::set_receive_client(&cc26x2::uart::UART1, gps);
 
     cc26x2::i2c::I2C0.initialize();
 
@@ -470,6 +455,7 @@ pub unsafe fn reset_handler() {
         alarm,
         rng,
         i2c_master,
+        gps,
         helium: radio_driver,
         ipc,
     };

@@ -10,8 +10,8 @@ enum_from_primitive! {
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum EVENT_PRIORITY {
     GPIO = 0,
-    UART0 = 2,
-    UART1 = 1,
+    UART0 = 1,
+    UART1 = 2,
     AON_RTC = 3,
     RTC = 4,
     I2C0 = 6,
