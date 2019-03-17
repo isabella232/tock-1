@@ -369,9 +369,6 @@ impl<'a> uart::Transmit<'a> for UART<'a> {
         buffer: &'static mut [u8],
         len: usize,
     ) -> (ReturnCode, Option<&'static mut [u8]>) {
-        if self.num == 1{
-            debug!("transmitting buffer!");
-        }
         // if there is a weird input, don't try to do any transfers
         if len == 0 || len > buffer.len() {
             (ReturnCode::ESIZE, Some(buffer))
