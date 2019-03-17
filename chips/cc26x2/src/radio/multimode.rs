@@ -541,7 +541,7 @@ impl Radio {
                 cond.set_rule(0x01);
                 cond
             },
-            frequency: 0x0395,
+            frequency: 0x038B,
             fract_freq: 0x0000,
             synth_conf: {
                 let mut synth = prop::RfcSynthConf(0);
