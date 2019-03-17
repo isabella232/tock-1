@@ -36,10 +36,9 @@ pub static mut TX_BUF: [u8; 64] = [0; 64];
 pub static mut RX_BUF: [u8; RX_BUF_LEN] = [0; RX_BUF_LEN];
 pub static mut RX_BUF1: [u8; RX_BUF_LEN] = [0; RX_BUF_LEN];
 
-
+#[derive(Copy, Clone)]
 enum State {
     Init,
-    ReceivedOne,
     SentOne,
     Ready,
 }
@@ -77,18 +76,50 @@ impl<'a> Gps<'a> {
         }
     }
 
-    pub fn initialize(&self, tx_buf: &'static mut [u8], rx_buf: &'static mut [u8]) {
-        self.rx_buffer.put(Some(tx_buf));
-        self.tx_buffer.put(Some(tx_buf));
-        //self.hw.receive_buffer(rx_buf, RX_BUF_LEN);
-    }
 
+    pub fn initialize(&self, mut tx_buf: &'static mut [u8], rx_buf: &'static mut [u8]) {
+        for i in 0..::core::cmp::min(PMTK_SET_NMEA_OUTPUT_RMCGGA.len(), tx_buf.len()) {
+            tx_buf[i] = PMTK_SET_NMEA_OUTPUT_RMCGGA[i];
+        }
+        self.hw.transmit_buffer(tx_buf, PMTK_SET_NMEA_OUTPUT_RMCGGA.len());
+        self.hw.receive_buffer(rx_buf, RX_BUF_LEN);
+        
+    }
 }
 
 impl<'a> hil::uart::TransmitClient for Gps<'a> {
-    fn transmitted_buffer(&self, buffer: &'static mut [u8], _tx_len: usize, _rcode: ReturnCode) {
-        
+    fn transmitted_buffer(&self, tx_buf: &'static mut [u8], _tx_len: usize, _rcode: ReturnCode) {
+    
+        let mut send =false;
+
+        self.state.take().map( |mut state| {
+            match state {
+                State::Init => {
+                    state = State::SentOne;
+           
+                    send = true;
+                    
+                },
+                State::SentOne => {
+                    state = State::Ready;
+                    
+                },
+                State::Ready => (),
+            }
+            self.state.put(state);
+        });
+
+        if send {
+            for i in 0..::core::cmp::min(PMTK_SET_NMEA_UPDATE_1HZ.len(), tx_buf.len()) {
+                tx_buf[i] = PMTK_SET_NMEA_UPDATE_1HZ[i];
+            }
+            self.hw.transmit_buffer(tx_buf, PMTK_SET_NMEA_UPDATE_1HZ.len());
+        }
+        else {
+            self.tx_buffer.put(Some(tx_buf));
+        }
     }
+
 }
 
 impl<'a> hil::uart::ReceiveClient for Gps<'a> {
