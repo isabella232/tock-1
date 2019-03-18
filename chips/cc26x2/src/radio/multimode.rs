@@ -1,10 +1,10 @@
 use crate::chip::SleepMode;
 use crate::peripheral_manager::PowerClient;
-use crate::enum_primitive::cast::{FromPrimitive, ToPrimitive};
+use crate::enum_primitive::cast::{FromPrimitive};
 use crate::osc;
 use crate::radio::commands as cmd;
 use crate::radio::commands::{
-    prop_commands as prop, DirectCommand, RadioCommand, RfcCondition, RfcTrigger, CWM_RFPARAMS,
+    prop_commands as prop, DirectCommand, RfcCondition, RfcTrigger, CWM_RFPARAMS,
     LR_RFPARAMS, TX_20_PARAMS, TX_STD_PARAMS_10, TX_STD_PARAMS_2, TX_STD_PARAMS_9,
 };
 use crate::radio::queue;
@@ -184,7 +184,6 @@ impl Radio {
             cmd.sync_word = 0x00000000;
             cmd.packet_pointer = p_packet;
 
-            RadioCommand::guard(cmd);
             self.rfc
                 .send_async(cmd)
                 .ok();
@@ -254,7 +253,6 @@ impl Radio {
         cmd.p_queue = p_queue;
         cmd.p_output = RX_DAT.as_mut_ptr();
 
-        RadioCommand::guard(cmd);
         self.rfc
             .send_sync(cmd)
             .and_then(|_| self.rfc.wait(cmd))
@@ -448,7 +446,6 @@ impl Radio {
             cmd.packet_len = 0x14;
             cmd.sync_word = 0x00000000;
             cmd.packet_pointer = p_packet;
-            RadioCommand::guard(cmd);
 
             self.rfc
                 .send_sync(cmd)
@@ -518,7 +515,6 @@ impl Radio {
             cmd.p_queue = p_queue;
             cmd.p_output = RX_DAT.as_mut_ptr();
 
-            RadioCommand::guard(cmd);
             self.rfc
                 .send_sync(cmd)
                 .and_then(|_| self.rfc.wait(cmd))
@@ -529,7 +525,7 @@ impl Radio {
     }
 
     fn set_radio_fs(&self) {
-        let mut cmd_fs = prop::CommandFS {
+        let cmd_fs = prop::CommandFS {
             command_no: 0x0803,
             status: 0,
             p_nextop: 0,
@@ -554,7 +550,6 @@ impl Radio {
             dummy3: 0x0000,
         };
 
-        RadioCommand::guard(&mut cmd_fs);
         self.rfc
             .send_sync(&cmd_fs)
             .and_then(|_| self.rfc.wait(&cmd_fs))
@@ -564,7 +559,7 @@ impl Radio {
     fn test_radio_cwm(&self) {
         self.frontend_client.map(|client| client.bypass());
 
-        let mut cmd_cwm = prop::CommandTxTest {
+        let cmd_cwm = prop::CommandTxTest {
             command_no: 0x808,
             status: 0,
             p_nextop: 0,
@@ -597,7 +592,6 @@ impl Radio {
             end_time: 0x00000000,
         };
 
-        RadioCommand::guard(&mut cmd_cwm);
         self.rfc.send_async(&cmd_cwm);
         //.and_then(|_| self.rfc.wait(&cmd_cwm))
         //.ok();
@@ -610,7 +604,7 @@ impl Radio {
         tx_20_overrides: u32,
         tx_power: u16,
     ) {
-        let mut setup_cmd = prop::CommandRadioDivSetup {
+        let setup_cmd = prop::CommandRadioDivSetup {
             command_no: 0x3807,
             status: 0,
             p_nextop: 0,
@@ -666,7 +660,6 @@ impl Radio {
             reg_override_tx_std: tx_std_overrides,
             reg_override_tx_20: tx_20_overrides,
         };
-        RadioCommand::guard(&mut setup_cmd);
 
         self.rfc
             .send_sync(&setup_cmd)
@@ -953,7 +946,7 @@ impl rfcore::RadioConfig for Radio {
     }
 
     fn set_frequency(&self, frequency: u16) -> ReturnCode {
-        let mut cmd_fs = prop::CommandFS {
+        let cmd_fs = prop::CommandFS {
             command_no: 0x0803,
             status: 0,
             p_nextop: 0,
@@ -978,7 +971,6 @@ impl rfcore::RadioConfig for Radio {
             dummy3: 0x0000,
         };
 
-        RadioCommand::guard(&mut cmd_fs);
 
         if self
             .rfc

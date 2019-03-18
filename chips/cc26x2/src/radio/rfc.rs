@@ -312,7 +312,7 @@ impl RFCore {
 
         // Add disable power domain and clocks
 
-        let mut fs_down = prop::CommandFSPowerdown {
+        let fs_down = prop::CommandFSPowerdown {
             command_no: 0x080D,
             status: 0,
             p_nextop: 0,
@@ -325,7 +325,6 @@ impl RFCore {
             },
         };
 
-        cmd::RadioCommand::guard(&mut fs_down);
 
         self.send_sync(&fs_down)
             .and_then(|_| self.wait(&fs_down))
@@ -343,7 +342,7 @@ impl RFCore {
         tx_20_overrides: u32,
         tx_power: u16,
     ) {
-        let mut setup_cmd = prop::CommandRadioDivSetup {
+        let setup_cmd = prop::CommandRadioDivSetup {
             command_no: 0x3807,
             status: 0,
             p_nextop: 0,
@@ -399,7 +398,6 @@ impl RFCore {
             reg_override_tx_std: tx_std_overrides,
             reg_override_tx_20: tx_20_overrides,
         };
-        cmd::RadioCommand::guard(&mut setup_cmd);
 
         self.send_sync(&setup_cmd)
             .and_then(|_| self.wait(&setup_cmd))
@@ -407,7 +405,7 @@ impl RFCore {
     }
 
     pub fn start_rat(&self) {
-        let mut rat_cmd = prop::CommandSyncRat {
+        let rat_cmd = prop::CommandSyncRat {
             command_no: 0x080A,
             status: 0,
             p_nextop: 0,
@@ -422,7 +420,6 @@ impl RFCore {
             rat0: self.rat.get(),
         };
 
-        cmd::RadioCommand::guard(&mut rat_cmd);
 
         self.send_sync(&rat_cmd)
             .and_then(|_| self.wait(&rat_cmd))
@@ -431,7 +428,7 @@ impl RFCore {
     }
 
     pub fn stop_rat(&self) -> ReturnCode {
-        let mut rat_cmd = prop::CommandSyncRat {
+        let rat_cmd = prop::CommandSyncRat {
             command_no: 0x0809,
             status: 0,
             p_nextop: 0,
@@ -446,7 +443,6 @@ impl RFCore {
             rat0: self.rat.get(),
         };
 
-        cmd::RadioCommand::guard(&mut rat_cmd);
 
         let ret = self
             .send_sync(&rat_cmd)

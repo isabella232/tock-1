@@ -60,6 +60,8 @@ pub struct DirectCommand {
     pub params: u16,
 }
 
+unsafe impl RadioCommand for DirectCommand {}
+
 impl DirectCommand {
     pub const fn new(command_no: u16, params: u16) -> DirectCommand {
         DirectCommand { command_no, params }
@@ -84,15 +86,11 @@ pub struct AddDataEntry {
     pub p_entry: u32,
 }
 
-unsafe impl RadioCommand for AddDataEntry {
-    fn guard(&mut self) {}
-}
+unsafe impl RadioCommand for AddDataEntry {}
 
 // Command and parameters for radio setup
 
-pub unsafe trait RadioCommand {
-    fn guard(&mut self);
-}
+pub unsafe trait RadioCommand {}
 
 pub mod prop_commands {
     #![allow(unused)]
@@ -238,9 +236,7 @@ pub mod prop_commands {
         pub reg_override_tx_20: u32,
     }
 
-    unsafe impl RadioCommand for CommandRadioDivSetup {
-        fn guard(&mut self) {}
-    }
+    unsafe impl RadioCommand for CommandRadioDivSetup {}
 
     #[repr(C)]
     pub struct CommandRadioSetup {
@@ -273,9 +269,7 @@ pub mod prop_commands {
         pub rat0: u32,
     }
 
-    unsafe impl RadioCommand for CommandSyncRat {
-        fn guard(&mut self) {}
-    }
+    unsafe impl RadioCommand for CommandSyncRat {}
 
     #[repr(C)]
     #[derive(Copy, Clone)]
@@ -292,9 +286,7 @@ pub mod prop_commands {
         pub packet_pointer: u32,
     }
 
-    unsafe impl RadioCommand for CommandTx {
-        fn guard(&mut self) {}
-    }
+    unsafe impl RadioCommand for CommandTx {}
 
     // Custom FS
     #[repr(C)]
@@ -315,9 +307,7 @@ pub mod prop_commands {
         pub dummy3: u16,
     }
 
-    unsafe impl RadioCommand for CommandFS {
-        fn guard(&mut self) {}
-    }
+    unsafe impl RadioCommand for CommandFS {}
 
     #[repr(C)]
     pub struct CommandFSPowerdown {
@@ -329,9 +319,7 @@ pub mod prop_commands {
         pub condition: RfcCondition,
     }
 
-    unsafe impl RadioCommand for CommandFSPowerdown {
-        fn guard(&mut self) {}
-    }
+    unsafe impl RadioCommand for CommandFSPowerdown {}
 
     #[repr(C)]
     pub struct CommandRx {
@@ -354,9 +342,7 @@ pub mod prop_commands {
         pub _rx_sniff: [u8; 14],
     }
 
-    unsafe impl RadioCommand for CommandRx {
-        fn guard(&mut self) {}
-    }
+    unsafe impl RadioCommand for CommandRx {}
 
     #[repr(C)]
     pub struct CommandRxAdv {
@@ -382,9 +368,7 @@ pub mod prop_commands {
         pub _rx_sniff: [u8; 14],
     }
 
-    unsafe impl RadioCommand for CommandRxAdv {
-        fn guard(&mut self) {}
-    }
+    unsafe impl RadioCommand for CommandRxAdv {}
 
     #[repr(C)]
     pub struct CommandTxTest {
@@ -403,7 +387,5 @@ pub mod prop_commands {
         pub end_time: u32,
     }
 
-    unsafe impl RadioCommand for CommandTxTest {
-        fn guard(&mut self) {}
-    }
+    unsafe impl RadioCommand for CommandTxTest {}
 }
