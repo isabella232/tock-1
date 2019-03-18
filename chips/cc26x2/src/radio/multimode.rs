@@ -186,8 +186,7 @@ impl Radio {
 
             RadioCommand::guard(cmd);
             self.rfc
-                .send_sync(cmd)
-                .and_then(|_| self.rfc.wait(cmd))
+                .send_async(cmd)
                 .ok();
         });
 
