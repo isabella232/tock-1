@@ -1,11 +1,11 @@
 use crate::chip::SleepMode;
-use crate::peripheral_manager::PowerClient;
-use crate::enum_primitive::cast::{FromPrimitive};
+use crate::enum_primitive::cast::FromPrimitive;
 use crate::osc;
+use crate::peripheral_manager::PowerClient;
 use crate::radio::commands as cmd;
 use crate::radio::commands::{
-    prop_commands as prop, DirectCommand, RfcCondition, RfcTrigger, CWM_RFPARAMS,
-    LR_RFPARAMS, TX_20_PARAMS, TX_STD_PARAMS_10, TX_STD_PARAMS_2, TX_STD_PARAMS_9,
+    prop_commands as prop, DirectCommand, RfcCondition, RfcTrigger, CWM_RFPARAMS, LR_RFPARAMS,
+    TX_20_PARAMS, TX_STD_PARAMS_10, TX_STD_PARAMS_2, TX_STD_PARAMS_9,
 };
 use crate::radio::queue;
 use crate::radio::rfc;
@@ -184,8 +184,8 @@ impl Radio {
             cmd.sync_word = 0x00000000;
             cmd.packet_pointer = p_packet;
 
-            self.rfc
-                .send_async(cmd)
+            self.rfc.send_async(cmd)
+                .and_then(|_| self.rfc.wait(cmd))
                 .ok();
         });
 
@@ -970,7 +970,6 @@ impl rfcore::RadioConfig for Radio {
             dummy2: 0x00,
             dummy3: 0x0000,
         };
-
 
         if self.rfc.send_async(&cmd_fs).is_ok() {
             return ReturnCode::SUCCESS;

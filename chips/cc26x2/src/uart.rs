@@ -125,7 +125,7 @@ struct Transaction {
     length: usize,
     /// The index of the byte currently being sent
     index: usize,
-    newline: bool
+    newline: bool,
 }
 
 pub struct UART<'a> {
@@ -155,7 +155,6 @@ macro_rules! uart_nvic {
                             rx.buffer[rx.index] = b'\0';
                             rx.index += 1;
                         }
-                        
                     }
                 });
 
@@ -237,30 +236,29 @@ impl<'a> UART<'a> {
 
     fn enable_interrupts(&self) {
         // set only interrupts used
-        self.registers.imsc.modify(
-            Interrupts::TX::SET
-                + Interrupts::END_OF_TRANSMISSION::SET,
-        );
+        self.registers
+            .imsc
+            .modify(Interrupts::TX::SET + Interrupts::END_OF_TRANSMISSION::SET);
 
-        self.registers.ifls.modify(FifoLevelSelect::TXSEL::OneEighth);
-        self.registers.ifls.modify(FifoLevelSelect::RXSEL::OneEighth);
+        self.registers
+            .ifls
+            .modify(FifoLevelSelect::TXSEL::OneEighth);
+        self.registers
+            .ifls
+            .modify(FifoLevelSelect::RXSEL::OneEighth);
     }
 
     /// Clears all interrupts related to UART.
     pub fn handle_events(&self) {
- 
-
         // Clear interrupts
         self.registers.icr.write(Interrupts::ALL_INTERRUPTS::SET);
 
         self.rx.take().map(|rx| {
             if rx.index == rx.length || rx.newline {
                 self.rx_client.map(move |client| {
-
-                    self.registers.imsc.modify(
-                        Interrupts::RX::CLEAR
-                        + Interrupts::RX_TIMEOUT::CLEAR
-                    );
+                    self.registers
+                        .imsc
+                        .modify(Interrupts::RX::CLEAR + Interrupts::RX_TIMEOUT::CLEAR);
                     client.received_buffer(
                         rx.buffer,
                         rx.index,
@@ -355,7 +353,6 @@ impl<'a> uart::Configure for UART<'a> {
             .write(Control::UART_ENABLE::SET + Control::RX_ENABLE::SET + Control::TX_ENABLE::SET);
 
         ReturnCode::SUCCESS
-
     }
 }
 
@@ -375,7 +372,6 @@ impl<'a> uart::Transmit<'a> for UART<'a> {
         } else if self.tx.is_some() {
             (ReturnCode::EBUSY, Some(buffer))
         } else {
-            
             // we will send one byte, causing EOT interrupt
             if self.tx_fifo_not_full() {
                 self.send_byte(buffer[0]);
@@ -385,7 +381,7 @@ impl<'a> uart::Transmit<'a> for UART<'a> {
                 buffer: buffer,
                 length: len,
                 index: 1,
-                newline: false
+                newline: false,
             });
             (ReturnCode::SUCCESS, None)
         }
@@ -424,17 +420,15 @@ impl<'a> uart::Receive<'a> for UART<'a> {
         } else if self.rx.is_some() || self.receiving_word.get() {
             (ReturnCode::EBUSY, Some(buffer))
         } else {
-
-            self.registers.imsc.modify(
-                Interrupts::RX::SET
-                    + Interrupts::RX_TIMEOUT::SET
-            );
+            self.registers
+                .imsc
+                .modify(Interrupts::RX::SET + Interrupts::RX_TIMEOUT::SET);
 
             self.rx.put(Transaction {
                 buffer: buffer,
                 length: len,
                 index: 0,
-                newline: false
+                newline: false,
             });
             (ReturnCode::SUCCESS, None)
         }
