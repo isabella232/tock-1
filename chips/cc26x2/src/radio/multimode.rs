@@ -186,6 +186,7 @@ impl Radio {
 
             self.rfc
                 .send_async(cmd)
+                .and_then(|_| self.rfc.wait(cmd))
                 .ok();
         });
 
