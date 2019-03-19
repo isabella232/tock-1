@@ -31,10 +31,9 @@ pub enum COMMAND {
 }
 
 
-const RX_BUF_LEN: usize = 64;
+const RX_BUF_LEN: usize = 128;
 pub static mut TX_BUF: [u8; 64] = [0; 64];
 pub static mut RX_BUF: [u8; RX_BUF_LEN] = [0; RX_BUF_LEN];
-pub static mut RX_BUF1: [u8; RX_BUF_LEN] = [0; RX_BUF_LEN];
 
 #[derive(Copy, Clone)]
 enum State {
