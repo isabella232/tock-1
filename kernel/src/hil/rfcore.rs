@@ -52,7 +52,7 @@ pub trait RadioConfig {
     // fn get_rat_time(&self) -> u32;
 
     fn set_tx_power(&self, power: u16) -> ReturnCode;
-    fn set_frequency(&self, frequency: u16) -> ReturnCode;
+    fn set_frequency(&self, frequency: u16, fract_frequency: u16) -> ReturnCode;
     fn config_commit(&self) -> ReturnCode;
 }
 

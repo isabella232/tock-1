@@ -62,6 +62,7 @@ pub const FREQ_DEVIATIONS: [u16; 26] = [
     0xB334, 0xBD67, 0xC79A, 0xD200, 0xDC34, 0xE134, 0xEB9A, 0xF5CD,
 ];
 
+#[derive(Copy, Clone, Default)]
 pub struct ChannelParams {
     pub center_frequency: u16,
     pub frequency: u16,
@@ -85,5 +86,3 @@ impl ChannelParams {
         }
     } 
 }
-
-

@@ -945,7 +945,7 @@ impl rfcore::RadioConfig for Radio {
         }
     }
 
-    fn set_frequency(&self, frequency: u16) -> ReturnCode {
+    fn set_frequency(&self, frequency: u16, fract_freq: u16) -> ReturnCode {
         let cmd_fs = prop::CommandFS {
             command_no: 0x0803,
             status: 0,
@@ -958,7 +958,7 @@ impl rfcore::RadioConfig for Radio {
                 cond
             },
             frequency: frequency,
-            fract_freq: 0x0000,
+            fract_freq: fract_freq,
             synth_conf: {
                 let mut synth = prop::RfcSynthConf(0);
                 synth.set_tx_mode(false);
@@ -972,15 +972,10 @@ impl rfcore::RadioConfig for Radio {
         };
 
 
-        if self
-            .rfc
-            .send_sync(&cmd_fs)
-            .and_then(|_| self.rfc.wait(&cmd_fs))
-            .is_ok()
-        {
-            ReturnCode::SUCCESS
+        if self.rfc.send_async(&cmd_fs).is_ok() {
+            return ReturnCode::SUCCESS;
         } else {
-            ReturnCode::FAIL
+            return ReturnCode::FAIL;
         }
     }
 }
