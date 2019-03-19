@@ -136,19 +136,19 @@ impl Radio {
 
     unsafe fn replace_and_send_tx_buffer(&self, buf: &'static mut [u8], len: usize) {
         self.frontend_client.map(|client| client.enable_pa());
-
+        debug!("send something");
         for i in 0..COMMAND.buf.len() {
             COMMAND.buf[i] = 0;
         }
-
+        debug!("clear cmd buf");
         for i in 0..TX_BUF.len() {
             TX_BUF[i] = 0;
         }
-
+        debug!("clear tx buf");
         for (i, c) in buf.as_ref()[0..len].iter().enumerate() {
             TX_BUF[i] = *c;
         }
-
+        debug!("copy buf");
         self.tx_buf.put(Some(buf));
 
         self.tx_buf.map(|buf| {
@@ -185,10 +185,7 @@ impl Radio {
             cmd.packet_pointer = p_packet;
 
             RadioCommand::guard(cmd);
-            self.rfc
-                .send_async(cmd)
-                .and_then(|_| self.rfc.wait(cmd))
-                .ok();
+            self.rfc.send_async(cmd).ok();
         });
 
         self.frontend_client.map(|client| client.bypass());
