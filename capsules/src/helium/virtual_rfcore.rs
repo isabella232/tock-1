@@ -167,7 +167,6 @@ impl<R: rfcore::Radio> VirtualRadio<'a, R> {
     }
 
     pub fn transmit_packet(&self) {
-        // MUST ENABLE PA BEFORE TRANSMIT OR MIGHT BURN CHIP
         self.tx_payload.take().map_or((), |buf| {
             let (result, rbuf) = self.radio.transmit(buf, self.tx_payload_len.get());
             match result {

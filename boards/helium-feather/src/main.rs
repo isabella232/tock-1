@@ -127,6 +127,12 @@ unsafe fn configure_pins(pin: &Pinmap) {
     cc26x2::gpio::PORT[pin.i2c0_scl].enable_i2c_scl();
     cc26x2::gpio::PORT[pin.i2c0_sda].enable_i2c_sda();
 
+    // cc26x2::gpio::PORT[pin.i2c0_scl].enable_gpio();
+    // cc26x2::gpio::PORT[pin.i2c0_scl].set();
+    // cc26x2::gpio::PORT[pin.i2c0_sda].enable_gpio();
+    // cc26x2::gpio::PORT[pin.i2c0_sda].set();
+
+
     cc26x2::gpio::PORT[pin.red_led].enable_gpio();
     cc26x2::gpio::PORT[pin.green_led].enable_gpio();
 
