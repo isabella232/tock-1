@@ -140,7 +140,7 @@ unsafe fn configure_pins(pin: &Pinmap) {
     cc26x2::gpio::PORT[pin.button1].enable_gpio();
     cc26x2::gpio::PORT[pin.button2].enable_gpio();
 
-    cc26x2::gpio::PORT[pin.on2].enable_gpio();
+    cc26x2::gpio::PORT[pin.on2].make_output();
     cc26x2::gpio::PORT[pin.on2].set();
 
     cc26x2::gpio::PORT[pin.skyworks_csd].enable_gpio();
@@ -454,7 +454,7 @@ pub unsafe fn reset_handler() {
     virtual_device.set_receive_client(radio_driver);
 
     let rfc = &cc26x2::radio::MULTIMODE_RADIO;
-    rfc.run_tests(0, 9);
+    //rfc.run_tests(0, 9);
 
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
 
