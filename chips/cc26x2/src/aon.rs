@@ -273,7 +273,7 @@ impl Aon {
         unsafe { rtc::RTC.sync() };
     }
 
-    pub fn reset(&self){
+    pub fn reset(&self) {
         self.pmctl_regs.reset_ctl.modify(ResetCtl::SYSRESET::SET);
     }
 

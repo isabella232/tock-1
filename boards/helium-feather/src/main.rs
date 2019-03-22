@@ -28,7 +28,6 @@ use kernel::hil::rng::Rng;
 use kernel::hil::uart::Configure;
 #[allow(unused_imports)]
 use kernel::{create_capability, debug, debug_gpio, static_init};
-use kernel::hil::rf_frontend::SE2435L;
 #[macro_use]
 pub mod io;
 
@@ -96,7 +95,7 @@ impl<'a> kernel::Platform for Platform {
 
 static mut HELIUM_BUF: [u8; 240] = [0x00; 240];
 
-mod cc1352p;
+mod cc1352r;
 
 pub struct Pinmap {
     uart0_rx: usize,
@@ -133,20 +132,19 @@ unsafe fn configure_pins(pin: &Pinmap) {
     // cc26x2::gpio::PORT[pin.i2c0_sda].enable_gpio();
     // cc26x2::gpio::PORT[pin.i2c0_sda].set();
 
-
     cc26x2::gpio::PORT[pin.red_led].enable_gpio();
     cc26x2::gpio::PORT[pin.green_led].enable_gpio();
 
     cc26x2::gpio::PORT[pin.button1].enable_gpio();
     cc26x2::gpio::PORT[pin.button2].enable_gpio();
 
-    cc26x2::gpio::PORT[pin.on2].enable_gpio();
+    cc26x2::gpio::PORT[pin.on2].make_output();
     cc26x2::gpio::PORT[pin.on2].set();
 
-    cc26x2::gpio::PORT[pin.skyworks_csd].enable_gpio();
-    cc26x2::gpio::PORT[pin.skyworks_cps].enable_gpio();
-    cc26x2::gpio::PORT[pin.skyworks_ctx].enable_gpio();
-
+    cc26x2::gpio::PORT[pin.skyworks_csd].make_output();
+    cc26x2::gpio::PORT[pin.skyworks_cps].make_output();
+    cc26x2::gpio::PORT[pin.skyworks_ctx].make_output();
+    
     if let Some(rf_2_4) = pin.rf_2_4 {
         cc26x2::gpio::PORT[rf_2_4].enable_24ghz_output();
     }
@@ -156,6 +154,7 @@ unsafe fn configure_pins(pin: &Pinmap) {
     if let Some(rf_subg) = pin.rf_subg {
         cc26x2::gpio::PORT[rf_subg].enable_subg_output();
     }
+    
 }
 
 static mut DRIVER_UART0: capsules::uart::Uart<UartDevice> = capsules::uart::Uart::new(0);
@@ -195,7 +194,7 @@ pub unsafe fn reset_handler() {
 
     let pinmap: &Pinmap;
 
-    pinmap = &cc1352p::PINMAP;
+    pinmap = &cc1352r::PINMAP;
     configure_pins(pinmap);
 
     // LEDs
@@ -401,8 +400,8 @@ pub unsafe fn reset_handler() {
     let sky = static_init!(
         capsules::skyworks_se2435l_r::Sky2435L<'static, cc26x2::gpio::GPIOPin>,
         capsules::skyworks_se2435l_r::Sky2435L::new(
-            &cc26x2::gpio::PORT[pinmap.skyworks_csd],
             &cc26x2::gpio::PORT[pinmap.skyworks_cps],
+            &cc26x2::gpio::PORT[pinmap.skyworks_csd],
             &cc26x2::gpio::PORT[pinmap.skyworks_ctx],
         )
     );

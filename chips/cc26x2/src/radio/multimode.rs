@@ -1,11 +1,11 @@
 use crate::chip::SleepMode;
-use crate::peripheral_manager::PowerClient;
-use crate::enum_primitive::cast::{FromPrimitive};
+use crate::enum_primitive::cast::FromPrimitive;
 use crate::osc;
+use crate::peripheral_manager::PowerClient;
 use crate::radio::commands as cmd;
 use crate::radio::commands::{
-    prop_commands as prop, DirectCommand, RfcCondition, RfcTrigger, CWM_RFPARAMS,
-    LR_RFPARAMS, TX_20_PARAMS, TX_STD_PARAMS_10, TX_STD_PARAMS_2, TX_STD_PARAMS_9,
+    prop_commands as prop, DirectCommand, RfcCondition, RfcTrigger, CWM_RFPARAMS, LR_RFPARAMS,
+    TX_20_PARAMS, TX_STD_PARAMS_10, TX_STD_PARAMS_2, TX_STD_PARAMS_9,
 };
 use crate::radio::queue;
 use crate::radio::rfc;
@@ -105,7 +105,7 @@ impl Radio {
 
         osc::OSC.switch_to_hf_xosc();
 
-        self.set_pa_restriction();
+        //self.set_pa_restriction();
         // Need to match on patches here but for now, just default to genfsk patches
         unsafe {
             let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
@@ -365,7 +365,7 @@ impl Radio {
                                 tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
                             }
                             9 => {
-                                self.tx_power.set(0x3248);
+                                self.tx_power.set(0x38DA);
                                 reg_overrides = CWM_RFPARAMS.as_mut_ptr() as u32;
                                 tx_std_overrides = TX_STD_PARAMS_9.as_mut_ptr() as u32;
                                 tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
@@ -451,7 +451,7 @@ impl Radio {
                 .ok();
         }
 
-        //self.frontend_client.map(|client| client.bypass());
+        self.frontend_client.map(|client| client.bypass());
     }
 
     fn test_radio_rx(&self) {
@@ -968,7 +968,6 @@ impl rfcore::RadioConfig for Radio {
             dummy2: 0x00,
             dummy3: 0x0000,
         };
-
 
         if self.rfc.send_async(&cmd_fs).is_ok() {
             return ReturnCode::SUCCESS;

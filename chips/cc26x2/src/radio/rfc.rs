@@ -325,7 +325,6 @@ impl RFCore {
             },
         };
 
-
         self.send_sync(&fs_down)
             .and_then(|_| self.wait(&fs_down))
             .ok();
@@ -420,7 +419,6 @@ impl RFCore {
             rat0: self.rat.get(),
         };
 
-
         self.send_sync(&rat_cmd)
             .and_then(|_| self.wait(&rat_cmd))
             .ok()
@@ -442,7 +440,6 @@ impl RFCore {
             _reserved: 0,
             rat0: self.rat.get(),
         };
-
 
         let ret = self
             .send_sync(&rat_cmd)

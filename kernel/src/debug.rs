@@ -132,9 +132,6 @@ pub unsafe fn panic_process_info<W: Write>(
     }
 }
 
-
-
-
 use crate::common::registers::{register_bitfields, ReadOnly, ReadWrite};
 use crate::common::StaticRef;
 
@@ -226,7 +223,7 @@ register_bitfields![
 ];
 
 const AON_PMCTL_BASE: StaticRef<AonPmCtlRegisters> =
-    unsafe { StaticRef::new( (0x4009_0000 + 0x28 )as *const AonPmCtlRegisters) };
+    unsafe { StaticRef::new((0x4009_0000 + 0x28) as *const AonPmCtlRegisters) };
 
 /// Blinks a recognizable pattern forever.
 ///
@@ -239,8 +236,6 @@ const AON_PMCTL_BASE: StaticRef<AonPmCtlRegisters> =
 /// one on the top and one on the bottom), thus this method
 /// accepts an array, however most will only need one.
 pub fn panic_blink_forever<L: hil::led::Led>(leds: &mut [&mut L]) -> ! {
-
-
     AON_PMCTL_BASE.reset_ctl.write(ResetCtl::SYSRESET::SET);
 
     leds.iter_mut().for_each(|led| led.init());

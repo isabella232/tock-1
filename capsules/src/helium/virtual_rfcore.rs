@@ -1,5 +1,5 @@
-use crate::helium::framer::FrameInfo;
 use crate::helium::channels::ChannelParams;
+use crate::helium::framer::FrameInfo;
 use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::rfcore;
@@ -84,11 +84,11 @@ pub struct App {
     process_status: Option<RadioState>,
     alarm_data: AlarmData,
 
-    // Channels meta-data 
+    // Channels meta-data
     adv_data: Option<ChannelParams>,
     channel_interval_ms: u32,
     tx_power: u16,
-    
+
     /// The state of an app-specific pseudo random number.
     ///
     /// For example, it can be used for the pseudo-random frequency parameter.
@@ -242,9 +242,10 @@ impl<R: rfcore::Radio> RFCore for VirtualRadio<'a, R> {
         self.radio.set_tx_power(power)
     }
 
-    fn set_frequency(&self) -> ReturnCode { 
+    fn set_frequency(&self) -> ReturnCode {
         let params = self.channel_params.get();
-        self.radio.set_frequency(params.frequency, params.fract_freq)
+        self.radio
+            .set_frequency(params.frequency, params.fract_freq)
     }
     fn transmit(
         &self,

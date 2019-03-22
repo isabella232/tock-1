@@ -11,7 +11,7 @@ pub struct Sky2435L<'a, G: hil::gpio::Pin> {
 
 impl<G: hil::gpio::Pin + hil::gpio::PinCtl> Sky2435L<'a, G> {
     pub fn new(cps: &'a G, csd: &'a G, ctx: &'a G) -> Sky2435L<'a, G> {
-        Sky2435L { cps, csd, ctx}
+        Sky2435L { cps, csd, ctx }
     }
 }
 
