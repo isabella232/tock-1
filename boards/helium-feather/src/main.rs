@@ -144,7 +144,7 @@ unsafe fn configure_pins(pin: &Pinmap) {
     cc26x2::gpio::PORT[pin.skyworks_csd].make_output();
     cc26x2::gpio::PORT[pin.skyworks_cps].make_output();
     cc26x2::gpio::PORT[pin.skyworks_ctx].make_output();
-    
+
     if let Some(rf_2_4) = pin.rf_2_4 {
         cc26x2::gpio::PORT[rf_2_4].enable_24ghz_output();
     }
@@ -154,7 +154,6 @@ unsafe fn configure_pins(pin: &Pinmap) {
     if let Some(rf_subg) = pin.rf_subg {
         cc26x2::gpio::PORT[rf_subg].enable_subg_output();
     }
-    
 }
 
 static mut DRIVER_UART0: capsules::uart::Uart<UartDevice> = capsules::uart::Uart::new(0);
@@ -452,8 +451,8 @@ pub unsafe fn reset_handler() {
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
 
-    let rfc = &cc26x2::radio::MULTIMODE_RADIO;
-    rfc.run_tests(0, 9);
+    //let rfc = &cc26x2::radio::MULTIMODE_RADIO;
+    //rfc.run_tests(0, 9);
 
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
 

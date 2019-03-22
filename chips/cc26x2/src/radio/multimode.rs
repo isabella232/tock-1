@@ -325,7 +325,7 @@ impl Radio {
                                 tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
                             }
                             9 => {
-                                self.tx_power.set(0x3248);
+                                self.tx_power.set(0x38DA);
                                 reg_overrides = LR_RFPARAMS.as_mut_ptr() as u32;
                                 tx_std_overrides = TX_STD_PARAMS_9.as_mut_ptr() as u32;
                                 tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
