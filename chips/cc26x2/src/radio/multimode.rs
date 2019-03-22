@@ -451,7 +451,7 @@ impl Radio {
                 .ok();
         }
 
-        self.frontend_client.map(|client| client.bypass());
+        //self.frontend_client.map(|client| client.bypass());
     }
 
     fn test_radio_rx(&self) {
@@ -602,7 +602,7 @@ impl Radio {
         tx_20_overrides: u32,
         tx_power: u16,
     ) {
-        let setup_cmd = prop::CommandRadioDivSetup {
+        let setup_cmd = prop::CommandRadioDivSetup_P {
             command_no: 0x3807,
             status: 0,
             p_nextop: 0,

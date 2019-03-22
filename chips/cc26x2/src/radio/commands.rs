@@ -214,7 +214,7 @@ pub mod prop_commands {
     // Radio Operation Commands
     #[repr(C)]
     #[derive(Copy, Clone)]
-    pub struct CommandRadioDivSetup {
+    pub struct CommandRadioDivSetup_P {
         pub command_no: u16, // 0x3807
         pub status: u16,
         pub p_nextop: u32,
@@ -236,7 +236,31 @@ pub mod prop_commands {
         pub reg_override_tx_20: u32,
     }
 
-    unsafe impl RadioCommand for CommandRadioDivSetup {}
+    unsafe impl RadioCommand for CommandRadioDivSetup_P {}
+    // Radio Operation Commands
+    #[repr(C)]
+    #[derive(Copy, Clone)]
+    pub struct CommandRadioDivSetup_R {
+        pub command_no: u16, // 0x3807
+        pub status: u16,
+        pub p_nextop: u32,
+        pub start_time: u32,
+        pub start_trigger: u8,
+        pub condition: RfcCondition,
+        pub modulation: RfcModulation,
+        pub symbol_rate: RfcSymbolRate,
+        pub rx_bandwidth: u8,
+        pub preamble_conf: RfcPreambleConf,
+        pub format_conf: RfcFormatConf,
+        pub config: RfcSetupConfig,
+        pub tx_power: u16,
+        pub reg_overrides: u32,
+        pub center_freq: u16,
+        pub int_freq: u16,
+        pub lo_divider: u8,
+    }
+
+    unsafe impl RadioCommand for CommandRadioDivSetup_R {}
 
     #[repr(C)]
     pub struct CommandRadioSetup {

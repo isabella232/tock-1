@@ -28,7 +28,7 @@ use kernel::hil::rng::Rng;
 use kernel::hil::uart::Configure;
 #[allow(unused_imports)]
 use kernel::{create_capability, debug, debug_gpio, static_init};
-
+use kernel::hil::rf_frontend::SE2435L;
 #[macro_use]
 pub mod io;
 
@@ -109,6 +109,7 @@ pub struct Pinmap {
     green_led: usize,
     button1: usize,
     button2: usize,
+    on2: usize,
     skyworks_csd: usize,
     skyworks_cps: usize,
     skyworks_ctx: usize,
@@ -139,6 +140,7 @@ unsafe fn configure_pins(pin: &Pinmap) {
     cc26x2::gpio::PORT[pin.button1].enable_gpio();
     cc26x2::gpio::PORT[pin.button2].enable_gpio();
 
+    cc26x2::gpio::PORT[pin.on2].enable_gpio();
     cc26x2::gpio::PORT[pin.skyworks_csd].enable_gpio();
     cc26x2::gpio::PORT[pin.skyworks_cps].enable_gpio();
     cc26x2::gpio::PORT[pin.skyworks_ctx].enable_gpio();
@@ -400,6 +402,7 @@ pub unsafe fn reset_handler() {
             &cc26x2::gpio::PORT[pinmap.skyworks_csd],
             &cc26x2::gpio::PORT[pinmap.skyworks_cps],
             &cc26x2::gpio::PORT[pinmap.skyworks_ctx],
+            &cc26x2::gpio::PORT[pinmap.on2],
         )
     );
 
@@ -449,8 +452,9 @@ pub unsafe fn reset_handler() {
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
 
-    //let rfc = &cc26x2::radio::MULTIMODE_RADIO;
-    //rfc.run_tests(0);
+    sky.power_on();
+    let rfc = &cc26x2::radio::MULTIMODE_RADIO;
+    rfc.run_tests(0, 9);
 
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
 

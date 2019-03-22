@@ -342,7 +342,7 @@ impl RFCore {
         tx_20_overrides: u32,
         tx_power: u16,
     ) {
-        let setup_cmd = prop::CommandRadioDivSetup {
+        let setup_cmd = prop::CommandRadioDivSetup_R {
             command_no: 0x3807,
             status: 0,
             p_nextop: 0,
@@ -395,8 +395,8 @@ impl RFCore {
             center_freq: 0x038B,
             int_freq: 0x8000,
             lo_divider: 0x05,
-            reg_override_tx_std: tx_std_overrides,
-            reg_override_tx_20: tx_20_overrides,
+            //reg_override_tx_std: tx_std_overrides,
+            //reg_override_tx_20: tx_20_overrides,
         };
 
         self.send_sync(&setup_cmd)
