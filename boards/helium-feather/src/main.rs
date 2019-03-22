@@ -130,8 +130,8 @@ unsafe fn configure_pins(pin: &Pinmap) {
     cc26x2::gpio::PORT[pin.red_led].enable_gpio();
     cc26x2::gpio::PORT[pin.green_led].enable_gpio();
 
-    cc26x2::gpio::PORT[pin.button1].enable_gpio();
-    cc26x2::gpio::PORT[pin.button2].enable_gpio();
+    cc26x2::gpio::PORT[pin.button1].make_input();
+    cc26x2::gpio::PORT[pin.button2].make_input();
 
     cc26x2::gpio::PORT[pin.skyworks_csd].enable_gpio();
     cc26x2::gpio::PORT[pin.skyworks_cps].enable_gpio();
@@ -210,36 +210,6 @@ pub unsafe fn reset_handler() {
         capsules::led::LED::new(led_pins)
     );
 
-    // BUTTONS
-    let button_pins = static_init!(
-        [(&'static cc26x2::gpio::GPIOPin, capsules::button::GpioMode); 2],
-        [
-            (
-                &cc26x2::gpio::PORT[pinmap.button1],
-                capsules::button::GpioMode::LowWhenPressed
-            ), // Button 1
-            (
-                &cc26x2::gpio::PORT[pinmap.button2],
-                capsules::button::GpioMode::LowWhenPressed
-            ), // Button 2
-        ]
-    );
-    let button = static_init!(
-        capsules::button::Button<'static, cc26x2::gpio::GPIOPin>,
-        capsules::button::Button::new(
-            button_pins,
-            board_kernel.create_grant(&memory_allocation_capability)
-        )
-    );
-
-    let mut count = 0;
-    for &(btn, _) in button_pins.iter() {
-        btn.set_input_mode(hil::gpio::InputMode::PullUp);
-        btn.enable_interrupt(count, InterruptMode::FallingEdge);
-        btn.set_client(button);
-        count += 1;
-    }
-
     // UART
     cc26x2::uart::UART0.initialize();
 
@@ -289,6 +259,36 @@ pub unsafe fn reset_handler() {
         kernel::debug::DebugWriterWrapper::new(debugger)
     );
     kernel::debug::set_debug_writer_wrapper(debug_wrapper);
+
+        // BUTTONS
+    let button_pins = static_init!(
+        [(&'static cc26x2::gpio::GPIOPin, capsules::button::GpioMode); 2],
+        [
+            (
+                &cc26x2::gpio::PORT[pinmap.button1],
+                capsules::button::GpioMode::HighWhenPressed
+            ), // Button 1
+            (
+                &cc26x2::gpio::PORT[pinmap.button2],
+                capsules::button::GpioMode::HighWhenPressed
+            ), // Button 2
+        ]
+    );
+    let button = static_init!(
+        capsules::button::Button<'static, cc26x2::gpio::GPIOPin>,
+        capsules::button::Button::new(
+            button_pins,
+            board_kernel.create_grant(&memory_allocation_capability)
+        )
+    );
+
+    let mut count = 0;
+    for &(btn, _) in button_pins.iter() {
+        btn.set_input_mode(hil::gpio::InputMode::PullDown);
+        btn.enable_interrupt(count, InterruptMode::RisingEdge);
+        btn.set_client(button);
+        count += 1;
+    }
 
     let uart_uarts = static_init!(
         [&'static mut capsules::uart::Uart<UartDevice>; 1],

@@ -256,8 +256,8 @@ impl<G: hil::gpio::Pin + hil::gpio::PinCtl> Client for Button<'a, G> {
         // It's possible we got an interrupt for a process that has since died
         // (and didn't unregister the interrupt). Lazily disable interrupts for
         // this button if so.
-        if interrupt_count.get() == 0 {
-            self.pins[pin_num].0.disable_interrupt();
-        }
+        // if interrupt_count.get() == 0 {
+        //     self.pins[pin_num].0.disable_interrupt();
+        // }
     }
 }

@@ -70,7 +70,9 @@ impl kernel::Chip for Cc26X2 {
             while let Some(event) = events::next_pending() {
                 events::clear_event_flag(event);
                 match event {
-                    EVENT_PRIORITY::GPIO => gpio::PORT.handle_events(),
+                    EVENT_PRIORITY::GPIO => {
+                        gpio::PORT.handle_events();
+                    },
                     EVENT_PRIORITY::AON_RTC => rtc::RTC.handle_events(),
                     EVENT_PRIORITY::I2C0 => i2c::I2C0.handle_events(),
                     EVENT_PRIORITY::UART0 => uart::UART0.handle_events(),

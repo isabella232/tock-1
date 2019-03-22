@@ -68,6 +68,7 @@ impl GPIOPin {
 
     pub fn handle_interrupt(&self) {
         self.client.map(|client| {
+            debug!("firing client");
             client.fired(self.client_data.get());
         });
     }
@@ -143,7 +144,7 @@ impl GPIOPin {
         pin_ioc.write(
             port_id
             + ioc::Config::DRIVE_STRENGTH::Auto
-            + ioc::Config::PULL::None
+            + ioc::Config::PULL::Up
             + ioc::Config::SLEW_RED::CLEAR
             + ioc::Config::HYST_EN::CLEAR
             + ioc::Config::IO_MODE::OpenDrain   // this is the special setting for I2C
@@ -385,7 +386,7 @@ impl Port {
         let mut evflags = regs.evflags.get();
         // Clear all interrupts by setting their bits to 1 in evflags
         regs.evflags.set(evflags);
-
+        
         let mut count = 0;
         while evflags != 0 && count < self.pins.len() {
             if (evflags & 0b1) != 0 {
