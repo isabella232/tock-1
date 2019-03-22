@@ -7,12 +7,11 @@ pub struct Sky2435L<'a, G: hil::gpio::Pin> {
     cps: &'a G,
     csd: &'a G,
     ctx: &'a G,
-    on2: &'a G,
 }
 
 impl<G: hil::gpio::Pin + hil::gpio::PinCtl> Sky2435L<'a, G> {
-    pub fn new(cps: &'a G, csd: &'a G, ctx: &'a G, on2: &'a G) -> Sky2435L<'a, G> {
-        Sky2435L { cps, csd, ctx , on2}
+    pub fn new(cps: &'a G, csd: &'a G, ctx: &'a G) -> Sky2435L<'a, G> {
+        Sky2435L { cps, csd, ctx}
     }
 }
 
@@ -42,16 +41,6 @@ impl<G: hil::gpio::Pin + hil::gpio::PinCtl> SE2435L for Sky2435L<'a, G> {
         self.cps.set();
         self.csd.set();
         self.ctx.clear();
-        kernel::ReturnCode::SUCCESS
-    }
-
-    fn power_on(&self) -> kernel::ReturnCode {
-        self.on2.set();
-        kernel::ReturnCode::SUCCESS
-    }
-
-    fn power_off(&self) -> kernel::ReturnCode {
-        self.on2.clear();
         kernel::ReturnCode::SUCCESS
     }
 }

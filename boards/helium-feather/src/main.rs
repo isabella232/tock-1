@@ -141,6 +141,8 @@ unsafe fn configure_pins(pin: &Pinmap) {
     cc26x2::gpio::PORT[pin.button2].enable_gpio();
 
     cc26x2::gpio::PORT[pin.on2].enable_gpio();
+    cc26x2::gpio::PORT[pin.on2].set();
+
     cc26x2::gpio::PORT[pin.skyworks_csd].enable_gpio();
     cc26x2::gpio::PORT[pin.skyworks_cps].enable_gpio();
     cc26x2::gpio::PORT[pin.skyworks_ctx].enable_gpio();
@@ -402,7 +404,6 @@ pub unsafe fn reset_handler() {
             &cc26x2::gpio::PORT[pinmap.skyworks_csd],
             &cc26x2::gpio::PORT[pinmap.skyworks_cps],
             &cc26x2::gpio::PORT[pinmap.skyworks_ctx],
-            &cc26x2::gpio::PORT[pinmap.on2],
         )
     );
 
@@ -452,7 +453,6 @@ pub unsafe fn reset_handler() {
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
 
-    sky.power_on();
     let rfc = &cc26x2::radio::MULTIMODE_RADIO;
     rfc.run_tests(0, 9);
 
