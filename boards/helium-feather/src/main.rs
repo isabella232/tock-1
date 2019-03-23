@@ -434,6 +434,7 @@ pub unsafe fn reset_handler() {
         >,
         helium::framer::Framer::new(radio)
     );
+
     // Set client for underlying radio as virtual device
     radio.set_transmit_client(virtual_device);
     radio.set_receive_client(virtual_device);
@@ -451,7 +452,7 @@ pub unsafe fn reset_handler() {
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
 
-    //let rfc = &cc26x2::radio::MULTIMODE_RADIO;
+    let rfc = &cc26x2::radio::MULTIMODE_RADIO;
     //rfc.run_tests(0, 9);
 
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
