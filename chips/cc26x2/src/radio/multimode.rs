@@ -109,7 +109,7 @@ impl Radio {
         // Need to match on patches here but for now, just default to genfsk patches
         unsafe {
             let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
-            let tx_std_overrides: u32 = TX_STD_PARAMS_2.as_mut_ptr() as u32;
+            let tx_std_overrides: u32 = TX_STD_PARAMS_9.as_mut_ptr() as u32;
             let tx_20_overrides: u32 = TX_20_PARAMS.as_mut_ptr() as u32;
             self.rfc.setup(
                 reg_overrides,
@@ -136,19 +136,16 @@ impl Radio {
 
     unsafe fn replace_and_send_tx_buffer(&self, buf: &'static mut [u8], len: usize) {
         self.frontend_client.map(|client| client.enable_pa());
-        debug!("send something");
+
         for i in 0..COMMAND.buf.len() {
             COMMAND.buf[i] = 0;
         }
-        debug!("clear cmd buf");
         for i in 0..TX_BUF.len() {
             TX_BUF[i] = 0;
         }
-        debug!("clear tx buf");
         for (i, c) in buf.as_ref()[0..len].iter().enumerate() {
             TX_BUF[i] = *c;
         }
-        debug!("copy buf");
         self.tx_buf.put(Some(buf));
 
         self.tx_buf.map(|buf| {
@@ -186,8 +183,6 @@ impl Radio {
 
             self.rfc.send_async(cmd).ok();
         });
-
-        self.frontend_client.map(|client| client.bypass());
     }
 
     unsafe fn start_rx_cmd(&self) -> ReturnCode {
@@ -256,7 +251,6 @@ impl Radio {
             .and_then(|_| self.rfc.wait(cmd))
             .ok();
 
-        self.frontend_client.map(|client| client.bypass());
         // TODO: Need to do some command success or fail checking return code here
         ReturnCode::SUCCESS
     }
@@ -518,8 +512,6 @@ impl Radio {
                 .and_then(|_| self.rfc.wait(cmd))
                 .ok();
         }
-
-        self.frontend_client.map(|client| client.bypass());
     }
 
     fn set_radio_fs(&self) {
