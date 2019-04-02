@@ -84,7 +84,7 @@ impl Radio {
             can_sleep: Cell::new(false),
             tx_buf: TakeCell::empty(),
             rx_buf: TakeCell::empty(),
-            tx_power: Cell::new(0x38DA),
+            tx_power: Cell::new(0x6EE1),
             pa_type: Cell::new(PaType::None),
         }
     }
@@ -105,7 +105,6 @@ impl Radio {
 
         osc::OSC.switch_to_hf_xosc();
 
-        //self.set_pa_restriction();
         // Need to match on patches here but for now, just default to genfsk patches
         unsafe {
             let reg_overrides: u32 = LR_RFPARAMS.as_mut_ptr() as u32;
@@ -118,11 +117,12 @@ impl Radio {
                 self.tx_power.get(),
             );
         }
+        
+        self.frontend_client.map(|client| client.bypass());
 
         self.set_radio_fs();
         self.power_client
             .map(|client| client.power_mode_changed(true));
-        self.frontend_client.map(|client| client.bypass());
     }
 
     pub fn power_down(&self) {
@@ -273,7 +273,7 @@ impl Radio {
                         let tx_20_overrides: u32;
                         match power {
                             2 => {
-                                self.tx_power.set(0x12C9);
+                                self.tx_power.set(0x12CA);
                                 reg_overrides = LR_RFPARAMS.as_mut_ptr() as u32;
                                 tx_std_overrides = TX_STD_PARAMS_2.as_mut_ptr() as u32;
                                 tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
@@ -285,6 +285,7 @@ impl Radio {
                                 tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
                             }
                             10 => {
+                                self.tx_power.set(0x6EE1);
                                 reg_overrides = LR_RFPARAMS.as_mut_ptr() as u32;
                                 tx_std_overrides = TX_STD_PARAMS_10.as_mut_ptr() as u32;
                                 tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
@@ -313,7 +314,7 @@ impl Radio {
                         let tx_20_overrides: u32;
                         match power {
                             2 => {
-                                self.tx_power.set(0x12C9);
+                                self.tx_power.set(0x12CA);
                                 reg_overrides = LR_RFPARAMS.as_mut_ptr() as u32;
                                 tx_std_overrides = TX_STD_PARAMS_2.as_mut_ptr() as u32;
                                 tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
@@ -325,6 +326,7 @@ impl Radio {
                                 tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
                             }
                             10 => {
+                                self.tx_power.set(0x6EE1);
                                 reg_overrides = LR_RFPARAMS.as_mut_ptr() as u32;
                                 tx_std_overrides = TX_STD_PARAMS_10.as_mut_ptr() as u32;
                                 tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
@@ -392,6 +394,7 @@ impl Radio {
 
     fn test_radio_tx(&self) {
         self.frontend_client.map(|client| client.enable_pa());
+
         let mut packet = TEST_PAYLOAD;
         let mut seq: u8 = 0;
         for p in packet.iter_mut() {
@@ -644,7 +647,7 @@ impl Radio {
             },
             tx_power: tx_power,
             reg_overrides: reg_overrides,
-            center_freq: 0x0395,
+            center_freq: 0x038B,
             int_freq: 0x8000,
             lo_divider: 0x05,
             reg_override_tx_std: tx_std_overrides,
@@ -685,6 +688,8 @@ impl rfc::RFCoreClient for Radio {
             self.schedule_powerdown.set(false);
             // do sleep mode here later
         }
+        
+        self.frontend_client.map(|client| client.bypass());
 
         self.tx_buf.take().map_or(ReturnCode::ERESERVE, |tbuf| {
             self.tx_client
@@ -906,7 +911,6 @@ impl rfcore::RadioConfig for Radio {
         // Send direct command for TX power change
         // TODO put some guards around the possible range for TX power
         self.tx_power.set(power);
-        self.set_pa_restriction();
         let command = DirectCommand::new(0x0010, self.tx_power.get());
         if self.rfc.send_direct(&command).is_ok() {
             return ReturnCode::SUCCESS;
