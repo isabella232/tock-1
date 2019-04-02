@@ -99,7 +99,7 @@ impl Radio {
 
         osc::OSC.request_switch_to_hf_xosc();
 
-        self.rfc.enable();
+        self.rfc.enable(0);
 
         self.rfc.start_rat();
 
@@ -117,7 +117,7 @@ impl Radio {
                 self.tx_power.get(),
             );
         }
-        
+
         self.frontend_client.map(|client| client.bypass());
 
         self.set_radio_fs();
@@ -259,7 +259,7 @@ impl Radio {
         self.rfc.set_mode(rfc::RfcMode::BLE);
 
         osc::OSC.request_switch_to_hf_xosc();
-        self.rfc.enable();
+        self.rfc.enable(test);
         self.rfc.start_rat();
 
         osc::OSC.switch_to_hf_xosc();
@@ -355,7 +355,7 @@ impl Radio {
                         let tx_20_overrides: u32;
                         match power {
                             2 => {
-                                self.tx_power.set(0x12C9);
+                                self.tx_power.set(0x12CA);
                                 reg_overrides = CWM_RFPARAMS.as_mut_ptr() as u32;
                                 tx_std_overrides = TX_STD_PARAMS_2.as_mut_ptr() as u32;
                                 tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
@@ -367,6 +367,7 @@ impl Radio {
                                 tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
                             }
                             10 => {
+                                self.tx_power.set(0x6EE1);
                                 reg_overrides = CWM_RFPARAMS.as_mut_ptr() as u32;
                                 tx_std_overrides = TX_STD_PARAMS_10.as_mut_ptr() as u32;
                                 tx_20_overrides = TX_20_PARAMS.as_mut_ptr() as u32;
@@ -585,9 +586,10 @@ impl Radio {
             end_time: 0x00000000,
         };
 
-        self.rfc.send_async(&cmd_cwm);
-        //.and_then(|_| self.rfc.wait(&cmd_cwm))
-        //.ok();
+        self.rfc
+            .send_sync(&cmd_cwm)
+            .and_then(|_| self.rfc.wait(&cmd_cwm))
+            .ok();
     }
     // Call commands to setup RFCore with optional register overrides and power output
     pub fn setup_cwm(
@@ -688,7 +690,7 @@ impl rfc::RFCoreClient for Radio {
             self.schedule_powerdown.set(false);
             // do sleep mode here later
         }
-        
+
         self.frontend_client.map(|client| client.bypass());
 
         self.tx_buf.take().map_or(ReturnCode::ERESERVE, |tbuf| {

@@ -23,6 +23,7 @@
 use crate::prcm;
 use crate::radio::commands as cmd;
 use crate::radio::commands::prop_commands as prop;
+use crate::radio::patches::patch_cpe_multiprotocol as patch_multiprotocol;
 use crate::radio::patches::patch_cpe_prop as patch_cpe;
 use crate::radio::RFC;
 use crate::rtc;
@@ -234,7 +235,7 @@ impl RFCore {
     }
 
     // Enable RFCore
-    pub fn enable(&self) {
+    pub fn enable(&self, patch: u8) {
         // Make sure RFC power is enabled
         prcm::Power::enable_domain(prcm::PowerDomain::RFC);
         prcm::Clock::enable_rfc();
@@ -286,7 +287,7 @@ impl RFCore {
         // Initialize radio module
         let cmd_init = cmd::DirectCommand::new(cmd::RFC_CMD0, 0x10 | 0x40);
         self.send_direct_async(&cmd_init).ok();
-        self.apply_rfcore_patch();
+        self.apply_rfcore_patch(patch);
 
         // Request bus
         let cmd_bus_req = cmd::DirectCommand::new(cmd::RFC_BUS_REQUEST, 1);
@@ -534,14 +535,39 @@ impl RFCore {
         Err(status as u32)
     }
 
-    pub fn apply_rfcore_patch(&self) {
-        patch_cpe::CPE_PATCH.apply_patch();
-        self.sync_on_ack();
-        //patch_mce::LONGRANGE_PATCH.apply_patch();
-        //patch_rfe::RFE_PATCH.apply_patch();
+    pub fn apply_rfcore_patch(&self, patch: u8) {
+        match patch {
+            0 => {
+                patch_cpe::CPE_PATCH.apply_patch();
+                self.sync_on_ack();
+                //patch_mce::LONGRANGE_PATCH.apply_patch();
+                //patch_rfe::RFE_PATCH.apply_patch();
 
-        let cmd = cmd::DirectCommand::new(cmd::RFC_CMD0, 0);
-        self.send_direct(&cmd).ok();
+                let cmd = cmd::DirectCommand::new(cmd::RFC_CMD0, 0);
+                self.send_direct(&cmd).ok();
+            }
+            1 => {
+                patch_cpe::CPE_PATCH.apply_patch();
+                self.sync_on_ack();
+                //patch_mce::LONGRANGE_PATCH.apply_patch();
+                //patch_rfe::RFE_PATCH.apply_patch();
+
+                let cmd = cmd::DirectCommand::new(cmd::RFC_CMD0, 0);
+                self.send_direct(&cmd).ok();
+            }
+            2 => {
+                patch_multiprotocol::CPE_PATCH.apply_patch();
+                self.sync_on_ack();
+                //patch_mce::LONGRANGE_PATCH.apply_patch();
+                //patch_rfe::RFE_PATCH.apply_patch();
+
+                let cmd = cmd::DirectCommand::new(cmd::RFC_CMD0, 0);
+                self.send_direct(&cmd).ok();
+            }
+            _ => {
+                debug!("no patch parameter sent");
+            }
+        }
     }
 
     pub fn sync_on_ack(&self) {
