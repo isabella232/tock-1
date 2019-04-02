@@ -910,7 +910,7 @@ impl rfcore::RadioConfig for Radio {
     fn set_tx_power(&self, power: u16) -> ReturnCode {
         // Send direct command for TX power change
         // TODO put some guards around the possible range for TX power
-        self.tx_power.set(power);
+        //self.tx_power.set(power);
         let command = DirectCommand::new(0x0010, self.tx_power.get());
         if self.rfc.send_direct(&command).is_ok() {
             return ReturnCode::SUCCESS;
