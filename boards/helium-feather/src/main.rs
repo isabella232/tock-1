@@ -490,5 +490,8 @@ pub unsafe fn reset_handler() {
         &process_management_capability,
     );
 
+    debug!("Kernel loop");
+
+
     board_kernel.kernel_loop(&launchxl, chip, Some(&launchxl.ipc), &main_loop_capability);
 }

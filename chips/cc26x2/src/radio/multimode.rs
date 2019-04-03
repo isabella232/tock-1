@@ -43,6 +43,22 @@ impl _32BitAlignedU8Array {
         }
     }
 }
+enum_from_primitive! {
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum CC1352R_POWER {
+    _0 = 0x10C8,
+    _1 = 0x12C9,
+    _2 = 0x12CA,
+    _3 = 0x14CB,
+    _4 = 0x16CD,
+    _5 = 0x1CCE,
+    _6 = 0x20D1,
+    _7 = 0x26D4,
+    _8 = 0x2CD8,
+    _9 = 0x3EDC,
+    _10 = 0x3E92,
+}
+}
 
 static mut COMMAND: _32BitAlignedU8Array = _32BitAlignedU8Array::new();
 static mut TX_BUF: [u8; 256] = [0; 256];
@@ -72,7 +88,7 @@ pub struct Radio {
 // 2 dB PWR 0x12C9
 // 9 dB PWR 0x3248
 impl Radio {
-    pub const fn new(rfc: &'static rfc::RFCore) -> Radio {
+    pub const fn new(rfc: &'static rfc::RFCore, power: CC1352R_POWER) -> Radio {
         Radio {
             rfc,
             tx_client: OptionalCell::empty(),
@@ -84,7 +100,7 @@ impl Radio {
             can_sleep: Cell::new(false),
             tx_buf: TakeCell::empty(),
             rx_buf: TakeCell::empty(),
-            tx_power: Cell::new(0x6EE1),
+            tx_power: Cell::new(power as u16),
             pa_type: Cell::new(PaType::None),
         }
     }
