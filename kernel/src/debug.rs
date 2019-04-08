@@ -132,7 +132,7 @@ pub unsafe fn panic_process_info<W: Write>(
     }
 }
 
-use crate::common::registers::{register_bitfields, ReadOnly, ReadWrite};
+use crate::common::registers::{register_bitfields, ReadWrite};
 use crate::common::StaticRef;
 
 #[repr(C)]

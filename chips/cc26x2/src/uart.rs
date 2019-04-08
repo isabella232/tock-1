@@ -127,7 +127,7 @@ struct Transaction {
     index: usize,
     newline: bool,
 }
-
+#[allow(dead_code)]
 pub struct UART<'a> {
     registers: &'static StaticRef<UartRegisters>,
     nvic: &'static nvic::Nvic,
