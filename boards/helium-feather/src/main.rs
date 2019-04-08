@@ -13,6 +13,7 @@ use capsules::helium::{device::Device, virtual_rfcore::RFCore};
 use capsules::virtual_uart::{MuxUart, UartDevice};
 use cc26x2::adc;
 use cc26x2::aon;
+use cc26x2::fcfg1;
 use cc26x2::osc;
 use cc26x2::prcm;
 use cc26x2::radio;
@@ -95,6 +96,7 @@ impl<'a> kernel::Platform for Platform {
 
 static mut HELIUM_BUF: [u8; 240] = [0x00; 240];
 
+mod cc1352p;
 mod cc1352r;
 
 pub struct Pinmap {
@@ -192,8 +194,14 @@ pub unsafe fn reset_handler() {
     prcm::Clock::enable_gpio();
 
     let pinmap: &Pinmap;
+    let chip_id = (cc26x2::rom::HAPI.get_chip_id)();
 
-    pinmap = &cc1352r::PINMAP;
+    if chip_id == cc1352p::CHIP_ID {
+        pinmap = &cc1352p::PINMAP;
+    } else {
+        pinmap = &cc1352r::PINMAP;
+    }
+
     configure_pins(pinmap);
 
     // LEDs
@@ -445,7 +453,8 @@ pub unsafe fn reset_handler() {
         helium::driver::Helium::new(
             board_kernel.create_grant(&memory_allocation_capability),
             &mut HELIUM_BUF,
-            virtual_device
+            virtual_device,
+            fcfg1::FCFG1.get_device_mac_0(),
         )
     );
 
@@ -454,6 +463,8 @@ pub unsafe fn reset_handler() {
 
     //let rfc = &cc26x2::radio::MULTIMODE_RADIO;
     //rfc.run_tests(2, 2);
+    //let id = (rom::HAPI.get_chip_id)();
+    //debug!("id: {:X?}", id);
 
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
 

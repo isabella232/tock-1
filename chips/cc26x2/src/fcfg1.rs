@@ -85,3 +85,19 @@ register_bitfields![
         ABS OFFSET(0) NUMBITS(8)
     ]
 ];
+
+pub const FCFG1: Fcfg1 = Fcfg1::new();
+
+pub struct Fcfg1 {
+    regs: StaticRef<Registers>,
+}
+
+impl Fcfg1 {
+    pub const fn new() -> Fcfg1 {
+        Fcfg1 { regs: REG }
+    }
+
+    pub fn get_device_mac_0(&self) -> u32 {
+        self.regs.mac_15_4_0.get()
+    }
+}

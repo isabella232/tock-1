@@ -19,7 +19,7 @@ pub struct Frame {
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub struct Header {
-    pub id: u16,
+    pub id: u8,
     pub address: [u8; 10],
     pub seq: u8,
     pub data_len: usize,
@@ -35,9 +35,9 @@ impl Frame {
         if total_len > 240 {
             return ReturnCode::ENOMEM;
         }
-
+        self.buf[0] = self.info.header.id;
         for i in 0..total_len as usize {
-            self.buf[i] = payload.as_ref()[i];
+            self.buf[i + 1] = payload.as_ref()[i];
         }
 
         self.info.header.data_len = total_len;
@@ -104,7 +104,7 @@ impl Frame {
         }
 
         let ping = msg::Ping {
-            id: self.info.header.id,
+            id: self.info.header.id.into(),
             address: msg::Addr(self.info.header.address),
             seq: self.info.header.seq,
             len: self.info.header.data_len as u32,
@@ -399,7 +399,7 @@ impl<D: virtual_rfcore::RFCore> device::Device<'a> for Framer<'a, D> {
         &self,
         buf: &'static mut [u8],
         seq: u8,
-        id: u16,
+        id: u8,
         payload_type: Option<PayloadType>,
     ) -> Result<Frame, &'static mut [u8]> {
         let header = Header {

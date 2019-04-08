@@ -40,7 +40,7 @@ pub trait Device<'a> {
         &self,
         buf: &'static mut [u8],
         seq: u8,
-        id: u16,
+        id: u8,
         caut_type: Option<PayloadType>,
     ) -> Result<Frame, &'static mut [u8]>;
 

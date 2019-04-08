@@ -22,9 +22,9 @@ pub struct App {
     app_cfg: Option<AppSlice<Shared, u8>>,
     app_write: Option<AppSlice<Shared, u8>>,
     app_read: Option<AppSlice<Shared, u8>>,
-    pending_tx: Option<(u16, Option<PayloadType>)>, // Change u32 to keyid and fec mode later on during implementation
-    tx_interval_ms: u32,                            // 400 ms is maximum per FCC
-                                                    // random_nonce: u32, // Randomness to sending interval to reduce collissions
+    pending_tx: Option<(u8, Option<PayloadType>)>, // Change u32 to keyid and fec mode later on during implementation
+    tx_interval_ms: u32,                           // 400 ms is maximum per FCC
+                                                   // random_nonce: u32, // Randomness to sending interval to reduce collissions
 }
 
 impl Default for App {
@@ -47,6 +47,7 @@ pub struct Helium<'a> {
     kernel_tx: TakeCell<'static, [u8]>,
     current_app: OptionalCell<AppId>,
     device: &'a device::Device<'a>,
+    device_id: u32,
 }
 
 impl Helium<'a> {
@@ -54,12 +55,14 @@ impl Helium<'a> {
         container: Grant<App>,
         tx_buf: &'static mut [u8],
         device: &'a device::Device<'a>,
+        device_id: u32,
     ) -> Helium<'a> {
         Helium {
             app: container,
             kernel_tx: TakeCell::new(tx_buf),
             current_app: OptionalCell::empty(),
             device: device,
+            device_id,
         }
     }
 
@@ -297,7 +300,7 @@ impl Driver for Helium<'a> {
     fn command(
         &self,
         command_num: usize,
-        addr: usize,
+        _addr: usize,
         payload_type: usize,
         appid: AppId,
     ) -> ReturnCode {
@@ -321,7 +324,8 @@ impl Driver for Helium<'a> {
                         if app.pending_tx.is_some() {
                             return ReturnCode::EBUSY;
                         }
-                        let device_id = addr as u16;
+                        //let device_id = addr as u16;
+                        let device_id = (self.device_id & 0x000000FF) as u8;
                         let pl_type = match PayloadType::from_cmd(payload_type) {
                             Some(pl_type) => pl_type,
                             None => {
