@@ -677,20 +677,6 @@ impl Radio {
             .and_then(|_| self.rfc.wait(&setup_cmd))
             .ok();
     }
-
-    fn set_pa_restriction(&self) {
-        let tx_power = self.tx_power.get();
-        let pa = self.pa_type.get();
-        match pa {
-            PaType::None => (),
-            PaType::Internal => (),
-            PaType::Skyworks => {
-                if tx_power > 0x3248 {
-                    self.tx_power.set(0x3248);
-                }
-            }
-        }
-    }
 }
 
 impl rfc::RFCoreClient for Radio {
@@ -929,7 +915,7 @@ impl rfcore::RadioConfig for Radio {
         // Send direct command for TX power change
         // TODO put some guards around the possible range for TX power
         //self.tx_power.set(power);
-        let command = DirectCommand::new(0x0010, self.tx_power.get());
+        let command = DirectCommand::new(0x0010, power);
         if self.rfc.send_direct(&command).is_ok() {
             return ReturnCode::SUCCESS;
         } else {

@@ -338,8 +338,8 @@ impl RFCore {
     pub fn setup(
         &self,
         reg_overrides: u32,
-        tx_std_overrides: u32,
-        tx_20_overrides: u32,
+        _tx_std_overrides: u32,
+        _tx_20_overrides: u32,
         tx_power: u16,
     ) {
         let setup_cmd = prop::CommandRadioDivSetup_R {

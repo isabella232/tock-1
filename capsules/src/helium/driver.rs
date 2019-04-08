@@ -328,7 +328,6 @@ impl Driver for Helium<'a> {
                                 return ReturnCode::FAIL;
                             }
                         };
-                        debug!("{:?}", pl_type);
                         let next_tx = Some((device_id, Some(pl_type)));
                         if next_tx.is_none() {
                             return ReturnCode::EINVAL;
