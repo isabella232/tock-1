@@ -500,7 +500,8 @@ pub unsafe fn reset_handler() {
         helium::driver::Helium::new(
             board_kernel.create_grant(&memory_allocation_capability),
             &mut HELIUM_BUF,
-            virtual_device
+            virtual_device,
+            chip_id,
         )
     );
 
@@ -613,7 +614,6 @@ pub unsafe fn reset_handler() {
     adc::ADC.configure(adc::Source::NominalVdds, adc::SampleCycle::_170_us);
 
     debug!("Loading processes");
-    panic!("wtf");
     kernel::procs::load_processes(
         board_kernel,
         chip,
