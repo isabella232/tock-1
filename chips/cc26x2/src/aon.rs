@@ -25,7 +25,7 @@ pub struct AonEventRegisters {
 
 #[repr(C)]
 struct AonPmCtlRegisters {
-    _unknown: ReadOnly<u32>,
+    _unknown: [ReadOnly<u8>; 8],
     aux_clk: ReadWrite<u32, AuxClk::Register>,
     ram_cfg: ReadWrite<u32, RamCfg::Register>,
     _unknown2: [ReadOnly<u8>; 8],
@@ -271,6 +271,10 @@ impl Aon {
     /// to sync with it.
     pub fn sync(&self) {
         unsafe { rtc::RTC.sync() };
+    }
+
+    pub fn reset(&self) {
+        self.pmctl_regs.reset_ctl.modify(ResetCtl::SYSRESET::SET);
     }
 
     pub fn reset_ctl_set(&self, val: u32) {

@@ -15,7 +15,6 @@ use cc26x2::adc;
 use cc26x2::aon;
 use cc26x2::osc;
 use cc26x2::prcm;
-use cc26x2::pwm;
 use cc26x2::radio;
 use kernel::capabilities;
 use kernel::hil;
@@ -29,7 +28,6 @@ use kernel::hil::rng::Rng;
 use kernel::hil::uart::Configure;
 #[allow(unused_imports)]
 use kernel::{create_capability, debug, debug_gpio, static_init};
-
 #[macro_use]
 pub mod io;
 
@@ -70,6 +68,7 @@ pub struct Platform {
     >,
     rng: &'static capsules::rng::RngDriver<'static>,
     i2c_master: &'static capsules::i2c_master::I2CMasterDriver<cc26x2::i2c::I2CMaster<'static>>,
+    gps: &'static capsules::gps::Gps<'static>,
     helium: &'static capsules::helium::driver::Helium<'static>,
     ipc: kernel::ipc::IPC,
 }
@@ -86,6 +85,7 @@ impl<'a> kernel::Platform for Platform {
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules::i2c_master::DRIVER_NUM => f(Some(self.i2c_master)),
+            capsules::gps::DRIVER_NUM => f(Some(self.gps)),
             capsules::helium::driver::DRIVER_NUM => f(Some(self.helium)),
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             _ => f(None),
@@ -95,7 +95,7 @@ impl<'a> kernel::Platform for Platform {
 
 static mut HELIUM_BUF: [u8; 240] = [0x00; 240];
 
-mod cc1352p;
+mod cc1352r;
 
 pub struct Pinmap {
     uart0_rx: usize,
@@ -108,6 +108,7 @@ pub struct Pinmap {
     green_led: usize,
     button1: usize,
     button2: usize,
+    on2: usize,
     skyworks_csd: usize,
     skyworks_cps: usize,
     skyworks_ctx: usize,
@@ -126,15 +127,23 @@ unsafe fn configure_pins(pin: &Pinmap) {
     cc26x2::gpio::PORT[pin.i2c0_scl].enable_i2c_scl();
     cc26x2::gpio::PORT[pin.i2c0_sda].enable_i2c_sda();
 
+    // cc26x2::gpio::PORT[pin.i2c0_scl].enable_gpio();
+    // cc26x2::gpio::PORT[pin.i2c0_scl].set();
+    // cc26x2::gpio::PORT[pin.i2c0_sda].enable_gpio();
+    // cc26x2::gpio::PORT[pin.i2c0_sda].set();
+
     cc26x2::gpio::PORT[pin.red_led].enable_gpio();
     cc26x2::gpio::PORT[pin.green_led].enable_gpio();
 
     cc26x2::gpio::PORT[pin.button1].enable_gpio();
     cc26x2::gpio::PORT[pin.button2].enable_gpio();
 
-    cc26x2::gpio::PORT[pin.skyworks_csd].enable_gpio();
-    cc26x2::gpio::PORT[pin.skyworks_cps].enable_gpio();
-    cc26x2::gpio::PORT[pin.skyworks_ctx].enable_gpio();
+    cc26x2::gpio::PORT[pin.on2].make_output();
+    cc26x2::gpio::PORT[pin.on2].set();
+
+    cc26x2::gpio::PORT[pin.skyworks_csd].make_output();
+    cc26x2::gpio::PORT[pin.skyworks_cps].make_output();
+    cc26x2::gpio::PORT[pin.skyworks_ctx].make_output();
 
     if let Some(rf_2_4) = pin.rf_2_4 {
         cc26x2::gpio::PORT[rf_2_4].enable_24ghz_output();
@@ -148,7 +157,6 @@ unsafe fn configure_pins(pin: &Pinmap) {
 }
 
 static mut DRIVER_UART0: capsules::uart::Uart<UartDevice> = capsules::uart::Uart::new(0);
-static mut DRIVER_UART1: capsules::uart::Uart<UartDevice> = capsules::uart::Uart::new(1);
 
 #[no_mangle]
 pub unsafe fn reset_handler() {
@@ -184,9 +192,8 @@ pub unsafe fn reset_handler() {
     prcm::Clock::enable_gpio();
 
     let pinmap: &Pinmap;
-    let chip_id = (cc26x2::rom::HAPI.get_chip_id)();
 
-    pinmap = &cc1352p::PINMAP;
+    pinmap = &cc1352r::PINMAP;
     configure_pins(pinmap);
 
     // LEDs
@@ -272,20 +279,6 @@ pub unsafe fn reset_handler() {
         hw_flow_control: false,
     });
 
-    cc26x2::uart::UART1.initialize();
-    // Create a UART channel for the additional UART
-    let uart1_mux = static_init!(
-        MuxUart<'static>,
-        MuxUart::new(
-            &cc26x2::uart::UART1,
-            &mut capsules::virtual_uart::RX_BUF1,
-            115200
-        )
-    );
-    uart1_mux.initialize();
-    hil::uart::Receive::set_receive_client(&cc26x2::uart::UART1, uart1_mux);
-    hil::uart::Transmit::set_transmit_client(&cc26x2::uart::UART1, uart1_mux);
-
     // Create virtual device for kernel debug.
     let debugger_uart = static_init!(UartDevice, UartDevice::new(uart0_mux, false));
     debugger_uart.setup();
@@ -305,25 +298,9 @@ pub unsafe fn reset_handler() {
     );
     kernel::debug::set_debug_writer_wrapper(debug_wrapper);
 
-    // Create a UartDevice for the second UART
-    let uart1_device = static_init!(UartDevice, UartDevice::new(uart1_mux, true));
-    uart1_device.setup();
-
-    kernel::hil::uart::Transmit::set_transmit_client(uart1_device, &DRIVER_UART1);
-    kernel::hil::uart::Receive::set_receive_client(uart1_device, &DRIVER_UART1);
-
-    // the debug uart should be initialized by hand
-    cc26x2::uart::UART1.configure(hil::uart::Parameters {
-        baud_rate: 115200,
-        width: hil::uart::Width::Eight,
-        stop_bits: hil::uart::StopBits::One,
-        parity: hil::uart::Parity::None,
-        hw_flow_control: false,
-    });
-
     let uart_uarts = static_init!(
-        [&'static mut capsules::uart::Uart<UartDevice>; 2],
-        [&mut DRIVER_UART0, &mut DRIVER_UART1]
+        [&'static mut capsules::uart::Uart<UartDevice>; 1],
+        [&mut DRIVER_UART0]
     );
 
     let uart = static_init!(
@@ -332,7 +309,7 @@ pub unsafe fn reset_handler() {
             uart_uarts,
             [
                 board_kernel.create_grant(&memory_allocation_capability),
-                board_kernel.create_grant(&memory_allocation_capability)
+                board_kernel.create_grant(&memory_allocation_capability),
             ]
         )
     );
@@ -345,12 +322,26 @@ pub unsafe fn reset_handler() {
         uart,
     );
 
-    DRIVER_UART1.initialize(
-        uart1_device,
-        &mut capsules::uart::WRITE_BUF1,
-        &mut capsules::uart::READ_BUF1,
-        uart,
+    cc26x2::uart::UART1.initialize();
+    // the debug uart should be initialized by hand
+    cc26x2::uart::UART1.configure(hil::uart::Parameters {
+        baud_rate: 9600,
+        width: hil::uart::Width::Eight,
+        stop_bits: hil::uart::StopBits::One,
+        parity: hil::uart::Parity::None,
+        hw_flow_control: false,
+    });
+
+    let gps = static_init!(
+        capsules::gps::Gps<'static>,
+        capsules::gps::Gps::new(
+            &cc26x2::uart::UART1,
+            board_kernel.create_grant(&memory_allocation_capability)
+        )
     );
+    gps.initialize(&mut capsules::gps::TX_BUF, &mut capsules::gps::RX_BUF);
+    hil::uart::Transmit::set_transmit_client(&cc26x2::uart::UART1, gps);
+    hil::uart::Receive::set_receive_client(&cc26x2::uart::UART1, gps);
 
     cc26x2::i2c::I2C0.initialize();
 
@@ -405,35 +396,13 @@ pub unsafe fn reset_handler() {
     cc26x2::trng::TRNG.set_client(entropy_to_random);
     entropy_to_random.set_client(rng);
 
-    // Set skyworks chip control pins
-    let sky_pins = static_init!(
-        [(
-            &'static cc26x2::gpio::GPIOPin,
-            capsules::skyworks_se2435l_r::ActivationMode,
-            capsules::skyworks_se2435l_r::CtlPinType
-        ); 3],
-        [
-            (
-                &cc26x2::gpio::PORT[pinmap.skyworks_csd],
-                capsules::skyworks_se2435l_r::ActivationMode::ActiveHigh,
-                capsules::skyworks_se2435l_r::CtlPinType::Csd
-            ),
-            (
-                &cc26x2::gpio::PORT[pinmap.skyworks_cps],
-                capsules::skyworks_se2435l_r::ActivationMode::ActiveHigh,
-                capsules::skyworks_se2435l_r::CtlPinType::Cps
-            ),
-            (
-                &cc26x2::gpio::PORT[pinmap.skyworks_ctx],
-                capsules::skyworks_se2435l_r::ActivationMode::ActiveHigh,
-                capsules::skyworks_se2435l_r::CtlPinType::Ctx
-            ),
-        ]
-    );
-
     let sky = static_init!(
         capsules::skyworks_se2435l_r::Sky2435L<'static, cc26x2::gpio::GPIOPin>,
-        capsules::skyworks_se2435l_r::Sky2435L::new(sky_pins)
+        capsules::skyworks_se2435l_r::Sky2435L::new(
+            &cc26x2::gpio::PORT[pinmap.skyworks_cps],
+            &cc26x2::gpio::PORT[pinmap.skyworks_csd],
+            &cc26x2::gpio::PORT[pinmap.skyworks_ctx],
+        )
     );
 
     // Set underlying radio client to the radio mode wrapper
@@ -454,7 +423,7 @@ pub unsafe fn reset_handler() {
         &mut HELIUM_BUF,
     );
     kernel::hil::rfcore::RadioDriver::set_power_client(&radio::MULTIMODE_RADIO, radio);
-    kernel::hil::rfcore::RadioDriver::set_skyworks_client(&radio::MULTIMODE_RADIO, sky);
+    kernel::hil::rfcore::RadioDriver::set_rf_frontend_client(&radio::MULTIMODE_RADIO, sky);
 
     // Virtual device that will respond to callbacks from the underlying radio and library
     // operations
@@ -465,6 +434,7 @@ pub unsafe fn reset_handler() {
         >,
         helium::framer::Framer::new(radio)
     );
+
     // Set client for underlying radio as virtual device
     radio.set_transmit_client(virtual_device);
     radio.set_receive_client(virtual_device);
@@ -482,85 +452,8 @@ pub unsafe fn reset_handler() {
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
 
-    let rfc = &cc26x2::radio::MULTIMODE_RADIO;
-    //rfc.run_tests(0);
-
-    // set nominal voltage
-    cc26x2::adc::ADC.nominal_voltage = Some(3300);
-    cc26x2::adc::ADC.configure(adc::Source::Fixed4P5V, adc::SampleCycle::_10p9_ms);
-
-    // Setup ADC
-    let adc: &'static capsules::adc::Adc<'static, cc26x2::adc::Adc>;
-    if chip_id == cc1352p::CHIP_ID {
-        let adc_channels = static_init!(
-            [&cc26x2::adc::Input; 5],
-            [
-                &cc26x2::adc::Input::Auxio7, // pin 23
-                &cc26x2::adc::Input::Auxio6, // pin 24
-                &cc26x2::adc::Input::Auxio5, // pin 25
-                &cc26x2::adc::Input::Auxio4, // pin 26
-                &cc26x2::adc::Input::Auxio3, // pin 27
-            ]
-        );
-        adc = static_init!(
-            capsules::adc::Adc<'static, cc26x2::adc::Adc>,
-            capsules::adc::Adc::new(
-                &mut cc26x2::adc::ADC,
-                adc_channels,
-                &mut capsules::adc::ADC_BUFFER1,
-                &mut capsules::adc::ADC_BUFFER2,
-                &mut capsules::adc::ADC_BUFFER3
-            )
-        );
-        for channel in adc_channels.iter() {
-            cc26x2::adc::ADC.set_client(adc, channel);
-        }
-    } else {
-        let adc_channels = static_init!(
-            [&cc26x2::adc::Input; 8],
-            [
-                &cc26x2::adc::Input::Auxio7, // pin 23
-                &cc26x2::adc::Input::Auxio6, // pin 24
-                &cc26x2::adc::Input::Auxio5, // pin 25
-                &cc26x2::adc::Input::Auxio4, // pin 26
-                &cc26x2::adc::Input::Auxio3, // pin 27
-                &cc26x2::adc::Input::Auxio2, // pin 28
-                &cc26x2::adc::Input::Auxio1, // pin 29
-                &cc26x2::adc::Input::Auxio0, // pin 30
-            ]
-        );
-        adc = static_init!(
-            capsules::adc::Adc<'static, cc26x2::adc::Adc>,
-            capsules::adc::Adc::new(
-                &mut cc26x2::adc::ADC,
-                adc_channels,
-                &mut capsules::adc::ADC_BUFFER1,
-                &mut capsules::adc::ADC_BUFFER2,
-                &mut capsules::adc::ADC_BUFFER3
-            )
-        );
-        for channel in adc_channels.iter() {
-            cc26x2::adc::ADC.set_client(adc, channel);
-        }
-    }
-
-    let pwm_channels = [
-        pwm::Signal::new(pwm::Timer::GPT0A),
-        pwm::Signal::new(pwm::Timer::GPT0B),
-        pwm::Signal::new(pwm::Timer::GPT1A),
-        pwm::Signal::new(pwm::Timer::GPT1B),
-        pwm::Signal::new(pwm::Timer::GPT2A),
-        pwm::Signal::new(pwm::Timer::GPT2B),
-        pwm::Signal::new(pwm::Timer::GPT3A),
-        pwm::Signal::new(pwm::Timer::GPT3B),
-    ];
-
-    // all PWM channels are enabled
-    for pwm_channel in pwm_channels.iter() {
-        pwm_channel.enable();
-    }
-
-    let pwm = capsules::pwm::Pwm::new(HFREQ as usize, &pwm_channels);
+    //let rfc = &cc26x2::radio::MULTIMODE_RADIO;
+    //rfc.run_tests(2, 2);
 
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
 
@@ -571,6 +464,7 @@ pub unsafe fn reset_handler() {
         alarm,
         rng,
         i2c_master,
+        gps,
         helium: radio_driver,
         ipc,
     };
@@ -595,6 +489,8 @@ pub unsafe fn reset_handler() {
         FAULT_RESPONSE,
         &process_management_capability,
     );
+
+    debug!("Kernel loop");
 
     board_kernel.kernel_loop(&launchxl, chip, Some(&launchxl.ipc), &main_loop_capability);
 }

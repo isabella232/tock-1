@@ -1001,7 +1001,7 @@ impl<C: Chip> ProcessType for Process<'a, C> {
             "\
              App: {}   -   [{:?}]\
              \r\n Events Queued: {}   Syscall Count: {}   Dropped Callback Count: {}\
-             \n Restart Count: {}\n",
+             \r\n Restart Count: {}\r\n",
             self.process_name,
             self.state.get(),
             events_queued,

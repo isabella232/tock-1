@@ -132,6 +132,99 @@ pub unsafe fn panic_process_info<W: Write>(
     }
 }
 
+use crate::common::registers::{register_bitfields, ReadOnly, ReadWrite};
+use crate::common::StaticRef;
+
+#[repr(C)]
+struct AonPmCtlRegisters {
+    reset_ctl: ReadWrite<u32, ResetCtl::Register>,
+}
+
+register_bitfields![
+    u32,
+    AuxClk [
+        PWR_DWN_SRC OFFSET(8) NUMBITS(1) [
+            NO_CLOCK = 0x00,
+            SCLK_LF = 0x01
+        ],
+        SRC     OFFSET(0) NUMBITS(1) [
+            SCLK_HFDIV2 = 0x00,
+            SCLK_MF = 0x01
+        ]
+    ],
+    RamCfg [
+        AUX_SRAM_PWR_OFF_OFF    OFFSET(17) NUMBITS(1) [],
+        AUX_SRAM_RET_EN OFFSET(16) NUMBITS(1) [],
+
+        //  SRAM Retention enabled
+        //  0x00 - Retention disabled
+        //  0x01 - Retention enabled for BANK0
+        //  0x03 - Retention enabled for BANK0, BANK1
+        //  0x07 - Retention enabled for BANK0, BANK1, BANK2
+        //  0x0F - Retention enabled for BANK0, BANK1, BANK2, BANK3
+        BUS_SRAM_RET_EN OFFSET(0)  NUMBITS(4) [
+            OFF = 0x00,
+            ON = 0x0F   // Default to enable retention in all banks
+        ]
+    ],
+    PwrCtl [
+        // 0 = use GLDO in active mode, 1 = use DCDC in active mode
+        DCDC_ACTIVE  OFFSET(2) NUMBITS(1) [],
+        // 0 = DCDC/GLDO are used, 1 = DCDC/GLDO are bypassed and using a external regulater
+        EXT_REG_MODE OFFSET(1) NUMBITS(1) [],
+        // 0 = use GDLO for recharge, 1 = use DCDC for recharge
+        DCDC_EN      OFFSET(0) NUMBITS(1) []
+    ],
+    PwrStat [
+        JTAG_PD_ON  OFFSET(2) NUMBITS(1) [],
+        AUX_BUS_RESET_DONE OFFSET(1) NUMBITS(1) [],
+        AUX_RESET_DONE OFFSET(0) NUMBITS(1) []
+    ],
+    Shutdown [
+        // Controls whether MCU & AUX requesting to be powered off
+        // will enable a transition to powerdown (0 = Enabled, 1 = Disabled)
+        PWR_DWN_DIS     OFFSET(0) NUMBITS(1) []
+    ],
+    IocClk [
+        EN  OFFSET(0) NUMBITS(1) []
+    ],
+    IocLatch [
+        EN OFFSET(0) NUMBITS(1) []
+    ],
+    OscCtl [
+        // Reserved 8-31
+        PER_M OFFSET(3) NUMBITS(7) [],
+        PER_E OFFSET(0) NUMBITS(3) []
+    ],
+    ResetCtl [
+        // 0: No effect 1: Generate system reset
+        SYSRESET OFFSET(31) NUMBITS(1) [],
+        // Reserved 26-30
+        // 24/25 BOOT DET 0/1 CLR
+        // Reserved 18-23
+        WU_FROM_SD OFFSET(15) NUMBITS(1) [],
+        GPIO_WU_FROM_SD OFFSET(14) NUMBITS(1) [],
+        // 12/13 BOOT DET
+        // Reserved 9-11
+        VDDS_LOSS_EN OFFSET(8) NUMBITS(1) [],
+        VDDR_LOSS_EN OFFSET(7) NUMBITS(1) [],
+        VDD_LOSS_EN OFFSET(6) NUMBITS(1) [],
+        CLK_LOSS_EN OFFSET(5) NUMBITS(1) [],
+        MCU_WARM_RESET OFFSET(4) NUMBITS(1) [],
+        RESET_SRC OFFSET(1) NUMBITS(3) []
+        // Reserved 0
+    ],
+    SleepCtl [
+        IO_PAD_SLEEP_DIS OFFSET(0) NUMBITS(1) []
+    ],
+    JtagCtl [
+        JTAG_PD_FORCE_ON OFFSET(8) NUMBITS(1) []
+    ]
+];
+
+const AON_PMCTL_BASE: StaticRef<AonPmCtlRegisters> =
+    unsafe { StaticRef::new((0x4009_0000 + 0x28) as *const AonPmCtlRegisters) };
+
 /// Blinks a recognizable pattern forever.
 ///
 /// If a multi-color LED is used for the panic pattern, it is
@@ -143,6 +236,8 @@ pub unsafe fn panic_process_info<W: Write>(
 /// one on the top and one on the bottom), thus this method
 /// accepts an array, however most will only need one.
 pub fn panic_blink_forever<L: hil::led::Led>(leds: &mut [&mut L]) -> ! {
+    AON_PMCTL_BASE.reset_ctl.write(ResetCtl::SYSRESET::SET);
+
     leds.iter_mut().for_each(|led| led.init());
     loop {
         for _ in 0..1000000 {

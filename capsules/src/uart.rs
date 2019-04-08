@@ -179,7 +179,6 @@ impl<'a, U: hil::uart::UartData<'a>> UartDriver<'a, U> {
                                         } else {
                                             ReturnCode::ECANCEL
                                         };
-                                        debug!("scheduled cb");
                                         cb.schedule(From::from(rettype), rx_len, uart_index);
                                     } else {
                                         // Oops, no app buffer

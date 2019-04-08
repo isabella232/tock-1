@@ -1,5 +1,5 @@
 use crate::enum_primitive::cast::FromPrimitive;
-use crate::helium::{device, framer::CauterizeType};
+use crate::helium::{device, framer::PayloadType};
 use core::cmp::min;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
@@ -22,9 +22,9 @@ pub struct App {
     app_cfg: Option<AppSlice<Shared, u8>>,
     app_write: Option<AppSlice<Shared, u8>>,
     app_read: Option<AppSlice<Shared, u8>>,
-    pending_tx: Option<(u16, Option<CauterizeType>)>, // Change u32 to keyid and fec mode later on during implementation
-    tx_interval_ms: u32,                              // 400 ms is maximum per FCC
-                                                      // random_nonce: u32, // Randomness to sending interval to reduce collissions
+    pending_tx: Option<(u16, Option<PayloadType>)>, // Change u32 to keyid and fec mode later on during implementation
+    tx_interval_ms: u32,                            // 400 ms is maximum per FCC
+                                                    // random_nonce: u32, // Randomness to sending interval to reduce collissions
 }
 
 impl Default for App {
@@ -137,7 +137,7 @@ impl Helium<'a> {
     #[inline]
     fn perform_tx_sync(&self, appid: AppId) -> ReturnCode {
         self.do_with_app(appid, |app| {
-            let (device_id, caut_type) = match app.pending_tx.take() {
+            let (device_id, payload_type) = match app.pending_tx.take() {
                 Some(pending_tx) => pending_tx,
                 None => {
                     return ReturnCode::SUCCESS;
@@ -146,23 +146,35 @@ impl Helium<'a> {
 
             let result = self.kernel_tx.take().map_or(ReturnCode::ENOMEM, |kbuf| {
                 let seq: u8 = 0;
-                let mut frame = match self
-                    .device
-                    .prepare_data_frame(kbuf, seq, device_id, caut_type)
-                {
-                    Ok(frame) => frame,
-                    Err(kbuf) => {
-                        self.kernel_tx.replace(kbuf);
-                        return ReturnCode::FAIL;
-                    }
-                };
+                let mut frame =
+                    match self
+                        .device
+                        .prepare_data_frame(kbuf, seq, device_id, payload_type)
+                    {
+                        Ok(frame) => frame,
+                        Err(kbuf) => {
+                            self.kernel_tx.replace(kbuf);
+                            return ReturnCode::FAIL;
+                        }
+                    };
 
                 let result = app
                     .app_write
                     .take()
                     .as_ref()
-                    .map(|payload| frame.append_payload(payload.as_ref()))
+                    .map(|payload| match frame.info.payload_type {
+                        Some(PayloadType::None) => frame.frame_payload(payload.as_ref()),
+                        Some(PayloadType::Packetizer) => frame.append_payload(payload.as_ref()),
+                        Some(PayloadType::Cauterize) => frame.cauterize_payload(payload.as_ref()),
+                        Some(PayloadType::LDPC) => {
+                            //frame.frame_payload_ldpc(payload.as_ref()),
+                            frame.frame_payload(payload.as_ref())
+                        }
+                        // Will never get to this
+                        None => ReturnCode::EINVAL,
+                    })
                     .unwrap_or(ReturnCode::EINVAL);
+
                 if result != ReturnCode::SUCCESS {
                     return result;
                 }
@@ -275,9 +287,20 @@ impl Driver for Helium<'a> {
     /// - `4`: Send kill radio operation command.
     /// - `5`: Set device configuration.
     /// - `6`: Set next device transmission.
+    /// -       a) payload_type field can be one of 3 types:
+    ///             None (0x00)
+    ///             Packetizer (0x01)
+    ///             Cauterize (0x10)
+    ///
     /// = `7`: Set device endpoint address.
     ///
-    fn command(&self, command_num: usize, addr: usize, _r3: usize, appid: AppId) -> ReturnCode {
+    fn command(
+        &self,
+        command_num: usize,
+        addr: usize,
+        payload_type: usize,
+        appid: AppId,
+    ) -> ReturnCode {
         if let Some(command) = HeliumCommand::from_usize(command_num) {
             match command {
                 // Handle callback for CMDSTA after write to CMDR
@@ -299,12 +322,25 @@ impl Driver for Helium<'a> {
                             return ReturnCode::EBUSY;
                         }
                         let device_id = addr as u16;
+                        let pl_type = match PayloadType::from_cmd(payload_type) {
+                            Some(pl_type) => pl_type,
+                            None => {
+                                return ReturnCode::FAIL;
+                            }
+                        };
+                        debug!("{:?}", pl_type);
+                        let next_tx = Some((device_id, Some(pl_type)));
+                        if next_tx.is_none() {
+                            return ReturnCode::EINVAL;
+                        }
+                        app.pending_tx = next_tx;
+                        self.do_next_tx_sync(appid)
                         /*
                         let next_tx = app.app_cfg.as_ref().and_then(|cfg| {
                             if cfg.len() != 11 {
                                 return None;
                             }
-                            let caut = match CauterizeType::from_slice(cfg.as_ref()[0]) {
+                            let caut = match PayloadType::from_slice(cfg.as_ref()[0]) {
                                 // The first entry `[0]` should be the encoding type
                                 Some(caut) => caut,
                                 None => {
@@ -312,18 +348,19 @@ impl Driver for Helium<'a> {
                                 }
                             };
 
-                            if caut == CauterizeType::None {
+                            if caut == PayloadType::None {
                                 return Some((address, None));
                             }
                             Some((address, Some(caut)))
                         });
-                        */
-                        let next_tx = Some((device_id, Some(CauterizeType::None)));
+
+                        let next_tx = Some((device_id, Some(PayloadType::None)));
                         if next_tx.is_none() {
                             return ReturnCode::EINVAL;
                         }
                         app.pending_tx = next_tx;
                         self.do_next_tx_sync(appid)
+                        */
                     })
                 }
                 HeliumCommand::SetAddress => self.do_with_cfg(appid, 10, |cfg| {

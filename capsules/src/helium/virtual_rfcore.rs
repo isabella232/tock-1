@@ -1,8 +1,8 @@
+use crate::helium::channels::ChannelParams;
 use crate::helium::framer::FrameInfo;
 use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::rfcore;
-use kernel::hil::sky2435l as sky;
 use kernel::ReturnCode;
 
 pub trait RFCore {
@@ -20,7 +20,6 @@ pub trait RFCore {
 
     fn set_power_client(&self, client: &'static rfcore::PowerClient);
 
-    fn set_skyworks_client(&self, client: &'static sky::Skyworks);
     /// Must be called after one or more calls to `set_*`. If
     /// `set_*` is called without calling `config_commit`, there is no guarantee
     /// that the underlying hardware configuration (addresses, pan ID) is in
@@ -39,6 +38,7 @@ pub trait RFCore {
 
     fn set_tx_power(&self, power: u16) -> ReturnCode;
 
+    fn set_frequency(&self) -> ReturnCode;
     /// Transmits complete MAC frames, which must be prepared by an ieee802154::device::MacDevice
     /// before being passed to the Mac layer. Returns the frame buffer in case of an error.
     fn transmit(
@@ -63,11 +63,11 @@ pub struct VirtualRadio<'a, R: rfcore::Radio> {
     tx_client: OptionalCell<&'static rfcore::TxClient>,
     rx_client: OptionalCell<&'static rfcore::RxClient>,
     power_client: OptionalCell<&'static rfcore::PowerClient>,
-    skyworks_client: OptionalCell<&'static sky::Skyworks>,
     tx_payload: TakeCell<'static, [u8]>,
     tx_payload_len: Cell<usize>,
     tx_pending: Cell<bool>,
     radio_state: Cell<RadioState>,
+    channel_params: Cell<ChannelParams>,
 }
 
 impl<R: rfcore::Radio> VirtualRadio<'a, R> {
@@ -77,16 +77,15 @@ impl<R: rfcore::Radio> VirtualRadio<'a, R> {
             tx_client: OptionalCell::empty(),
             rx_client: OptionalCell::empty(),
             power_client: OptionalCell::empty(),
-            skyworks_client: OptionalCell::empty(),
             tx_payload: TakeCell::empty(),
             tx_payload_len: Cell::new(0),
             tx_pending: Cell::new(false),
             radio_state: Cell::new(RadioState::Sleep),
+            channel_params: Cell::default(),
         }
     }
 
     pub fn transmit_packet(&self) {
-        // MUST ENABLE PA BEFORE TRANSMIT OR MIGHT BURN CHIP
         self.tx_payload.take().map_or((), |buf| {
             let (result, rbuf) = self.radio.transmit(buf, self.tx_payload_len.get());
             match result {
@@ -135,10 +134,6 @@ impl<R: rfcore::Radio> RFCore for VirtualRadio<'a, R> {
         self.power_client.set(client);
     }
 
-    fn set_skyworks_client(&self, client: &'static sky::Skyworks) {
-        self.skyworks_client.set(client);
-    }
-
     fn set_receive_buffer(&self, buffer: &'static mut [u8]) {
         self.radio.set_receive_buffer(buffer);
     }
@@ -166,6 +161,11 @@ impl<R: rfcore::Radio> RFCore for VirtualRadio<'a, R> {
         self.radio.set_tx_power(power)
     }
 
+    fn set_frequency(&self) -> ReturnCode {
+        let params = self.channel_params.get();
+        self.radio
+            .set_frequency(params.frequency, params.fract_freq)
+    }
     fn transmit(
         &self,
         frame: &'static mut [u8],

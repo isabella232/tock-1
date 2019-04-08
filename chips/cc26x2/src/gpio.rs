@@ -143,7 +143,7 @@ impl GPIOPin {
         pin_ioc.write(
             port_id
             + ioc::Config::DRIVE_STRENGTH::Auto
-            + ioc::Config::PULL::None
+            + ioc::Config::PULL::Up
             + ioc::Config::SLEW_RED::CLEAR
             + ioc::Config::HYST_EN::CLEAR
             + ioc::Config::IO_MODE::OpenDrain   // this is the special setting for I2C

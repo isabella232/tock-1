@@ -3,7 +3,7 @@
 //! - Preparing frames (data frame, command frames, beacon frames)
 //! - Transmitting and receiving frames
 //!
-use crate::helium::framer::{CauterizeType, Frame};
+use crate::helium::framer::{Frame, PayloadType};
 use kernel::ReturnCode;
 
 pub trait Device<'a> {
@@ -41,7 +41,7 @@ pub trait Device<'a> {
         buf: &'static mut [u8],
         seq: u8,
         id: u16,
-        caut_type: Option<CauterizeType>,
+        caut_type: Option<PayloadType>,
     ) -> Result<Frame, &'static mut [u8]>;
 
     /// Transmits a frame that has been prepared by the above process. If the

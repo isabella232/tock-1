@@ -28,7 +28,7 @@ struct UartRegisters {
     fbrd: ReadWrite<u32, FracDivisor::Register>,
     lcrh: ReadWrite<u32, LineControl::Register>,
     ctl: ReadWrite<u32, Control::Register>,
-    ifls: ReadWrite<u32>,
+    ifls: ReadWrite<u32, FifoLevelSelect::Register>,
     imsc: ReadWrite<u32, Interrupts::Register>,
     ris: ReadOnly<u32, Interrupts::Register>,
     mis: ReadOnly<u32, Interrupts::Register>,
@@ -36,8 +36,8 @@ struct UartRegisters {
     dmactl: ReadWrite<u32>,
 }
 
-pub static mut UART0: UART = UART::new(&UART0_REG, &UART0_NVIC);
-pub static mut UART1: UART = UART::new(&UART1_REG, &UART1_NVIC);
+pub static mut UART0: UART = UART::new(&UART0_REG, &UART0_NVIC, 0);
+pub static mut UART1: UART = UART::new(&UART1_REG, &UART1_NVIC, 1);
 
 register_bitfields![
     u32,
@@ -54,6 +54,22 @@ register_bitfields![
             Len6 = 0x1,
             Len7 = 0x2,
             Len8 = 0x3
+        ]
+    ],
+    FifoLevelSelect [
+        RXSEL OFFSET(3) NUMBITS(3) [
+            OneEighth = 0,
+            OneQuarter = 1,
+            Half = 2,
+            ThreeQuarters = 3,
+            SevenEights = 4
+        ],
+        TXSEL OFFSET(0) NUMBITS(3) [
+            OneEighth = 0,
+            OneQuarter = 1,
+            Half = 2,
+            ThreeQuarters = 3,
+            SevenEights = 4
         ]
     ],
     IntDivisor [
@@ -109,11 +125,13 @@ struct Transaction {
     length: usize,
     /// The index of the byte currently being sent
     index: usize,
+    newline: bool,
 }
 
 pub struct UART<'a> {
     registers: &'static StaticRef<UartRegisters>,
     nvic: &'static nvic::Nvic,
+    num: usize,
     tx_client: OptionalCell<&'a uart::TransmitClient>,
     rx_client: OptionalCell<&'a uart::ReceiveClient>,
     tx: MapCell<Transaction>,
@@ -128,16 +146,18 @@ macro_rules! uart_nvic {
             unsafe {
                 // handle RX
                 $uart.rx.map(|rx| {
-                    while $uart.rx_fifo_not_empty() && rx.index < rx.length {
+                    while $uart.rx_fifo_not_empty() && rx.index < rx.length && !rx.newline {
                         let byte = $uart.read_byte();
                         rx.buffer[rx.index] = byte;
                         rx.index += 1;
+                        if byte == b'\n' {
+                            rx.newline = true;
+                            rx.buffer[rx.index] = b'\0';
+                            rx.index += 1;
+                        }
                     }
                 });
-                // if there is no client, empty the buffer into the void
-                if $uart.rx_fifo_not_empty() {
-                    $uart.read_byte();
-                }
+
                 $uart.tx.map(|tx| {
                     // if a big buffer was given, this could be a very long call
                     if $uart.tx_fifo_not_full() && tx.index < tx.length {
@@ -159,15 +179,16 @@ impl<'a> UART<'a> {
     const fn new(
         registers: &'static StaticRef<UartRegisters>,
         nvic: &'static nvic::Nvic,
+        num: usize,
     ) -> UART<'a> {
         UART {
             registers,
             nvic,
+            num,
             tx_client: OptionalCell::empty(),
             rx_client: OptionalCell::empty(),
             tx: MapCell::empty(),
             rx: MapCell::empty(),
-
             receiving_word: Cell::new(false),
         }
     }
@@ -215,11 +236,16 @@ impl<'a> UART<'a> {
 
     fn enable_interrupts(&self) {
         // set only interrupts used
-        self.registers.imsc.modify(
-            Interrupts::RX::SET
-                + Interrupts::RX_TIMEOUT::SET
-                + Interrupts::END_OF_TRANSMISSION::SET,
-        );
+        self.registers
+            .imsc
+            .modify(Interrupts::TX::SET + Interrupts::END_OF_TRANSMISSION::SET);
+
+        self.registers
+            .ifls
+            .modify(FifoLevelSelect::TXSEL::OneEighth);
+        self.registers
+            .ifls
+            .modify(FifoLevelSelect::RXSEL::OneEighth);
     }
 
     /// Clears all interrupts related to UART.
@@ -228,8 +254,11 @@ impl<'a> UART<'a> {
         self.registers.icr.write(Interrupts::ALL_INTERRUPTS::SET);
 
         self.rx.take().map(|rx| {
-            if rx.index == rx.length {
+            if rx.index == rx.length || rx.newline {
                 self.rx_client.map(move |client| {
+                    self.registers
+                        .imsc
+                        .modify(Interrupts::RX::CLEAR + Interrupts::RX_TIMEOUT::CLEAR);
                     client.received_buffer(
                         rx.buffer,
                         rx.index,
@@ -352,6 +381,7 @@ impl<'a> uart::Transmit<'a> for UART<'a> {
                 buffer: buffer,
                 length: len,
                 index: 1,
+                newline: false,
             });
             (ReturnCode::SUCCESS, None)
         }
@@ -390,10 +420,15 @@ impl<'a> uart::Receive<'a> for UART<'a> {
         } else if self.rx.is_some() || self.receiving_word.get() {
             (ReturnCode::EBUSY, Some(buffer))
         } else {
+            self.registers
+                .imsc
+                .modify(Interrupts::RX::SET + Interrupts::RX_TIMEOUT::SET);
+
             self.rx.put(Transaction {
                 buffer: buffer,
                 length: len,
                 index: 0,
+                newline: false,
             });
             (ReturnCode::SUCCESS, None)
         }

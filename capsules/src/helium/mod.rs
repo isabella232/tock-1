@@ -1,3 +1,4 @@
+pub mod channels;
 pub mod device;
 pub mod driver;
 // pub mod mac;

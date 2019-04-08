@@ -5,79 +5,12 @@ use kernel::common::registers::ReadOnly;
 pub static mut LR_RFPARAMS: [u32; 6] = [
     0x030c5068, 0x50884446, 0x0017609c, 0x000288A3, 0x7ddf0002, 0xFFFFFFFF,
 ];
-
-//pub static mut TX_STD_PARAMS: [u32; 4] = [0x0141362b, 0x11310703, 0x001a6028, 0xFFFFFFFF];
-pub static mut TX_STD_PARAMS: [u32; 4] = [0x00c9222b, 0x11310703, 0x001a6028, 0xFFFFFFFF];
-
+pub static mut CWM_RFPARAMS: [u32; 5] =
+    [0x50884446, 0x000288A3, 0x001a609c, 0x7ddf0002, 0xFFFFFFFF];
+pub static mut TX_STD_PARAMS_10: [u32; 4] = [0x0141362b, 0x11310703, 0x001a6028, 0xFFFFFFFF]; // 10 dB output
+pub static mut TX_STD_PARAMS_9: [u32; 4] = [0x00c9222b, 0x11310703, 0x001a6028, 0xFFFFFFFF]; // 9 dB output
+pub static mut TX_STD_PARAMS_2: [u32; 4] = [0x004f262b, 0x11310703, 0x001a6028, 0xFFFFFFFF]; // 2 dB output
 pub static mut TX_20_PARAMS: [u32; 4] = [0x82a86c2b, 0x11310703, 0x001f6028, 0xFFFFFFFF];
-
-pub static mut OLD_LR_RFPARAMS: [u32; 28] = [
-    // override_use_patch_simplelink_long_range.xml
-    0x00000847, // PHY: Use MCE RAM patch, RFE RAM patch MCE_RFE_OVERRIDE(1,0,0,1,0,0),
-    0x006E88E3, // PHY: Use MCE RAM patch only for Rx (0xE), use MCE ROM bank 6 for Tx (0x6)
-    // override_synth_prop_863_930_div5.xml
-    0x02400403, // Synth: Use 48 MHz crystal as synth clock, enable extra PLL filtering
-    0x00068793, // Synth: Set minimum RTRIM to 6
-    0x001C8473, // Synth: Configure extra PLL filtering
-    0x00088433, // Synth: Configure extra PLL filtering
-    0x000684A3, // Synth: Set Fref to 4 MHz
-    0x40014005, // Synth: Configure faster calibration HW32_ARRAY_OVERRIDE(0x4004,1),
-    0x180C0618, // Synth: Configure faster calibration
-    0xC00401A1, // Synth: Configure faster calibration
-    0x00010101, // Synth: Configure faster calibration
-    0xC0040141, // Synth: Configure faster calibration
-    0x00214AD3, // Synth: Configure faster calibration
-    0x02980243, // Synth: Decrease synth programming time-out by 90 us from default (0x0298 RAT ticks = 166 us)
-    0x0A480583, // Synth: Set loop bandwidth after lock to 20 kHz
-    0x7AB80603, // Synth: Set loop bandwidth after lock to 20 kHz
-    0x00000623, // Synth: Set loop bandwidth after lock to 20 kHz
-    // override_phy_simplelink_long_range_dsss4.xml
-    0x030c5068, // PHY: Configure DSSS SF=4 for payload data HW_REG_OVERRIDE(0x5068,0x030C),
-    0x146f5128, // PHY: Set SimpleLink Long Range bit-inverted sync word pattern (uncoded, before spreading to fixed-size 64-bit pattern): 0x146F HW_REG_OVERRIDE(0x5128,0x146F),
-    0xeb90512c, // PHY: Set SimpleLink Long Range sync word pattern (uncoded, before spreading to fixed-size 64-bit pattern): 0xEB90 HW_REG_OVERRIDE(0x512C,0xEB90),
-    0x362e5124, // PHY: Reduce demodulator correlator threshold for improved Rx sensitivity HW_REG_OVERRIDE(0x5124,0x362E),
-    0x004c5118, // PHY: Reduce demodulator correlator threshold for improved Rx sensitivity HW_REG_OVERRIDE(0x5118,0x004C),
-    0x3e055140, // PHY: Configure limit on frequency offset compensation tracker HW_REG_OVERRIDE(0x5140,0x3E05),
-    // override_phy_rx_frontend_simplelink_long_range.xml
-    0x000288A3, // Rx: Set RSSI offset to adjust reported RSSI by -2 dB (default: 0)
-    // override_phy_rx_aaf_bw_0xd.xml
-    0x7ddf0002, // Rx: Set anti-aliasing filter bandwidth to 0xD (in ADI0, set IFAMPCTL3[7:4]=0xD) ADI_HALFREG_OVERRIDE(0,61,0xF,0xD),
-    0xFCFC08C3, // DC/DC regulator: In Tx, use DCDCCTL5[3:0]=0xC (DITHER_EN=1 and IPEAK=4). In Rx, use DCDCCTL5[3:0]=0xC (DITHER_EN=1 and IPEAK=4).
-    0x82A86C2B, // txHighPA=0x20AA1B
-    0xFFFFFFFF,
-];
-
-pub static mut GFSK_RFPARAMS: [u32; 26] = [
-    // override_use_patch_prop_genfsk.xml
-    0x00000847, // PHY: Use MCE RAM patch, RFE RAM patch MCE_RFE_OVERRIDE(1,0,0,1,0,0),
-    // override_synth_prop_863_930_div5.xml
-    0x02400403, // Synth: Use 48 MHz crystal as synth clock, enable extra PLL filtering
-    0x00068793, // Synth: Set minimum RTRIM to 6
-    0x001C8473, // Synth: Configure extra PLL filtering
-    0x00088433, // Synth: Configure extra PLL filtering
-    0x000684A3, // Synth: Set Fref to 4 MHz
-    0x40014005, // Synth: Configure faster calibration HW32_ARRAY_OVERRIDE(0x4004,1),
-    0x180C0618, // Synth: Configure faster calibration
-    0xC00401A1, // Synth: Configure faster calibration
-    0x00010101, // Synth: Configure faster calibration
-    0xC0040141, // Synth: Configure faster calibration
-    0x00214AD3, // Synth: Configure faster calibration
-    0x02980243, // Synth: Decrease synth programming time-out by 90 us from default (0x0298 RAT ticks = 166 us) Synth: Set loop bandwidth after lock to 20 kHz
-    0x0A480583, // Synth: Set loop bandwidth after lock to 20 kHz
-    0x7AB80603, // Synth: Set loop bandwidth after lock to 20 kHz
-    0x00000623, 0x002F6028, //
-    // override_phy_tx_pa_ramp_genfsk.xml
-    0x50880002, // Tx: Configure PA ramp time, PACTL2.RC=0x3 (in ADI0, set PACTL2[3]=1) ADI_HALFREG_OVERRIDE(0,16,0x8,0x8),
-    0x51110002, // Tx: Configure PA ramp time, PACTL2.RC=0x3 (in ADI0, set PACTL2[4]=1) ADI_HALFREG_OVERRIDE(0,17,0x1,0x1),
-    // override_phy_rx_frontend_genfsk.xml
-    0x001a609c, // Rx: Set AGC reference level to 0x1A (default: 0x2E) HW_REG_OVERRIDE(0x609C,0x001A),
-    0x00018883, // Rx: Set LNA bias current offset to adjust +1 (default: 0)
-    0x000288A3, // Rx: Set RSSI offset to adjust reported RSSI by -2 dB (default: 0)
-    // override_phy_rx_aaf_bw_0xd.xml
-    0x7ddf0002, // Rx: Set anti-aliasing filter bandwidth to 0xD (in ADI0, set IFAMPCTL3[7:4]=0xD) ADI_HALFREG_OVERRIDE(0,61,0xF,0xD),
-    0xFCFC08C3, // TX power override DC/DC regulator: In Tx with 14 dBm PA setting, use DCDCCTL5[3:0]=0xF (DITHER_EN=1 and IPEAK=7). In Rx, use DCDCCTL5[3:0]=0xC (DITHER_EN=1 and IPEAK=4).
-    0x82A86C2B, 0xFFFFFFFF, // Stop word
-];
 
 // Radio and data commands bitfields
 bitfield! {
@@ -127,6 +60,8 @@ pub struct DirectCommand {
     pub params: u16,
 }
 
+unsafe impl RadioCommand for DirectCommand {}
+
 impl DirectCommand {
     pub const fn new(command_no: u16, params: u16) -> DirectCommand {
         DirectCommand { command_no, params }
@@ -151,15 +86,11 @@ pub struct AddDataEntry {
     pub p_entry: u32,
 }
 
-unsafe impl RadioCommand for AddDataEntry {
-    fn guard(&mut self) {}
-}
+unsafe impl RadioCommand for AddDataEntry {}
 
 // Command and parameters for radio setup
 
-pub unsafe trait RadioCommand {
-    fn guard(&mut self);
-}
+pub unsafe trait RadioCommand {}
 
 pub mod prop_commands {
     #![allow(unused)]
@@ -271,10 +202,19 @@ pub mod prop_commands {
         pub _num_addr, set_num_addr                         : 15, 11;
     }
 
+    bitfield! {
+        #[derive(Copy, Clone)]
+        pub struct RfcTxTestConf(u8);
+        impl Debug;
+        pub _use_cw, set_use_cw                             : 0;
+        pub _fs_off, set_fs_off                             : 1;
+        pub _whiten_mode, set_whiten_mode                   :3, 2;
+    }
+
     // Radio Operation Commands
     #[repr(C)]
     #[derive(Copy, Clone)]
-    pub struct CommandRadioDivSetup {
+    pub struct CommandRadioDivSetup_P {
         pub command_no: u16, // 0x3807
         pub status: u16,
         pub p_nextop: u32,
@@ -296,9 +236,31 @@ pub mod prop_commands {
         pub reg_override_tx_20: u32,
     }
 
-    unsafe impl RadioCommand for CommandRadioDivSetup {
-        fn guard(&mut self) {}
+    unsafe impl RadioCommand for CommandRadioDivSetup_P {}
+    // Radio Operation Commands
+    #[repr(C)]
+    #[derive(Copy, Clone)]
+    pub struct CommandRadioDivSetup_R {
+        pub command_no: u16, // 0x3807
+        pub status: u16,
+        pub p_nextop: u32,
+        pub start_time: u32,
+        pub start_trigger: u8,
+        pub condition: RfcCondition,
+        pub modulation: RfcModulation,
+        pub symbol_rate: RfcSymbolRate,
+        pub rx_bandwidth: u8,
+        pub preamble_conf: RfcPreambleConf,
+        pub format_conf: RfcFormatConf,
+        pub config: RfcSetupConfig,
+        pub tx_power: u16,
+        pub reg_overrides: u32,
+        pub center_freq: u16,
+        pub int_freq: u16,
+        pub lo_divider: u8,
     }
+
+    unsafe impl RadioCommand for CommandRadioDivSetup_R {}
 
     #[repr(C)]
     pub struct CommandRadioSetup {
@@ -331,9 +293,7 @@ pub mod prop_commands {
         pub rat0: u32,
     }
 
-    unsafe impl RadioCommand for CommandSyncRat {
-        fn guard(&mut self) {}
-    }
+    unsafe impl RadioCommand for CommandSyncRat {}
 
     #[repr(C)]
     #[derive(Copy, Clone)]
@@ -350,9 +310,7 @@ pub mod prop_commands {
         pub packet_pointer: u32,
     }
 
-    unsafe impl RadioCommand for CommandTx {
-        fn guard(&mut self) {}
-    }
+    unsafe impl RadioCommand for CommandTx {}
 
     // Custom FS
     #[repr(C)]
@@ -373,9 +331,7 @@ pub mod prop_commands {
         pub dummy3: u16,
     }
 
-    unsafe impl RadioCommand for CommandFS {
-        fn guard(&mut self) {}
-    }
+    unsafe impl RadioCommand for CommandFS {}
 
     #[repr(C)]
     pub struct CommandFSPowerdown {
@@ -387,9 +343,7 @@ pub mod prop_commands {
         pub condition: RfcCondition,
     }
 
-    unsafe impl RadioCommand for CommandFSPowerdown {
-        fn guard(&mut self) {}
-    }
+    unsafe impl RadioCommand for CommandFSPowerdown {}
 
     #[repr(C)]
     pub struct CommandRx {
@@ -412,9 +366,7 @@ pub mod prop_commands {
         pub _rx_sniff: [u8; 14],
     }
 
-    unsafe impl RadioCommand for CommandRx {
-        fn guard(&mut self) {}
-    }
+    unsafe impl RadioCommand for CommandRx {}
 
     #[repr(C)]
     pub struct CommandRxAdv {
@@ -440,7 +392,24 @@ pub mod prop_commands {
         pub _rx_sniff: [u8; 14],
     }
 
-    unsafe impl RadioCommand for CommandRxAdv {
-        fn guard(&mut self) {}
+    unsafe impl RadioCommand for CommandRxAdv {}
+
+    #[repr(C)]
+    pub struct CommandTxTest {
+        pub command_no: u16, // 0808
+        pub status: u16,
+        pub p_nextop: u32,
+        pub start_time: u32,
+        pub start_trigger: u8,
+        pub condition: RfcCondition,
+        pub config: RfcTxTestConf,
+        pub _reserved0: u8,
+        pub tx_word: u16,
+        pub _reserved1: u8,
+        pub end_trigger: RfcTrigger,
+        pub sync_word: u32,
+        pub end_time: u32,
     }
+
+    unsafe impl RadioCommand for CommandTxTest {}
 }
