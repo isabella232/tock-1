@@ -452,7 +452,7 @@ pub unsafe fn reset_handler() {
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
 
-    let rfc = &cc26x2::radio::MULTIMODE_RADIO;
+    //let rfc = &cc26x2::radio::MULTIMODE_RADIO;
     //rfc.run_tests(2, 2);
 
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
@@ -491,7 +491,6 @@ pub unsafe fn reset_handler() {
     );
 
     debug!("Kernel loop");
-
 
     board_kernel.kernel_loop(&launchxl, chip, Some(&launchxl.ipc), &main_loop_capability);
 }

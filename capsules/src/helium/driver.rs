@@ -1,4 +1,4 @@
-use crate::enum_primitive::cast::{FromPrimitive, ToPrimitive};
+use crate::enum_primitive::cast::FromPrimitive;
 use crate::helium::{device, framer::PayloadType};
 use core::cmp::min;
 use kernel::common::cells::{OptionalCell, TakeCell};
@@ -166,6 +166,10 @@ impl Helium<'a> {
                         Some(PayloadType::None) => frame.frame_payload(payload.as_ref()),
                         Some(PayloadType::Packetizer) => frame.append_payload(payload.as_ref()),
                         Some(PayloadType::Cauterize) => frame.cauterize_payload(payload.as_ref()),
+                        Some(PayloadType::LDPC) => {
+                            //frame.frame_payload_ldpc(payload.as_ref()),
+                            frame.frame_payload(payload.as_ref())
+                        }
                         // Will never get to this
                         None => ReturnCode::EINVAL,
                     })
@@ -324,7 +328,7 @@ impl Driver for Helium<'a> {
                                 return ReturnCode::FAIL;
                             }
                         };
-
+                        debug!("{:?}", pl_type);
                         let next_tx = Some((device_id, Some(pl_type)));
                         if next_tx.is_none() {
                             return ReturnCode::EINVAL;

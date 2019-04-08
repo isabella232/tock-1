@@ -1,4 +1,4 @@
-use kernel::common::cells::{MapCell, OptionalCell, TakeCell};
+use kernel::common::cells::{MapCell, TakeCell};
 
 use kernel::hil;
 use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
@@ -7,19 +7,11 @@ use kernel::{AppId, AppSlice, Callback, Driver, Grant, ReturnCode, Shared};
 use crate::driver;
 pub const DRIVER_NUM: usize = driver::NUM::GPS as usize;
 
-static GPS_PARAMS: hil::uart::Parameters = hil::uart::Parameters {
-    baud_rate: 9600, // baud rate in bit/s
-    width: hil::uart::Width::Eight,
-    parity: hil::uart::Parity::None,
-    stop_bits: hil::uart::StopBits::One,
-    hw_flow_control: false,
-};
-
 const PMTK_SET_NMEA_OUTPUT_RMCGGA: &'static [u8; 49] =
     b"$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28";
 const PMTK_SET_NMEA_UPDATE_1HZ: &'static [u8; 16] = b"$PMTK220,1000*1F";
 
-use enum_primitive::cast::{FromPrimitive, ToPrimitive};
+use enum_primitive::cast::FromPrimitive;
 use enum_primitive::enum_from_primitive;
 
 enum_from_primitive! {
@@ -52,10 +44,7 @@ pub struct App {
 pub struct Gps<'a> {
     state: MapCell<State>,
     hw: &'a hil::uart::Uart<'a>,
-    tx_in_progress: OptionalCell<AppId>,
     tx_buffer: TakeCell<'a, [u8]>,
-    rx_in_progress: OptionalCell<AppId>,
-    rx_buffer: TakeCell<'a, [u8]>,
     apps: Grant<App>,
 }
 
@@ -64,15 +53,12 @@ impl<'a> Gps<'a> {
         Gps {
             state: MapCell::new(State::Init),
             hw: uart,
-            tx_in_progress: OptionalCell::empty(),
             tx_buffer: TakeCell::empty(),
-            rx_in_progress: OptionalCell::empty(),
-            rx_buffer: TakeCell::empty(),
             apps,
         }
     }
 
-    pub fn initialize(&self, mut tx_buf: &'static mut [u8], rx_buf: &'static mut [u8]) {
+    pub fn initialize(&self, tx_buf: &'static mut [u8], rx_buf: &'static mut [u8]) {
         for i in 0..::core::cmp::min(PMTK_SET_NMEA_OUTPUT_RMCGGA.len(), tx_buf.len()) {
             tx_buf[i] = PMTK_SET_NMEA_OUTPUT_RMCGGA[i];
         }
@@ -119,7 +105,7 @@ impl<'a> hil::uart::ReceiveClient for Gps<'a> {
         buffer: &'static mut [u8],
         rx_len: usize,
         _rcode: ReturnCode,
-        error: hil::uart::Error,
+        _error: hil::uart::Error,
     ) {
         for app in self.apps.iter() {
             app.enter(|app, _| {
@@ -299,7 +285,6 @@ impl Driver for Gps<'a> {
                     ReturnCode::SUCCESS
                 }).unwrap_or_else(|err| err.into())
             },
-            _ => ReturnCode::ENOSUPPORT
         }
     }
 }

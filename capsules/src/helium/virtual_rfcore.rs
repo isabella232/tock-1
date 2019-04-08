@@ -3,7 +3,6 @@ use crate::helium::framer::FrameInfo;
 use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::hil::rfcore;
-use kernel::hil::time::Frequency;
 use kernel::ReturnCode;
 
 pub trait RFCore {
@@ -59,86 +58,6 @@ pub enum RadioState {
     TxDelay,
 }
 
-#[derive(Copy, Clone)]
-enum Expiration {
-    Disabled,
-    Abs(u32),
-}
-
-#[derive(Copy, Clone)]
-struct AlarmData {
-    t0: u32,
-    expiration: Expiration,
-}
-
-impl AlarmData {
-    fn new() -> AlarmData {
-        AlarmData {
-            t0: 0,
-            expiration: Expiration::Disabled,
-        }
-    }
-}
-/// Process specific memory
-pub struct App {
-    process_status: Option<RadioState>,
-    alarm_data: AlarmData,
-
-    // Channels meta-data
-    adv_data: Option<ChannelParams>,
-    channel_interval_ms: u32,
-    tx_power: u16,
-
-    /// The state of an app-specific pseudo random number.
-    ///
-    /// For example, it can be used for the pseudo-random frequency parameter.
-    /// It should be read using the `random_number` method, which updates it as
-    /// well.
-    random_nonce: u32,
-
-    // Scanning meta-data
-    hop_callback: Option<kernel::Callback>,
-}
-
-impl Default for App {
-    fn default() -> App {
-        App {
-            process_status: Some(RadioState::Sleep),
-            alarm_data: AlarmData::new(),
-            adv_data: None,
-            tx_power: 0,
-            channel_interval_ms: 200,
-            // Just use any non-zero starting value by default
-            random_nonce: 0xdeadbeef,
-            hop_callback: None,
-        }
-    }
-}
-
-impl App {
-    // Returns a new pseudo-random number and updates the randomness state.
-    //
-    // Uses the [Xorshift](https://en.wikipedia.org/wiki/Xorshift) algorithm to
-    // produce pseudo-random numbers. Uses the `random_nonce` field to keep
-    // state.
-    fn random_nonce(&mut self) -> u32 {
-        let mut next_nonce = ::core::num::Wrapping(self.random_nonce);
-        next_nonce ^= next_nonce << 13;
-        next_nonce ^= next_nonce >> 17;
-        next_nonce ^= next_nonce << 5;
-        self.random_nonce = next_nonce.0;
-        self.random_nonce
-    }
-
-    // Set the next alarm for this app using the period and provided start time.
-    fn set_next_alarm<F: Frequency>(&mut self, now: u32) {
-        self.alarm_data.t0 = now;
-        let nonce = self.random_nonce() % 10;
-
-        let period_ms = (self.channel_interval_ms + nonce) * F::frequency() / 1000;
-        self.alarm_data.expiration = Expiration::Abs(now.wrapping_add(period_ms));
-    }
-}
 pub struct VirtualRadio<'a, R: rfcore::Radio> {
     radio: &'a R,
     tx_client: OptionalCell<&'static rfcore::TxClient>,

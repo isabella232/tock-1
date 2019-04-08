@@ -1,5 +1,6 @@
 use crate::cauterize::{Cauterize, Encoder, Vector};
 use crate::helium::{device, virtual_rfcore};
+//use crate::labrador_ldpc::LDPCCode;
 use crate::msg;
 use core::cell::Cell;
 use kernel::common::cells::{MapCell, OptionalCell};
@@ -127,6 +128,35 @@ impl Frame {
 
         ReturnCode::SUCCESS
     }
+    /*
+    pub fn frame_payload_ldpc(&mut self, payload: &[u8]) -> ReturnCode {
+        let total_len = payload.len();
+        if total_len > 240 {
+            return ReturnCode::ENOMEM;
+        }
+        let code = LDPCCode::TC512;
+
+        let fill = code.k() % total_len;
+        debug!("Fill: {:?}", fill);
+
+        let mut txcode = [0u8; 64];
+
+        let mut txdata: [u8; 32] = [0; 32];
+        for i in 0..payload.len() as usize {
+            txdata[i] = payload.as_ref()[i];
+        }
+
+        code.copy_encode(&txdata, &mut txcode);
+
+        for i in 0..64 as usize {
+            self.buf[i] = txcode.as_ref()[i] as u8;
+        }
+
+        debug!("Code: {:?}", self.buf);
+        self.info.header.data_len = self.buf.len();
+        ReturnCode::SUCCESS
+    }
+    */
 }
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
@@ -175,6 +205,7 @@ pub enum PayloadType {
     None = 0b00,
     Packetizer = 0b001,
     Cauterize = 0b010,
+    LDPC = 0b011,
 }
 
 impl PayloadType {
@@ -183,6 +214,7 @@ impl PayloadType {
             0b00 => Some(PayloadType::None),
             0b01 => Some(PayloadType::Packetizer),
             0b10 => Some(PayloadType::Cauterize),
+            0b11 => Some(PayloadType::LDPC),
             _ => None,
         }
     }
@@ -191,6 +223,7 @@ impl PayloadType {
             0b00 => Some(PayloadType::None),
             0b01 => Some(PayloadType::Packetizer),
             0b10 => Some(PayloadType::Cauterize),
+            0b11 => Some(PayloadType::LDPC),
             _ => None,
         }
     }
