@@ -25,7 +25,8 @@ use kernel::common::StaticRef;
 
 use crate::memory_map::AON_BATMON_BASE;
 
-pub const BATMON: StaticRef<Registers> = unsafe { StaticRef::new(AON_BATMON_BASE as *const Registers) };
+pub const BATMON: StaticRef<Registers> =
+    unsafe { StaticRef::new(AON_BATMON_BASE as *const Registers) };
 
 #[repr(C)]
 pub struct Registers {
@@ -86,35 +87,37 @@ register_bitfields![
 
 pub fn enable() {
     BATMON.ctl.write(Ctl::CALC::ENABLE + Ctl::MEAS::ENABLE);
-    BATMON.meascfg.write(MeasCfg::PER::CONTINUOUS + MeasCfg::MEAS::ENABLE);
+    BATMON
+        .meascfg
+        .write(MeasCfg::PER::CONTINUOUS + MeasCfg::MEAS::ENABLE);
 }
 
 pub fn has_new_measurement() -> bool {
-	BATMON.batupd.read(BatteryUpdates::SINCE_LAST_CLEAR) == 1
+    BATMON.batupd.read(BatteryUpdates::SINCE_LAST_CLEAR) == 1
 }
 
 pub fn get_mv() -> u32 {
-	// read in the integer part of the voltage
-	// and initialize the return value with it
-	let mut ret = 1000 * BATMON.bat.read(Battery::INT);
-	// read in the factional part of the voltage
-	let frac = BATMON.bat.read(Battery::FRAC);
-	// create a bitmask on the highest bit
-	let mut bm = 0b10000000;
-	// initialize a multiplier coefficient
-	let mut mult = 1.0/2.0;
+    // read in the integer part of the voltage
+    // and initialize the return value with it
+    let mut ret = 1000 * BATMON.bat.read(Battery::INT);
+    // read in the factional part of the voltage
+    let frac = BATMON.bat.read(Battery::FRAC);
+    // create a bitmask on the highest bit
+    let mut bm = 0b10000000;
+    // initialize a multiplier coefficient
+    let mut mult = 1.0 / 2.0;
 
-	// for every bit, if it's set, multiply by current mutiplier
-	for _i in 0..7 {
-		if (frac&bm) != 0 {
-			ret += (mult*1000.0) as u32;
-		}
-		// shift the bitmask
-		bm >>= 1;
-		// keep multiplying out the multiplier
-		mult *= 1.0/2.0;
-	}
-	ret
+    // for every bit, if it's set, multiply by current mutiplier
+    for _i in 0..7 {
+        if (frac & bm) != 0 {
+            ret += (mult * 1000.0) as u32;
+        }
+        // shift the bitmask
+        bm >>= 1;
+        // keep multiplying out the multiplier
+        mult *= 1.0 / 2.0;
+    }
+    ret
 }
 
 /*
@@ -133,7 +136,7 @@ if ( HWREG( AON_PMCTL_BASE + AON_PMCTL_O_PWRCTL ) & AON_PMCTL_PWRCTL_EXT_REG_MOD
 } else {
     HWREGBITW( AON_BATMON_BASE + AON_BATMON_O_FLASHPUMPP0, AON_BATMON_FLASHPUMPP0_LOWLIM_BITN ) = 0;
 
-	batmon::BATMON::FlashPumpP0.write(batmon::FlashPumpP0::LOWLIM::INTERNAL_REGULATOR_MODE)
+    batmon::BATMON::FlashPumpP0.write(batmon::FlashPumpP0::LOWLIM::INTERNAL_REGULATOR_MODE)
     gpt::GPT[0].cfg.write(gpt::Cfg::BITS::_16);
 }
 

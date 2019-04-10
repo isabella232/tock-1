@@ -490,8 +490,6 @@ pub unsafe fn reset_handler() {
 
     adc::ADC.configure(adc::Source::NominalVdds, adc::SampleCycle::_170_us);
 
-
-
     debug!("Loading processes");
 
     batmon::enable();
