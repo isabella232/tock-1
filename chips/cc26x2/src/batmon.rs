@@ -119,25 +119,3 @@ pub fn get_mv() -> u32 {
     }
     ret
 }
-
-/*
-
-to add to setup
-
-// 1.
-// Do not allow DCDC to be enabled if in external regulator mode.
-// Preventing this by setting both the RECHARGE and the ACTIVE bits bit in the CCFG_MODE_CONF copy register (ccfg_ModeConfReg).
-//
-// 2.
-// Adjusted battery monitor low limit in internal regulator mode.
-// This is done by setting AON_BATMON_FLASHPUMPP0_LOWLIM=0 in internal regulator mode.
-if ( HWREG( AON_PMCTL_BASE + AON_PMCTL_O_PWRCTL ) & AON_PMCTL_PWRCTL_EXT_REG_MODE ) {
-    ccfg_ModeConfReg |= ( CCFG_MODE_CONF_DCDC_RECHARGE_M | CCFG_MODE_CONF_DCDC_ACTIVE_M );
-} else {
-    HWREGBITW( AON_BATMON_BASE + AON_BATMON_O_FLASHPUMPP0, AON_BATMON_FLASHPUMPP0_LOWLIM_BITN ) = 0;
-
-    batmon::BATMON::FlashPumpP0.write(batmon::FlashPumpP0::LOWLIM::INTERNAL_REGULATOR_MODE)
-    gpt::GPT[0].cfg.write(gpt::Cfg::BITS::_16);
-}
-
-*/
