@@ -31,6 +31,7 @@
 */
 use crate::aon;
 use crate::aux;
+use crate::batmon;
 use crate::ccfg;
 use crate::gpio;
 use crate::memory_map;
@@ -41,7 +42,10 @@ use core::ptr;
 use kernel::common::StaticRef;
 
 pub fn perform() {
+    // Adjust battery monitor low limit in internal regulator mode.
+    batmon::BATMON.flashpumpp0.write(batmon::FlashPumpP0::LOWLIM::INTERNAL_REGULATOR_MODE);
     unsafe { SetupTrimDevice() }
+
 }
 
 const FCFG_1_REVISION: StaticRef<u32> = unsafe { StaticRef::new(0x5000131C as *const u32) };

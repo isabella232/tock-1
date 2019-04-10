@@ -372,6 +372,7 @@ impl Driver for Helium<'a> {
                     self.device.set_address_long(addr_long);
                     ReturnCode::SUCCESS
                 }),
+                
                 HeliumCommand::Invalid => ReturnCode::ENOSUPPORT,
             }
         } else {

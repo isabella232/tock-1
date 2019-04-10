@@ -13,6 +13,7 @@ use capsules::helium::{device::Device, virtual_rfcore::RFCore};
 use capsules::virtual_uart::{MuxUart, UartDevice};
 use cc26x2::adc;
 use cc26x2::aon;
+use cc26x2::batmon;
 use cc26x2::fcfg1;
 use cc26x2::osc;
 use cc26x2::prcm;
@@ -489,7 +490,12 @@ pub unsafe fn reset_handler() {
 
     adc::ADC.configure(adc::Source::NominalVdds, adc::SampleCycle::_170_us);
 
+
+
     debug!("Loading processes");
+
+    batmon::enable();
+    debug!("Battery Voltage = {}", batmon::get_mv());
 
     kernel::procs::load_processes(
         board_kernel,
