@@ -7,6 +7,8 @@ use crate::prcm;
 use crate::radio;
 use crate::rtc;
 use crate::uart;
+use crate::wdt;
+
 use cortexm4;
 use kernel;
 
@@ -90,6 +92,14 @@ impl kernel::Chip for Cc26X2 {
 
     fn has_pending_interrupts(&self) -> bool {
         events::has_event()
+    }
+
+    fn wdt_enable(&self) {
+        wdt::enable();
+    }
+
+    fn wdt_disable(&self) {
+        wdt::disable();
     }
 
     fn sleep(&self) {

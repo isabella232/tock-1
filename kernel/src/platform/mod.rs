@@ -24,6 +24,8 @@ pub trait Chip {
     fn service_pending_interrupts(&self);
     fn has_pending_interrupts(&self) -> bool;
     fn mpu(&self) -> &Self::MPU;
+    fn wdt_enable(&self);
+    fn wdt_disable(&self);
     fn systick(&self) -> &Self::SysTick;
     fn userspace_kernel_boundary(&self) -> &Self::UserspaceKernelBoundary;
     fn sleep(&self);

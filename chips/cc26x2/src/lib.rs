@@ -45,5 +45,6 @@ pub mod rtc;
 pub mod setup;
 pub mod trng;
 pub mod uart;
+pub mod wdt;
 
 pub use crate::crt1::init;
