@@ -17,14 +17,13 @@ use kernel::common::StaticRef;
 
 use crate::memory_map::WDT_BASE;
 
-pub const WDT: StaticRef<Registers> =
-    unsafe { StaticRef::new(WDT_BASE as *const Registers) };
+pub const WDT: StaticRef<Registers> = unsafe { StaticRef::new(WDT_BASE as *const Registers) };
 
 #[repr(C)]
 pub struct Registers {
     load: ReadWrite<u32>,
-	read: ReadOnly<u32>,
-	ctl: ReadWrite<u32, Ctl::Register>,
+    read: ReadOnly<u32>,
+    ctl: ReadWrite<u32, Ctl::Register>,
 }
 
 register_bitfields![
@@ -46,11 +45,10 @@ register_bitfields![
 ];
 
 pub fn enable() {
-	WDT.load.set(0xFF);
+    WDT.load.set(0xFF);
     WDT.ctl.write(Ctl::RESET::ENABLE + Ctl::INT::ENABLE);
 }
 
 pub fn disable() {
     WDT.ctl.write(Ctl::INT::DISABLE);
 }
-
