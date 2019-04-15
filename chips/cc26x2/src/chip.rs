@@ -70,6 +70,7 @@ impl kernel::Chip for Cc26X2 {
     fn service_pending_interrupts(&self) {
         unsafe {
             while let Some(event) = events::next_pending() {
+                self.wdt_enable();
                 events::clear_event_flag(event);
                 match event {
                     EVENT_PRIORITY::GPIO => gpio::PORT.handle_events(),
@@ -86,6 +87,7 @@ impl kernel::Chip for Cc26X2 {
                     EVENT_PRIORITY::AON_PROG => (),
                     _ => panic!("unhandled event {:?} ", event),
                 }
+                self.wdt_disable();
             }
         }
     }

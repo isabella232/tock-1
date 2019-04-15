@@ -208,7 +208,6 @@ impl Kernel {
         _capability: &capabilities::MainLoopCapability,
     ) {
         loop {
-            chip.wdt_enable();
             unsafe {
                 chip.service_pending_interrupts();
 
@@ -220,7 +219,7 @@ impl Kernel {
                         break;
                     }
                 }
-                chip.wdt_disable();
+
                 chip.atomic(|| {
                     if !chip.has_pending_interrupts() && self.processes_blocked() {
                         chip.sleep();

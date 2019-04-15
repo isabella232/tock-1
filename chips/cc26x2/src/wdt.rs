@@ -46,9 +46,9 @@ register_bitfields![
 
 pub fn enable() {
     WDT.load.set(0xFF);
-    WDT.ctl.write(Ctl::RESET::ENABLE + Ctl::INT::ENABLE);
+    WDT.ctl.write(Ctl::RESET::ENABLE);
 }
 
 pub fn disable() {
-    WDT.ctl.write(Ctl::INT::DISABLE);
+    WDT.ctl.write(Ctl::RESET::DISABLE);
 }
