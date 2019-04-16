@@ -46,8 +46,8 @@ pub const HFREQ: u32 = 48 * 1_000_000;
 const FAULT_RESPONSE: kernel::procs::FaultResponse = kernel::procs::FaultResponse::Panic;
 
 // Number of concurrent processes this platform supports.
-const NUM_PROCS: usize = 3;
-static mut PROCESSES: [Option<&'static kernel::procs::ProcessType>; NUM_PROCS] = [None, None, None];
+const NUM_PROCS: usize = 1;
+static mut PROCESSES: [Option<&'static kernel::procs::ProcessType>; NUM_PROCS] = [None];
 
 #[link_section = ".app_memory"]
 // Give half of RAM to be dedicated APP memory
@@ -494,8 +494,6 @@ pub unsafe fn reset_handler() {
         /// Beginning of the ROM region containing app images.
         static _sapps: u8;
     }
-
-    adc::ADC.configure(adc::Source::NominalVdds, adc::SampleCycle::_170_us);
 
     debug!("Loading processes");
 

@@ -30,7 +30,7 @@ mod grant;
 mod mem;
 mod memop;
 mod platform;
-mod process;
+pub mod process;
 mod returncode;
 mod sched;
 mod tbfheader;
