@@ -59,8 +59,8 @@ pub struct Registers {
     _offset4: [u8; 0x50],
     mac_ble0: ReadOnly<u32>,
     mac_ble1: ReadOnly<u32>,
-    mac_15_4_0: ReadOnly<u32>,
-    mac_15_4_1: ReadOnly<u32>,
+    pub mac_15_4_0: ReadOnly<u32>,
+    pub mac_15_4_1: ReadOnly<u32>,
     _offset5: [u8; 0x14],
     misc_trim: ReadOnly<u32>,
     _offset6: [u8; 0x0C],
@@ -85,19 +85,3 @@ register_bitfields![
         ABS OFFSET(0) NUMBITS(8)
     ]
 ];
-
-pub const FCFG1: Fcfg1 = Fcfg1::new();
-
-pub struct Fcfg1 {
-    regs: StaticRef<Registers>,
-}
-
-impl Fcfg1 {
-    pub const fn new() -> Fcfg1 {
-        Fcfg1 { regs: REG }
-    }
-
-    pub fn get_device_mac_0(&self) -> u32 {
-        self.regs.mac_15_4_0.get()
-    }
-}

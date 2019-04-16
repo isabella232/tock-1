@@ -447,8 +447,6 @@ pub unsafe fn reset_handler() {
     radio.set_transmit_client(virtual_device);
     radio.set_receive_client(virtual_device);
 
-    debug!("my device is is: {:x}", fcfg1::FCFG1.get_device_mac_0());
-
     // Driver for user to interface with
     let radio_driver = static_init!(
         helium::driver::Helium<'static>,
@@ -456,7 +454,7 @@ pub unsafe fn reset_handler() {
             board_kernel.create_grant(&memory_allocation_capability),
             &mut HELIUM_BUF,
             virtual_device,
-            fcfg1::FCFG1.get_device_mac_0(),
+            fcfg1::REG.mac_15_4_0.get() as usize,
         )
     );
 

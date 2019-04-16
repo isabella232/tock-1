@@ -35,9 +35,8 @@ impl Frame {
         if total_len > 240 {
             return ReturnCode::ENOMEM;
         }
-        self.buf[0] = self.info.header.id;
         for i in 0..total_len as usize {
-            self.buf[i + 1] = payload.as_ref()[i];
+            self.buf[i] = payload.as_ref()[i];
         }
 
         self.info.header.data_len = total_len;

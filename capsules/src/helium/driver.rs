@@ -14,32 +14,16 @@ pub enum PowerMode {
     DeepSleep,
 }
 
-// #[derive(Default)]
-#[allow(unused)]
+#[derive(Default)]
 pub struct App {
     tx_callback: Option<Callback>,
     rx_callback: Option<Callback>,
+
     app_cfg: Option<AppSlice<Shared, u8>>,
     app_write: Option<AppSlice<Shared, u8>>,
     app_read: Option<AppSlice<Shared, u8>>,
-    pending_tx: Option<(u8, Option<PayloadType>)>, // Change u32 to keyid and fec mode later on during implementation
-    tx_interval_ms: u32,                           // 400 ms is maximum per FCC
-                                                   // random_nonce: u32, // Randomness to sending interval to reduce collissions
-}
-
-impl Default for App {
-    fn default() -> App {
-        App {
-            tx_callback: None,
-            rx_callback: None,
-            app_cfg: None,
-            app_write: None,
-            app_read: None,
-            pending_tx: None,
-            tx_interval_ms: 400,
-            // random_nonce: 0xdeadbeef,
-        }
-    }
+    pending_tx: Option<(u8, Option<PayloadType>)>,
+    // Change u32 to keyid and fec mode later on during implementation
 }
 
 pub struct Helium<'a> {
@@ -47,7 +31,7 @@ pub struct Helium<'a> {
     kernel_tx: TakeCell<'static, [u8]>,
     current_app: OptionalCell<AppId>,
     device: &'a device::Device<'a>,
-    device_id: u32,
+    device_id: usize,
 }
 
 impl Helium<'a> {
@@ -55,7 +39,7 @@ impl Helium<'a> {
         container: Grant<App>,
         tx_buf: &'static mut [u8],
         device: &'a device::Device<'a>,
-        device_id: u32,
+        device_id: usize,
     ) -> Helium<'a> {
         Helium {
             app: container,
@@ -274,6 +258,12 @@ impl Driver for Helium<'a> {
                     app.tx_callback = callback;
                     ReturnCode::SUCCESS
                 }),
+                HeliumCallback::GetAddress => {
+                    if let Some(mut cb) = callback {
+                        cb.schedule(self.device_id, 0, 0);
+                    }
+                    ReturnCode::SUCCESS
+                }
             }
         } else {
             ReturnCode::ENOSUPPORT
@@ -372,8 +362,6 @@ impl Driver for Helium<'a> {
                     self.device.set_address_long(addr_long);
                     ReturnCode::SUCCESS
                 }),
-
-                HeliumCommand::Invalid => ReturnCode::ENOSUPPORT,
             }
         } else {
             ReturnCode::ENOSUPPORT
@@ -424,6 +412,7 @@ enum_from_primitive! {
 pub enum HeliumCallback {
     RxCallback = 0,
     TxCallback = 1,
+    GetAddress = 2,
 }
 }
 
@@ -438,6 +427,5 @@ pub enum HeliumCommand {
     SetDeviceConfig = 5,
     SetNextTx = 6,
     SetAddress = 7,
-    Invalid,
 }
 }
