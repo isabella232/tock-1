@@ -152,8 +152,6 @@ macro_rules! uart_nvic {
                         rx.index += 1;
                         if byte == b'\n' {
                             rx.newline = true;
-                            rx.buffer[rx.index] = b'\0';
-                            rx.index += 1;
                         }
                     }
                 });

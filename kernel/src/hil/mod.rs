@@ -2,6 +2,7 @@
 
 pub mod adc;
 pub mod analog_comparator;
+pub mod battery;
 pub mod ble_advertising;
 pub mod crc;
 pub mod dac;

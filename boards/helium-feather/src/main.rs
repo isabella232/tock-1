@@ -70,6 +70,8 @@ pub struct Platform {
     rng: &'static capsules::rng::RngDriver<'static>,
     i2c_master: &'static capsules::i2c_master::I2CMasterDriver<cc26x2::i2c::I2CMaster<'static>>,
     gps: &'static capsules::gps::Gps<'static>,
+    battery: &'static capsules::battery::Battery<'static, cc26x2::batmon::Registers>,
+
     helium: &'static capsules::helium::driver::Helium<'static>,
     ipc: kernel::ipc::IPC,
 }
@@ -87,6 +89,7 @@ impl<'a> kernel::Platform for Platform {
             capsules::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules::i2c_master::DRIVER_NUM => f(Some(self.i2c_master)),
             capsules::gps::DRIVER_NUM => f(Some(self.gps)),
+            capsules::battery::DRIVER_NUM => f(Some(self.battery)),
             capsules::helium::driver::DRIVER_NUM => f(Some(self.helium)),
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             _ => f(None),
@@ -461,12 +464,16 @@ pub unsafe fn reset_handler() {
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
 
-    //let rfc = &cc26x2::radio::MULTIMODE_RADIO;
-    //rfc.run_tests(2, 2);
-    //let id = (rom::HAPI.get_chip_id)();
-    //debug!("id: {:X?}", id);
-
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
+
+
+    let battery = static_init!(
+            capsules::battery::Battery<'static, cc26x2::batmon::Registers>,
+            capsules::battery::Battery::new(
+                &cc26x2::batmon::BATMON
+            )
+    );
+    cc26x2::batmon::BATMON.enable();
 
     let launchxl = Platform {
         uart,
@@ -476,6 +483,7 @@ pub unsafe fn reset_handler() {
         rng,
         i2c_master,
         gps,
+        battery,
         helium: radio_driver,
         ipc,
     };

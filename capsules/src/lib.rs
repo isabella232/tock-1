@@ -23,6 +23,7 @@ pub mod ambient_light;
 pub mod analog_comparator;
 pub mod analog_sensor;
 pub mod app_flash_driver;
+pub mod battery;
 pub mod ble_advertising_driver;
 pub mod button;
 pub mod console;
