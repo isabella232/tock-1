@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Find boards based on folders with Makefiles
-boards="launchxl/"
+boards="helium-feather/"
 # for b in $(find boards | egrep 'Makefile$'); do
 #     b1=${b#boards/}
 #     b2=${b1%/*}
