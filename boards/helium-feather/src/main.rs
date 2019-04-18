@@ -11,7 +11,6 @@ extern crate fixedvec;
 use capsules::helium;
 use capsules::helium::{device::Device, virtual_rfcore::RFCore};
 use capsules::virtual_uart::{MuxUart, UartDevice};
-use cc26x2::adc;
 use cc26x2::aon;
 use cc26x2::fcfg1;
 use cc26x2::osc;

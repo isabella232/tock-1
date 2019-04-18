@@ -1,6 +1,6 @@
 h
 r
-loadbin target/thumbv7em-none-eabi/release/helium-featherccfg.bin, 0x57FA8
+loadbin target/thumbv7em-none-eabi/release/helium-feather-pltccfg.bin, 0x57FA8
 r
 h
 g

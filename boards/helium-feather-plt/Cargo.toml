@@ -1,5 +1,5 @@
 [package]
-name = "helium-feather"
+name = "helium-feather-plt"
 version = "0.1.0"
 authors = ["Tock Project Developers <tock-dev@googlegroups.com>"]
 build = "build.rs"
@@ -18,11 +18,11 @@ opt-level = "z"
 debug = true
 
 [[bin]]
-name = "helium-feather"
+name = "helium-feather-plt"
 path = "src/main.rs"
 
 [[bin]]
-name = "helium-featherccfg"
+name = "helium-feather-pltccfg"
 path = "src/ccfg.rs"
 
 [dependencies]
