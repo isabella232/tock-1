@@ -16,7 +16,6 @@ pub enum PowerMode {
 
 use kernel::process::Error;
 
-
 #[derive(Default)]
 pub struct App {
     tx_callback: Option<Callback>,
@@ -63,12 +62,13 @@ impl Helium<'a> {
             .enter(appid, |app, _| closure(app))
             .unwrap_or_else(|err| {
                 match err {
-                     Error::NoSuchApp => debug!("NoSuchApp"),
-                     Error::OutOfMemory => debug!("OutOfMemory"),
-                     Error::AddressOutOfBounds => debug!("AddressOutOfBounds"),
-                     Error::KernelError => debug!("KernelError"),
+                    Error::NoSuchApp => debug!("NoSuchApp"),
+                    Error::OutOfMemory => debug!("OutOfMemory"),
+                    Error::AddressOutOfBounds => debug!("AddressOutOfBounds"),
+                    Error::KernelError => debug!("KernelError"),
                 }
-                err.into()})
+                err.into()
+            })
     }
 
     /// Utility function to perform an action using an app's config buffer.
@@ -315,26 +315,27 @@ impl Driver for Helium<'a> {
                 HeliumCommand::SetDeviceConfig => self.device.set_device_config(),
                 HeliumCommand::SetNextTx => {
                     self.app
-                    .enter(appid, |app, _| {
-                        if app.pending_tx.is_some() {
-                            return ReturnCode::EBUSY;
-                        }
-                        //let device_id = addr as u16;
-                        let device_id = self.device_id as u8;
-                        let pl_type = match PayloadType::from_cmd(payload_type) {
-                            Some(pl_type) => pl_type,
-                            None => {
-                                return ReturnCode::FAIL;
+                        .enter(appid, |app, _| {
+                            if app.pending_tx.is_some() {
+                                return ReturnCode::EBUSY;
                             }
-                        };
-                        let next_tx = Some((device_id, Some(pl_type)));
-                        if next_tx.is_none() {
-                            return ReturnCode::EINVAL;
-                        }
-                        app.pending_tx = next_tx;
-                        self.do_next_tx_sync(appid)
-                        //ReturnCode::SUCCESS
-                    }).unwrap_or_else(|err| err.into())
+                            //let device_id = addr as u16;
+                            let device_id = self.device_id as u8;
+                            let pl_type = match PayloadType::from_cmd(payload_type) {
+                                Some(pl_type) => pl_type,
+                                None => {
+                                    return ReturnCode::FAIL;
+                                }
+                            };
+                            let next_tx = Some((device_id, Some(pl_type)));
+                            if next_tx.is_none() {
+                                return ReturnCode::EINVAL;
+                            }
+                            app.pending_tx = next_tx;
+                            self.do_next_tx_sync(appid)
+                            //ReturnCode::SUCCESS
+                        })
+                        .unwrap_or_else(|err| err.into())
                 }
                 HeliumCommand::SetAddress => self.do_with_cfg(appid, 10, |cfg| {
                     let mut addr_long = [0u8; 10];

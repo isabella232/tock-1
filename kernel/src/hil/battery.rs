@@ -2,7 +2,6 @@
 
 use crate::returncode::ReturnCode;
 
-
 pub trait Reader {
     /// Initiate a CRC calculation
     fn get_mv(&self) -> u32;

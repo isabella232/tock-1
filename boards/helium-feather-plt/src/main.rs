@@ -466,12 +466,9 @@ pub unsafe fn reset_handler() {
 
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
 
-
     let battery = static_init!(
-            capsules::battery::Battery<'static, cc26x2::batmon::Registers>,
-            capsules::battery::Battery::new(
-                &cc26x2::batmon::BATMON
-            )
+        capsules::battery::Battery<'static, cc26x2::batmon::Registers>,
+        capsules::battery::Battery::new(&cc26x2::batmon::BATMON)
     );
     cc26x2::batmon::BATMON.enable();
 

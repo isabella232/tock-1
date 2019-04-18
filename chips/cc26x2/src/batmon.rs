@@ -90,8 +90,7 @@ register_bitfields![
 impl Registers {
     pub fn enable(&self) {
         self.ctl.write(Ctl::CALC::ENABLE + Ctl::MEAS::ENABLE);
-        self
-            .meascfg
+        self.meascfg
             .write(MeasCfg::PER::CONTINUOUS + MeasCfg::MEAS::ENABLE);
     }
 
@@ -126,4 +125,3 @@ impl hil::battery::Reader for Registers {
         ret
     }
 }
-
