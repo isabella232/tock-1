@@ -150,7 +150,7 @@ macro_rules! uart_nvic {
                         let byte = $uart.read_byte();
                         rx.buffer[rx.index] = byte;
                         rx.index += 1;
-                        if byte == b'\n' {
+                        if byte == b'\r' {
                             rx.newline = true;
                         }
                     }

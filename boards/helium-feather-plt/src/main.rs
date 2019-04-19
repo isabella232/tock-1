@@ -11,6 +11,7 @@ extern crate fixedvec;
 use capsules::helium;
 use capsules::helium::{device::Device, virtual_rfcore::RFCore};
 use capsules::virtual_uart::{MuxUart, UartDevice};
+
 use cc26x2::aon;
 use cc26x2::fcfg1;
 use cc26x2::osc;
@@ -59,7 +60,6 @@ pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 
 pub struct Platform {
     led: &'static capsules::led::LED<'static, cc26x2::gpio::GPIOPin>,
-    uart: &'static capsules::uart::UartDriver<'static, UartDevice<'static>>,
     //console: &'static capsules::console::Console<'static>,
     button: &'static capsules::button::Button<'static, cc26x2::gpio::GPIOPin>,
     alarm: &'static capsules::alarm::AlarmDriver<
@@ -68,7 +68,6 @@ pub struct Platform {
     >,
     rng: &'static capsules::rng::RngDriver<'static>,
     i2c_master: &'static capsules::i2c_master::I2CMasterDriver<cc26x2::i2c::I2CMaster<'static>>,
-    gps: &'static capsules::gps::Gps<'static>,
     battery: &'static capsules::battery::Battery<'static, cc26x2::batmon::Registers>,
 
     helium: &'static capsules::helium::driver::Helium<'static>,
@@ -81,13 +80,11 @@ impl<'a> kernel::Platform for Platform {
         F: FnOnce(Option<&kernel::Driver>) -> R,
     {
         match driver_num {
-            capsules::uart::DRIVER_NUM => f(Some(self.uart)),
             capsules::led::DRIVER_NUM => f(Some(self.led)),
             capsules::button::DRIVER_NUM => f(Some(self.button)),
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules::i2c_master::DRIVER_NUM => f(Some(self.i2c_master)),
-            capsules::gps::DRIVER_NUM => f(Some(self.gps)),
             capsules::battery::DRIVER_NUM => f(Some(self.battery)),
             capsules::helium::driver::DRIVER_NUM => f(Some(self.helium)),
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
@@ -159,8 +156,6 @@ unsafe fn configure_pins(pin: &Pinmap) {
         cc26x2::gpio::PORT[rf_subg].enable_subg_output();
     }
 }
-
-static mut DRIVER_UART0: capsules::uart::Uart<UartDevice> = capsules::uart::Uart::new(0);
 
 #[no_mangle]
 pub unsafe fn reset_handler() {
@@ -258,28 +253,7 @@ pub unsafe fn reset_handler() {
         count += 1;
     }
 
-    // UART
     cc26x2::uart::UART0.initialize();
-
-    // Create a shared UART channel for the uart and for kernel debug.
-    let uart0_mux = static_init!(
-        MuxUart<'static>,
-        MuxUart::new(
-            &cc26x2::uart::UART0,
-            &mut capsules::virtual_uart::RX_BUF,
-            115200
-        )
-    );
-    uart0_mux.initialize();
-    hil::uart::Receive::set_receive_client(&cc26x2::uart::UART0, uart0_mux);
-    hil::uart::Transmit::set_transmit_client(&cc26x2::uart::UART0, uart0_mux);
-
-    // Create a UartDevice for the uart.
-    let uart0_device = static_init!(UartDevice, UartDevice::new(uart0_mux, true));
-    uart0_device.setup();
-    kernel::hil::uart::Transmit::set_transmit_client(uart0_device, &DRIVER_UART0);
-    kernel::hil::uart::Receive::set_receive_client(uart0_device, &DRIVER_UART0);
-
     // the debug uart should be initialized by hand
     cc26x2::uart::UART0.configure(hil::uart::Parameters {
         baud_rate: 115200,
@@ -289,8 +263,38 @@ pub unsafe fn reset_handler() {
         hw_flow_control: false,
     });
 
+    // Create a shared UART channel for the console and for kernel debug.
+    let uart_mux = static_init!(
+        MuxUart<'static>,
+        MuxUart::new(
+            &cc26x2::uart::UART0,
+            &mut capsules::virtual_uart::RX_BUF,
+            115200
+        )
+    );
+
+    uart_mux.initialize();
+    hil::uart::Receive::set_receive_client(&cc26x2::uart::UART0, uart_mux);
+    hil::uart::Transmit::set_transmit_client(&cc26x2::uart::UART0, uart_mux);
+
+    // Create a UartDevice for the console.
+    let console_uart = static_init!(UartDevice, UartDevice::new(uart_mux, true));
+    console_uart.setup();
+
+    let console = static_init!(
+        capsules::console::Console<'static>,
+        capsules::console::Console::new(
+            console_uart,
+            &mut capsules::console::WRITE_BUF,
+            &mut capsules::console::READ_BUF,
+            board_kernel.create_grant(&memory_allocation_capability)
+        )
+    );
+    kernel::hil::uart::Transmit::set_transmit_client(console_uart, console);
+    kernel::hil::uart::Receive::set_receive_client(console_uart, console);
+
     // Create virtual device for kernel debug.
-    let debugger_uart = static_init!(UartDevice, UartDevice::new(uart0_mux, false));
+    let debugger_uart = static_init!(UartDevice, UartDevice::new(uart_mux, false));
     debugger_uart.setup();
     let debugger = static_init!(
         kernel::debug::DebugWriter,
@@ -308,50 +312,34 @@ pub unsafe fn reset_handler() {
     );
     kernel::debug::set_debug_writer_wrapper(debug_wrapper);
 
-    let uart_uarts = static_init!(
-        [&'static mut capsules::uart::Uart<UartDevice>; 1],
-        [&mut DRIVER_UART0]
-    );
-
-    let uart = static_init!(
-        capsules::uart::UartDriver<UartDevice>,
-        capsules::uart::UartDriver::new(
-            uart_uarts,
-            [
-                board_kernel.create_grant(&memory_allocation_capability),
-                board_kernel.create_grant(&memory_allocation_capability),
-            ]
-        )
-    );
-
-    uart.initialize();
-    DRIVER_UART0.initialize(
-        uart0_device,
-        &mut capsules::uart::WRITE_BUF0,
-        &mut capsules::uart::READ_BUF0,
-        uart,
-    );
+    // Create a UartDevice for the plt debug
+    let plt_debug_uart = static_init!(UartDevice, UartDevice::new(uart_mux, true));
+    plt_debug_uart.setup();
 
     cc26x2::uart::UART1.initialize();
     // the debug uart should be initialized by hand
     cc26x2::uart::UART1.configure(hil::uart::Parameters {
-        baud_rate: 9600,
+        baud_rate: 115200,
         width: hil::uart::Width::Eight,
         stop_bits: hil::uart::StopBits::One,
         parity: hil::uart::Parity::None,
         hw_flow_control: false,
     });
 
-    let gps = static_init!(
-        capsules::gps::Gps<'static>,
-        capsules::gps::Gps::new(
-            &cc26x2::uart::UART1,
-            board_kernel.create_grant(&memory_allocation_capability)
-        )
+    let plt = static_init!(
+        capsules::plt::Plt,
+        capsules::plt::Plt::new(&cc26x2::uart::UART1, plt_debug_uart, chip_id,)
     );
-    gps.initialize(&mut capsules::gps::TX_BUF, &mut capsules::gps::RX_BUF);
-    hil::uart::Transmit::set_transmit_client(&cc26x2::uart::UART1, gps);
-    hil::uart::Receive::set_receive_client(&cc26x2::uart::UART1, gps);
+    plt.initialize(
+        &mut capsules::plt::TX_BUF,
+        &mut capsules::plt::RX_BUF,
+        &mut capsules::plt::TX_BUF_DEBUG,
+    );
+
+    hil::uart::Receive::set_receive_client(&cc26x2::uart::UART1, plt);
+    hil::uart::Transmit::set_transmit_client(&cc26x2::uart::UART1, plt);
+
+    hil::uart::Transmit::set_transmit_client(plt_debug_uart, &plt.debug);
 
     cc26x2::i2c::I2C0.initialize();
 
@@ -463,6 +451,13 @@ pub unsafe fn reset_handler() {
     virtual_device.set_transmit_client(radio_driver);
     virtual_device.set_receive_client(radio_driver);
 
+    // Set client for underlying radio as virtual device
+    radio.set_transmit_client(virtual_device);
+    radio.set_receive_client(virtual_device);
+
+    virtual_device.set_transmit_client(radio_driver);
+    virtual_device.set_receive_client(radio_driver);
+
     let ipc = kernel::ipc::IPC::new(board_kernel, &memory_allocation_capability);
 
     let battery = static_init!(
@@ -472,13 +467,11 @@ pub unsafe fn reset_handler() {
     cc26x2::batmon::BATMON.enable();
 
     let launchxl = Platform {
-        uart,
         led,
         button,
         alarm,
         rng,
         i2c_master,
-        gps,
         battery,
         helium: radio_driver,
         ipc,
@@ -491,8 +484,6 @@ pub unsafe fn reset_handler() {
         static _sapps: u8;
     }
 
-    debug!("Loading processes");
-
     kernel::procs::load_processes(
         board_kernel,
         chip,
@@ -503,6 +494,5 @@ pub unsafe fn reset_handler() {
         &process_management_capability,
     );
 
-    debug!("Kernel loop");
     board_kernel.kernel_loop(&launchxl, chip, Some(&launchxl.ipc), &main_loop_capability);
 }
