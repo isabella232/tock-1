@@ -1,5 +1,6 @@
-use core::fmt::{write, Arguments, Result, Write};
+use core::fmt::{write, Result, Write};
 use core::str;
+
 use kernel::common::cells::TakeCell;
 
 use kernel::hil;
@@ -32,15 +33,15 @@ pub struct Plt {
     uart: &'static hil::uart::Uart<'static>,
     pub debug: DebugClient,
     chip_id: u32,
+    mac_id: u64,
 }
-
-
 
 impl Plt {
     pub const fn new(
         plt_uart: &'static hil::uart::Uart<'static>,
         debug_uart: &'static hil::uart::Uart<'static>,
         chip_id: u32,
+        mac_id: u64,
     ) -> Plt {
         Plt {
             uart: plt_uart,
@@ -49,6 +50,7 @@ impl Plt {
                 tx_buffer: TakeCell::empty(),
             },
             chip_id,
+            mac_id,
         }
     }
 
@@ -70,11 +72,9 @@ impl Write for PltWriter {
         let bytes = s.as_bytes();
         let len = bytes.len();
         self.tx_buffer.take().map(|buf| {
-
             for (dst, src) in buf[self.len..self.len + len].iter_mut().zip(bytes.iter()) {
                 *dst = *src;
             }
-
 
             self.tx_buffer.put(Some(buf));
         });
@@ -103,25 +103,34 @@ impl hil::uart::ReceiveClient for Plt {
         });
 
         unsafe {
+            let result;
 
             let cmd = buffer[0];
-
+            debug!("cmd: {}", cmd);
             match cmd {
                 b'0' => {
-                    write(&mut PLT_WRITER, format_args!("chip_id={:x}\r\n", self.chip_id));
+                    result = write(
+                        &mut PLT_WRITER,
+                        format_args!("chip_id={:x}\r\n", self.chip_id),
+                    );
+                }
+                b'1' => {
+                    result = write(
+                        &mut PLT_WRITER,
+                        format_args!("mac_id={:x}\r\n", self.mac_id),
+                    );
                 }
                 _ => {
-                    write(&mut PLT_WRITER, format_args!("unknown command\r\n"));
+                    result = write(&mut PLT_WRITER, format_args!("unknown command!\r\n"));
                 }
-            }            
+            }
 
             if let Some(buf) = PLT_WRITER.tx_buffer.take() {
                 self.uart.transmit_buffer(buf, PLT_WRITER.len);
             }
-            
-        };
 
-        
+            result.unwrap();
+        };
 
         self.uart.receive_buffer(buffer, RX_BUF_LEN);
     }
@@ -129,14 +138,12 @@ impl hil::uart::ReceiveClient for Plt {
 
 impl hil::uart::TransmitClient for Plt {
     fn transmitted_buffer(&self, tx_buf: &'static mut [u8], _tx_len: usize, _rcode: ReturnCode) {
-        unsafe { 
+        unsafe {
             PLT_WRITER.len = 0;
             PLT_WRITER.tx_buffer.put(Some(tx_buf));
         };
-
     }
 }
-
 
 impl hil::uart::TransmitClient for DebugClient {
     fn transmitted_buffer(&self, tx_buf: &'static mut [u8], _tx_len: usize, _rcode: ReturnCode) {

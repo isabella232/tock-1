@@ -326,9 +326,12 @@ pub unsafe fn reset_handler() {
         hw_flow_control: false,
     });
 
+    let mac_id: u64 =
+        fcfg1::REG.mac_15_4_1.get() as u64 | ((fcfg1::REG.mac_15_4_0.get() as u64) << 32);
+
     let plt = static_init!(
         capsules::plt::Plt,
-        capsules::plt::Plt::new(&cc26x2::uart::UART1, plt_debug_uart, chip_id,)
+        capsules::plt::Plt::new(&cc26x2::uart::UART1, plt_debug_uart, chip_id, mac_id)
     );
     plt.initialize(
         &mut capsules::plt::TX_BUF,
