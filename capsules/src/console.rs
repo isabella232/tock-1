@@ -290,7 +290,10 @@ impl uart::TransmitClient for Console<'a> {
                             let written = app.write_len;
                             app.write_len = 0;
                             app.write_callback.map(|mut cb| {
-                                cb.schedule(written, 0, 0);
+                                let scheduled = cb.schedule(written, 0, 0);
+                                if !scheduled {
+                                    debug!("OOOGA BOOOGA!!");
+                                }
                             });
                         }
                     }

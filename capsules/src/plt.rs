@@ -1,4 +1,6 @@
 use kernel::common::cells::TakeCell;
+use core::fmt::{write, Arguments, Result, Write};
+use core::str;
 
 use kernel::hil;
 use kernel::ReturnCode;
@@ -11,32 +13,40 @@ pub static mut RX_BUF: [u8; RX_BUF_LEN] = [0; RX_BUF_LEN];
 pub static mut TX_BUF_DEBUG: [u8; RX_BUF_LEN] = [0; RX_BUF_LEN];
 pub static mut TX_BUF: [u8; TX_BUF_LEN] = [0; TX_BUF_LEN];
 
+static mut PLT_WRITER: PltWriter = PltWriter {
+    tx_buffer: TakeCell::empty(),
+};
+
 pub struct DebugClient {
     uart: &'static hil::uart::Uart<'static>,
     tx_buffer: TakeCell<'static, [u8]>,
 }
 
+
+
 pub struct Plt {
     uart: &'static hil::uart::Uart<'static>,
-    tx_buffer: TakeCell<'static, [u8]>,
     pub debug: DebugClient,
-    _chip_id: u32,
+    chip_id: u32,
+}
+
+pub struct PltWriter {
+    tx_buffer: TakeCell<'static, [u8]>,
 }
 
 impl Plt {
     pub const fn new(
         plt_uart: &'static hil::uart::Uart<'static>,
         debug_uart: &'static hil::uart::Uart<'static>,
-        _chip_id: u32,
+        chip_id: u32,
     ) -> Plt {
         Plt {
             uart: plt_uart,
-            tx_buffer: TakeCell::empty(),
             debug: DebugClient {
                 uart: debug_uart,
                 tx_buffer: TakeCell::empty(),
             },
-            _chip_id,
+            chip_id,
         }
     }
 
@@ -47,7 +57,7 @@ impl Plt {
         rx_buf: &'static mut [u8],
         debug_buf: &'static mut [u8],
     ) {
-        self.tx_buffer.put(Some(tx_buf));
+        unsafe { PLT_WRITER.tx_buffer.put(Some(tx_buf)) };
         self.debug.tx_buffer.put(Some(debug_buf));
         self.uart.receive_buffer(rx_buf, RX_BUF_LEN);
     }
@@ -55,8 +65,15 @@ impl Plt {
 
 impl hil::uart::TransmitClient for Plt {
     fn transmitted_buffer(&self, tx_buf: &'static mut [u8], _tx_len: usize, _rcode: ReturnCode) {
-        self.tx_buffer.put(Some(tx_buf));
+        unsafe { PLT_WRITER.tx_buffer.put(Some(tx_buf)) };
     }
+}
+
+impl Write for PltWriter {
+    fn write_str(&mut self, s: &str) -> Result {
+        Ok(())
+    }
+
 }
 
 impl hil::uart::ReceiveClient for Plt {
@@ -77,6 +94,13 @@ impl hil::uart::ReceiveClient for Plt {
             self.debug.uart.transmit_buffer(buf, len + 1);
         });
 
+        
+            unsafe { write(&mut PLT_WRITER, format_args!(
+                 "chip_id={}",
+                 self.chip_id));
+        };
+
+       
         self.uart.receive_buffer(buffer, RX_BUF_LEN);
     }
 }
