@@ -111,8 +111,6 @@ pub struct Pinmap {
     red_led: usize,
     green_led: usize,
     button1: usize,
-    button2: usize,
-    on2: usize,
     skyworks_csd: usize,
     skyworks_cps: usize,
     skyworks_ctx: usize,
@@ -140,11 +138,6 @@ unsafe fn configure_pins(pin: &Pinmap) {
     cc26x2::gpio::PORT[pin.green_led].enable_gpio();
 
     cc26x2::gpio::PORT[pin.button1].enable_gpio();
-    cc26x2::gpio::PORT[pin.button2].enable_gpio();
-
-    cc26x2::gpio::PORT[pin.on2].make_output();
-    cc26x2::gpio::PORT[pin.on2].set();
-
     cc26x2::gpio::PORT[pin.skyworks_csd].make_output();
     cc26x2::gpio::PORT[pin.skyworks_cps].make_output();
     cc26x2::gpio::PORT[pin.skyworks_ctx].make_output();
@@ -230,16 +223,12 @@ pub unsafe fn reset_handler() {
 
     // BUTTONS
     let button_pins = static_init!(
-        [(&'static cc26x2::gpio::GPIOPin, capsules::button::GpioMode); 2],
+        [(&'static cc26x2::gpio::GPIOPin, capsules::button::GpioMode); 1],
         [
             (
                 &cc26x2::gpio::PORT[pinmap.button1],
                 capsules::button::GpioMode::LowWhenPressed
             ), // Button 1
-            (
-                &cc26x2::gpio::PORT[pinmap.button2],
-                capsules::button::GpioMode::LowWhenPressed
-            ), // Button 2
         ]
     );
     let button = static_init!(
