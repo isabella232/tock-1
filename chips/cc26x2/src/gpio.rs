@@ -19,14 +19,13 @@ use cortexm4::nvic;
 
 pub const NUM_PINS: usize = 32;
 
-const IOC_BASE: StaticRef<ioc::Registers> =
-    unsafe { StaticRef::new(0x4008_1000 as *const ioc::Registers) };
+use crate::memory_map::GPIO_BASE;
 
-const GPIO_BASE: StaticRef<GpioRegisters> =
-    unsafe { StaticRef::new(0x40022000 as *const GpioRegisters) };
+const REG: StaticRef<Registers> =
+    unsafe { StaticRef::new(GPIO_BASE as *const Registers) };
 
 #[repr(C)]
-struct GpioRegisters {
+struct Registers {
     _reserved0: [u8; 0x90],
     pub dout_set: WriteOnly<u32>,
     _reserved1: [u8; 0xC],
@@ -42,7 +41,7 @@ struct GpioRegisters {
 }
 
 pub struct GPIOPin {
-    registers: StaticRef<GpioRegisters>,
+    registers: StaticRef<Registers>,
     ioc_registers: StaticRef<ioc::Registers>,
     pin: usize,
     pin_mask: u32,
@@ -53,8 +52,8 @@ pub struct GPIOPin {
 impl GPIOPin {
     const fn new(pin: usize) -> GPIOPin {
         GPIOPin {
-            registers: GPIO_BASE,
-            ioc_registers: IOC_BASE,
+            registers: REG,
+            ioc_registers: ioc::REG,
             pin: pin,
             pin_mask: 1 << pin,
             client_data: Cell::new(0),
@@ -347,10 +346,9 @@ impl IndexMut<usize> for Port {
 
 impl Port {
     pub fn handle_events(&self) {
-        let regs = GPIO_BASE;
-        let mut evflags = regs.evflags.get();
+        let mut evflags = REG.evflags.get();
         // Clear all interrupts by setting their bits to 1 in evflags
-        regs.evflags.set(evflags);
+        REG.evflags.set(evflags);
 
         let mut count = 0;
         while evflags != 0 && count < self.pins.len() {

@@ -1,8 +1,14 @@
 use crate::gpio;
 use kernel::common::registers::{register_bitfields, ReadWrite};
+use kernel::common::StaticRef;
+
 
 pub const MIN_ANALOG_CAPABLE: usize = 23 + 1;
 pub const MAX_ANALOG_CAPABLE: usize = 27;
+
+use crate::memory_map::IOC_BASE;
+pub const REG: StaticRef<Registers> =
+    unsafe { StaticRef::new(IOC_BASE as *const Registers) };
 
 #[repr(C)]
 pub struct Registers {
