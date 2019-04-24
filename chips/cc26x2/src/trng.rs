@@ -11,7 +11,7 @@ use kernel::hil::entropy;
 use kernel::ReturnCode;
 
 #[repr(C)]
-struct RngRegisters {
+struct Registers {
     out0: ReadOnly<u32>,
     out1: ReadOnly<u32>,
 
@@ -65,20 +65,22 @@ register_bitfields![
     ]
 ];
 
-const RNG_BASE: StaticRef<RngRegisters> =
-    unsafe { StaticRef::new(0x40028000 as *const RngRegisters) };
+use crate::memory_map::TRNG_BASE;
+
+const REG: StaticRef<Registers> =
+    unsafe { StaticRef::new(TRNG_BASE as *const Registers) };
 
 pub static mut TRNG: Trng = Trng::new();
 
 pub struct Trng<'a> {
-    registers: StaticRef<RngRegisters>,
+    registers: StaticRef<Registers>,
     client: OptionalCell<&'a entropy::Client32>,
 }
 
 impl<'a> Trng<'a> {
     const fn new() -> Trng<'a> {
         Trng {
-            registers: RNG_BASE,
+            registers: REG,
             client: OptionalCell::empty(),
         }
     }

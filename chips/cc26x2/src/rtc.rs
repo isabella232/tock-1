@@ -9,7 +9,7 @@ use crate::peripheral_interrupts;
 use cortexm4::nvic;
 
 #[repr(C)]
-struct RtcRegisters {
+struct Registers {
     ctl: ReadWrite<u32, Control::Register>,
 
     // Event flags
@@ -60,14 +60,16 @@ register_bitfields![
     ]
 ];
 
-const RTC_BASE: StaticRef<RtcRegisters> =
-    unsafe { StaticRef::new(0x40092000 as *const RtcRegisters) };
+use crate::memory_map::AON_RTC_BASE;
+
+const REG: StaticRef<Registers> =
+    unsafe { StaticRef::new(AON_RTC_BASE as *const Registers) };
 
 const RTC_NVIC: nvic::Nvic =
     unsafe { nvic::Nvic::new(peripheral_interrupts::NVIC_IRQ::AON_RTC as u32) };
 
 pub struct Rtc {
-    registers: StaticRef<RtcRegisters>,
+    registers: StaticRef<Registers>,
     nvic: &'static nvic::Nvic,
     callback: OptionalCell<&'static time::Client>,
 }
@@ -77,7 +79,7 @@ pub static mut RTC: Rtc = Rtc::new();
 impl Rtc {
     const fn new() -> Rtc {
         Rtc {
-            registers: RTC_BASE,
+            registers: REG,
             nvic: &RTC_NVIC,
             callback: OptionalCell::empty(),
         }
