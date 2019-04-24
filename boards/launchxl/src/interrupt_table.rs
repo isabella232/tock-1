@@ -1,34 +1,10 @@
 use crate::event_priority;
-use cortexm::events;
+use cortexm::{events, generic_isr};
 use cortexm4::{
-    generic_isr, hard_fault_handler, set_privileged_thread, stash_process_state, svc_handler,
-    systick_handler,
+    generic_isr, hard_fault_handler, set_privileged_thread,
+    stash_process_state, svc_handler, systick_handler,
 };
 
-macro_rules! generic_isr {
-    ($label:tt, $priority:expr) => {
-        #[cfg(target_os = "none")]
-        #[naked]
-        unsafe extern "C" fn $label() {
-            stash_process_state();
-            events::set_event_flag_from_isr($priority as usize);
-            set_privileged_thread();
-        }
-    };
-}
-
-macro_rules! custom_isr {
-    ($label:tt, $priority:expr, $isr:ident) => {
-        #[cfg(target_os = "none")]
-        #[naked]
-        unsafe extern "C" fn $label() {
-            stash_process_state();
-            events::set_event_flag_from_isr($priority);
-            $isr();
-            set_privileged_thread();
-        }
-    };
-}
 
 unsafe extern "C" fn unhandled_interrupt() {
     'loop0: loop {}
@@ -36,7 +12,6 @@ unsafe extern "C" fn unhandled_interrupt() {
 
 generic_isr!(uart0_nvic, event_priority::EVENT_PRIORITY::UART0);
 generic_isr!(uart1_nvic, event_priority::EVENT_PRIORITY::UART1);
-
 generic_isr!(osc_isr, event_priority::EVENT_PRIORITY::OSC);
 
 #[link_section = ".vectors"]
