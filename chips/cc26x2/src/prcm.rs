@@ -209,21 +209,23 @@ register_bitfields![
     ]
 ];
 
-const PRCM_BASE: StaticRef<PrcmRegisters> =
-    unsafe { StaticRef::new(0x4008_2000 as *mut PrcmRegisters) };
+use crate::memory_map::PRCM_BASE;
+
+const REG: StaticRef<PrcmRegisters> =
+    unsafe { StaticRef::new(PRCM_BASE as *mut PrcmRegisters) };
 
 // In order to save changes to the PRCM, we need to
 // trigger the load register
 
 fn prcm_commit() {
-    let regs = PRCM_BASE;
+    let regs = REG;
     regs.clk_load_ctl.write(ClockLoad::LOAD::SET);
     // Wait for the settings to take effect
     while !regs.clk_load_ctl.is_set(ClockLoad::LOAD_DONE) {}
 }
 
 pub fn force_disable_dma_and_crypto() {
-    let regs = PRCM_BASE;
+    let regs = REG;
     if regs.sec_dma_clk_run.is_set(SECDMAClockGate::DMA_CLK_EN) {
         regs.sec_dma_clk_deep_sleep
             .modify(SECDMAClockGate::DMA_CLK_EN::CLEAR);
@@ -239,14 +241,14 @@ pub fn force_disable_dma_and_crypto() {
 /// The ULDO power source is a temporary power source
 /// which could be enable to drive Peripherals in deep sleep.
 pub fn acquire_uldo() {
-    let regs = PRCM_BASE;
+    let regs = REG;
     regs.vd_ctl.modify(VDControl::ULDO::SET);
 }
 
 /// It is no use to enable the ULDO power source constantly,
 /// and it would need to be released once we go out of deep sleep
 pub fn release_uldo() {
-    let regs = PRCM_BASE;
+    let regs = REG;
     regs.vd_ctl.modify(VDControl::ULDO::CLEAR);
 }
 
@@ -289,7 +291,7 @@ pub struct Power(());
 
 impl Power {
     pub fn enable_domain(domain: PowerDomain) {
-        let regs = PRCM_BASE;
+        let regs = REG;
 
         match domain {
             PowerDomain::Peripherals => {
@@ -317,7 +319,7 @@ impl Power {
     }
 
     pub fn disable_domain(domain: PowerDomain) {
-        let regs = PRCM_BASE;
+        let regs = REG;
 
         match domain {
             PowerDomain::Peripherals => {
@@ -340,7 +342,7 @@ impl Power {
     }
 
     pub fn is_enabled(domain: PowerDomain) -> bool {
-        let regs = PRCM_BASE;
+        let regs = REG;
         match domain {
             PowerDomain::Peripherals => regs.pd_stat0_periph.is_set(PowerDomainSingle::ON),
             PowerDomain::Serial => regs.pd_stat0_serial.is_set(PowerDomainSingle::ON),
@@ -358,7 +360,7 @@ pub struct Clock(());
 
 impl Clock {
     pub fn enable_gpio() {
-        let regs = PRCM_BASE;
+        let regs = REG;
         regs.gpio_clk_gate_run.modify(ClockGate::AM_EN::SET);
         regs.gpio_clk_gate_run.modify(ClockGate::CLK_EN::SET);
         regs.gpio_clk_gate_sleep.modify(ClockGate::CLK_EN::SET);
@@ -368,7 +370,7 @@ impl Clock {
     }
 
     pub fn enable_trng() {
-        let regs = PRCM_BASE;
+        let regs = REG;
         regs.sec_dma_clk_run
             .modify(SECDMAClockGate::TRNG_CLK_EN::SET);
 
@@ -377,7 +379,7 @@ impl Clock {
 
     /// Enables UART clocks for run, sleep and deep sleep mode.
     pub fn enable_uarts() {
-        let regs = PRCM_BASE;
+        let regs = REG;
         regs.uart_clk_gate_run.modify(
             ClockGate2::AM_EN0::SET
                 + ClockGate2::AM_EN1::SET
@@ -393,7 +395,7 @@ impl Clock {
     }
 
     pub fn disable_uarts() {
-        let regs = PRCM_BASE;
+        let regs = REG;
         regs.uart_clk_gate_run.modify(
             ClockGate2::AM_EN0::CLEAR
                 + ClockGate2::AM_EN1::CLEAR
@@ -409,35 +411,35 @@ impl Clock {
     }
 
     pub fn enable_rfc() {
-        let regs = PRCM_BASE;
+        let regs = REG;
         regs.rfc_clk_gate.modify(ClockGate::CLK_EN::SET);
 
         prcm_commit();
     }
 
     pub fn disable_rfc() {
-        let regs = PRCM_BASE;
+        let regs = REG;
         regs.rfc_clk_gate.modify(ClockGate::CLK_EN::CLEAR);
 
         prcm_commit();
     }
 
     pub fn enable_vims() {
-        let regs = PRCM_BASE;
+        let regs = REG;
         regs.vims_clk_gate.modify(ClockGate::CLK_EN::SET);
 
         prcm_commit();
     }
 
     pub fn disable_vims() {
-        let regs = PRCM_BASE;
+        let regs = REG;
         regs.vims_clk_gate.modify(ClockGate::CLK_EN::SET);
 
         prcm_commit();
     }
 
     pub fn enable_gpt(num: usize) {
-        let regs = PRCM_BASE;
+        let regs = REG;
 
         match num {
             0 => {
@@ -470,7 +472,7 @@ impl Clock {
     }
 
     pub fn disable_gpt(num: usize) {
-        let regs = PRCM_BASE;
+        let regs = REG;
 
         match num {
             0 => {
@@ -504,7 +506,7 @@ impl Clock {
 
     /// Enables I2C clocks for run, sleep and deep sleep mode.
     pub fn enable_i2c() {
-        let regs = PRCM_BASE;
+        let regs = REG;
         regs.i2c_clk_gate_run.modify(ClockGate::CLK_EN::SET);
         regs.i2c_clk_gate_sleep.modify(ClockGate::CLK_EN::SET);
         regs.i2c_clk_gate_deep_sleep.modify(ClockGate::CLK_EN::SET);
@@ -513,7 +515,7 @@ impl Clock {
     }
 
     pub fn enable_i2s() {
-        let regs = PRCM_BASE;
+        let regs = REG;
         regs.i2s_clk_gate_run
             .modify(ClockGate::AM_EN::SET + ClockGate::CLK_EN::SET);
         regs.i2s_clk_gate_sleep.modify(ClockGate::CLK_EN::SET);
@@ -523,7 +525,7 @@ impl Clock {
     }
 
     pub fn disable_i2s() {
-        let regs = PRCM_BASE;
+        let regs = REG;
         regs.i2s_clk_gate_run
             .modify(ClockGate::AM_EN::CLEAR + ClockGate::CLK_EN::CLEAR);
         regs.i2s_clk_gate_sleep.modify(ClockGate::CLK_EN::CLEAR);
