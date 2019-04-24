@@ -1,5 +1,5 @@
 //
-//  These are configurable priorities that can be used by ISRs or yields from within kernel space
+//  This allows for boards to set custom interrupt priorities
 //
 use enum_primitive::cast::{FromPrimitive, ToPrimitive};
 use enum_primitive::enum_from_primitive;
@@ -17,3 +17,7 @@ pub enum EVENT_PRIORITY {
     OSC = 8,
 }
 }
+
+// a default interrupt table can be used that generates the interrupt handlers
+// that know how to set the appropriate event flag based on EVENT_PRIORITY defined here
+cc26x2::default_interrupt_table!();

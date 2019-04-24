@@ -23,17 +23,22 @@ pub mod uart;
 
 pub use crate::crt1::init;
 
-
 #[macro_export]
 macro_rules! default_interrupt_table {
     () => {
+        use cortexm::{events, generic_isr};
+        use cortexm4::{
+            generic_isr, hard_fault_handler, set_privileged_thread,
+            stash_process_state, svc_handler, systick_handler,
+        };
+
         unsafe extern "C" fn unhandled_interrupt() {
             'loop0: loop {}
         }
 
-        generic_isr!(uart0_nvic, event_priority::EVENT_PRIORITY::UART0);
-        generic_isr!(uart1_nvic, event_priority::EVENT_PRIORITY::UART1);
-        generic_isr!(osc_isr, event_priority::EVENT_PRIORITY::OSC);
+        generic_isr!(uart0_nvic, EVENT_PRIORITY::UART0);
+        generic_isr!(uart1_nvic, EVENT_PRIORITY::UART1);
+        generic_isr!(osc_isr, EVENT_PRIORITY::OSC);
 
         #[link_section = ".vectors"]
         // used Ensures that the symbol is kept until the final binary
