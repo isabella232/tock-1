@@ -265,6 +265,8 @@ impl<'a> I2CMaster<'a> {
     /// This _must_ be invoked before using the I2C
     pub fn initialize(&self) {
         self.power_and_clock();
+        self.registers.mcr.write(Configuration::MFE::SET);
+        self.registers.mimr.write(Interrupt::IM::SET);
         self.set_time_period(100_000);
     }
 
@@ -273,6 +275,7 @@ impl<'a> I2CMaster<'a> {
         const MCU_CLOCK: u32 = 48_000_000;
         // Forumla from 23.4, step 4, in the datasheet
         let tpr = MCU_CLOCK / (2 * 10 * freq) - 1;
+
         self.registers
             .mtpr
             .write(TimerPeriod::WRITE::Valid + TimerPeriod::TPR.val(tpr));
@@ -288,8 +291,7 @@ impl<'a> I2CMaster<'a> {
 
 impl<'a> i2c::I2CMaster for I2CMaster<'a> {
     fn enable(&self) {
-        self.registers.mcr.write(Configuration::MFE::SET);
-        self.registers.mimr.write(Interrupt::IM::SET);
+        self.initialize();
     }
 
     fn disable(&self) {

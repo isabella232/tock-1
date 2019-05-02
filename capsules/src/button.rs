@@ -243,6 +243,7 @@ impl<G: hil::gpio::Pin + hil::gpio::PinCtl> Client for Button<'a, G> {
         let button_state = self.get_button_state(pin_num);
         let interrupt_count = Cell::new(0);
 
+        debug!("Fired!");
         // schedule callback with the pin number and value
         self.apps.each(|cntr| {
             cntr.0.map(|mut callback| {

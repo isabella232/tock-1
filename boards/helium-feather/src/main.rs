@@ -356,7 +356,6 @@ pub unsafe fn reset_handler() {
     );
 
     cc26x2::i2c::I2C0.set_client(i2c_master);
-    cc26x2::i2c::I2C0.enable();
 
     let rtc = &cc26x2::rtc::RTC;
     rtc.start();
