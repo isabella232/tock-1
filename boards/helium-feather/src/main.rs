@@ -155,6 +155,8 @@ unsafe fn configure_pins(pin: &Pinmap) {
 
 static mut DRIVER_UART0: capsules::uart::Uart<UartDevice> = capsules::uart::Uart::new(0);
 
+use kernel::hil::rf_frontend::SE2435L;
+
 #[no_mangle]
 pub unsafe fn reset_handler() {
     cc26x2::init();
@@ -227,7 +229,7 @@ pub unsafe fn reset_handler() {
         [
             (
                 &cc26x2::gpio::PORT[pinmap.button1],
-                capsules::button::GpioMode::LowWhenPressed
+                capsules::button::GpioMode::HighWhenPressed
             ), // Button 1
         ]
     );
@@ -241,8 +243,8 @@ pub unsafe fn reset_handler() {
 
     let mut count = 0;
     for &(btn, _) in button_pins.iter() {
-        btn.set_input_mode(hil::gpio::InputMode::PullUp);
-        btn.enable_interrupt(count, InterruptMode::FallingEdge);
+        btn.set_input_mode(hil::gpio::InputMode::PullNone);
+        btn.enable_interrupt(count, InterruptMode::RisingEdge);
         btn.set_client(button);
         count += 1;
     }
@@ -403,6 +405,8 @@ pub unsafe fn reset_handler() {
             &cc26x2::gpio::PORT[pinmap.skyworks_ctx],
         )
     );
+
+    
 
     // Set underlying radio client to the radio mode wrapper
     radio::RFC.set_client(&radio::MULTIMODE_RADIO);
