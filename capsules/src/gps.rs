@@ -58,7 +58,7 @@ impl<'a, G: hil::gpio::Pin + hil::gpio::PinCtl> Gps<'a, G> {
             hw: uart,
             tx_buffer: TakeCell::empty(),
             apps,
-            en_pin
+            en_pin,
         }
     }
 

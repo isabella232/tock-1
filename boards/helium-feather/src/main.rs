@@ -22,7 +22,6 @@ use kernel::hil::entropy::Entropy32;
 use kernel::hil::gpio::InterruptMode;
 use kernel::hil::gpio::Pin;
 use kernel::hil::gpio::PinCtl;
-use kernel::hil::i2c::I2CMaster;
 use kernel::hil::rfcore::PaType;
 use kernel::hil::rng::Rng;
 use kernel::hil::uart::Configure;
@@ -118,7 +117,6 @@ pub struct Pinmap {
     rf_2_4: Option<usize>,
     rf_subg: Option<usize>,
     rf_high_pa: Option<usize>,
-
 }
 
 unsafe fn configure_pins(pin: &Pinmap) {
@@ -158,8 +156,6 @@ unsafe fn configure_pins(pin: &Pinmap) {
 }
 
 static mut DRIVER_UART0: capsules::uart::Uart<UartDevice> = capsules::uart::Uart::new(0);
-
-use kernel::hil::rf_frontend::SE2435L;
 
 #[no_mangle]
 pub unsafe fn reset_handler() {
@@ -409,8 +405,6 @@ pub unsafe fn reset_handler() {
             &cc26x2::gpio::PORT[pinmap.skyworks_ctx],
         )
     );
-
-    
 
     // Set underlying radio client to the radio mode wrapper
     radio::RFC.set_client(&radio::MULTIMODE_RADIO);
