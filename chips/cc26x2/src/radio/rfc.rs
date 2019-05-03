@@ -275,7 +275,7 @@ impl RFCore {
         dbell_regs.rfcpe_ien.write(
             CPEInterrupts::INTERNAL_ERROR::SET
                 + CPEInterrupts::COMMAND_DONE::SET
-                + CPEInterrupts::TX_DONE::SET
+                + CPEInterrupts::TX_DONE::SET // Only for IEEE or BLE stack
                 + CPEInterrupts::BOOT_DONE::SET
                 + CPEInterrupts::RX_OK::SET
                 + CPEInterrupts::RX_NOK::SET
@@ -628,29 +628,37 @@ impl RFCore {
 
     pub fn handle_cpe0_event(&self) {
         let dbell_regs = &*self.dbell_regs;
-        if dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::TX_DONE) {
-            self.client.get().map(|client| client.tx_done());
-        }
+        let cmd_done = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::COMMAND_DONE);
+        let tx_done = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::TX_DONE);
+        let rx_ok = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_OK);
+        let rx_buf_full = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_BUF_FULL);
+        let rx_nok = dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_NOK);
 
-        if dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::COMMAND_DONE)
-            || dbell_regs
-                .rfcpe_ifg
-                .is_set(CPEInterrupts::LAST_COMMAND_DONE)
-        {
-            self.client.get().map(|client| client.command_done());
-        }
-        if dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_BUF_FULL) {
-            self.client.get().map(|client| client.rx_buf_full());
-        }
-        if dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_OK) {
-            self.client.get().map(|client| client.rx_ok());
-        }
-        if dbell_regs.rfcpe_ifg.is_set(CPEInterrupts::RX_NOK) {
-            self.client.get().map(|client| client.rx_nok());
-        }
-        dbell_regs.rfcpe_ifg.set(0);
+        self.dbell_regs.rfcpe_ifg.set(0);
         self.cpe0_nvic.clear_pending();
         self.cpe0_nvic.enable();
+
+        if cmd_done {
+            debug!("cmd done");
+            self.client.get().map(|client| client.command_done());
+        }
+        if tx_done {
+            debug!("tx done");
+            self.client.get().map(|client| client.tx_done());
+        }
+        if rx_ok {
+            debug!("rx ok");
+            self.client.get().map(|client| client.rx_ok());
+        }
+        if rx_buf_full {
+            debug!("rx buf full");
+            self.client.get().map(|client| client.rx_buf_full());
+        }
+        if rx_nok {
+            debug!("rx nok");
+            self.client.get().map(|client| client.rx_nok());
+        }
+        //self.cpe0_nvic.enable();
     }
 
     pub fn handle_cpe1_event(&self) {

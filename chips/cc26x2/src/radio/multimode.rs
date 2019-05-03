@@ -465,7 +465,7 @@ impl Radio {
                 .ok();
         }
 
-        self.frontend_client.map(|client| client.bypass());
+        //self.frontend_client.map(|client| client.bypass());
     }
 
     fn test_radio_rx(&self) {
@@ -693,7 +693,7 @@ impl rfc::RFCoreClient for Radio {
             // do sleep mode here later
         }
 
-        self.frontend_client.map(|client| client.bypass());
+        //self.frontend_client.map(|client| client.bypass());
 
         self.tx_buf.take().map_or(ReturnCode::ERESERVE, |tbuf| {
             self.tx_client
@@ -703,7 +703,7 @@ impl rfc::RFCoreClient for Radio {
     }
 
     fn tx_done(&self) {
-        self.frontend_client.map(|client| client.bypass());
+        //self.frontend_client.map(|client| client.bypass());
 
         unsafe { rtc::RTC.sync() };
 
