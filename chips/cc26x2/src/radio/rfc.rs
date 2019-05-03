@@ -639,23 +639,23 @@ impl RFCore {
         self.cpe0_nvic.enable();
 
         if cmd_done {
-            debug!("cmd done");
+            //debug!("cmd done");
             self.client.get().map(|client| client.command_done());
         }
         if tx_done {
-            debug!("tx done");
+            //debug!("tx done");
             self.client.get().map(|client| client.tx_done());
         }
         if rx_ok {
-            debug!("rx ok");
+            //debug!("rx ok");
             self.client.get().map(|client| client.rx_ok());
         }
         if rx_buf_full {
-            debug!("rx buf full");
+            //debug!("rx buf full");
             self.client.get().map(|client| client.rx_buf_full());
         }
         if rx_nok {
-            debug!("rx nok");
+            //debug!("rx nok");
             self.client.get().map(|client| client.rx_nok());
         }
         //self.cpe0_nvic.enable();
