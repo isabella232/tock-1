@@ -68,7 +68,7 @@ pub struct Platform {
     >,
     rng: &'static capsules::rng::RngDriver<'static>,
     i2c_master: &'static capsules::i2c_master::I2CMasterDriver<cc26x2::i2c::I2CMaster<'static>>,
-    gps: &'static capsules::gps::Gps<'static>,
+    gps: &'static capsules::gps::Gps<'static, cc26x2::gpio::GPIOPin>,
     battery: &'static capsules::battery::Battery<'static, cc26x2::batmon::Registers>,
 
     helium: &'static capsules::helium::driver::Helium<'static>,
@@ -111,12 +111,14 @@ pub struct Pinmap {
     red_led: usize,
     green_led: usize,
     button1: usize,
+    a2: usize,
     skyworks_csd: usize,
     skyworks_cps: usize,
     skyworks_ctx: usize,
     rf_2_4: Option<usize>,
     rf_subg: Option<usize>,
     rf_high_pa: Option<usize>,
+
 }
 
 unsafe fn configure_pins(pin: &Pinmap) {
@@ -141,6 +143,8 @@ unsafe fn configure_pins(pin: &Pinmap) {
     cc26x2::gpio::PORT[pin.skyworks_csd].make_output();
     cc26x2::gpio::PORT[pin.skyworks_cps].make_output();
     cc26x2::gpio::PORT[pin.skyworks_ctx].make_output();
+
+    cc26x2::gpio::PORT[pin.a2].make_output();
 
     if let Some(rf_2_4) = pin.rf_2_4 {
         cc26x2::gpio::PORT[rf_2_4].enable_24ghz_output();
@@ -334,9 +338,10 @@ pub unsafe fn reset_handler() {
     });
 
     let gps = static_init!(
-        capsules::gps::Gps<'static>,
+        capsules::gps::Gps<'static, cc26x2::gpio::GPIOPin>,
         capsules::gps::Gps::new(
             &cc26x2::uart::UART1,
+            &cc26x2::gpio::PORT[pinmap.a2],
             board_kernel.create_grant(&memory_allocation_capability)
         )
     );

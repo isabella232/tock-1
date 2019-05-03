@@ -51,6 +51,7 @@ pub static PINMAP: Pinmap = Pinmap {
     skyworks_csd: PIN_FN::SE_CSD as usize,
     skyworks_cps: PIN_FN::SE_CPS as usize,
     skyworks_ctx: PIN_FN::SE_CTX as usize,
+    a2: PIN_FN::A2 as usize,
     rf_2_4: None,
     rf_high_pa: None,
     rf_subg: None,

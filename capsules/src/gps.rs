@@ -19,6 +19,8 @@ enum_from_primitive! {
 pub enum COMMAND {
     DRIVER_CHECK = 0,
     READLINE = 1,
+    WAKE = 2,
+    SLEEP = 3,
 }
 }
 
@@ -41,24 +43,27 @@ pub struct App {
     rx_write: usize,
 }
 
-pub struct Gps<'a> {
+pub struct Gps<'a, G: hil::gpio::Pin + hil::gpio::PinCtl> {
     state: MapCell<State>,
     hw: &'a hil::uart::Uart<'a>,
     tx_buffer: TakeCell<'a, [u8]>,
     apps: Grant<App>,
+    en_pin: &'a G,
 }
 
-impl<'a> Gps<'a> {
-    pub const fn new(uart: &'a hil::uart::Uart<'a>, apps: Grant<App>) -> Gps<'a> {
+impl<'a, G: hil::gpio::Pin + hil::gpio::PinCtl> Gps<'a, G> {
+    pub const fn new(uart: &'a hil::uart::Uart<'a>, en_pin: &'a G, apps: Grant<App>) -> Gps<'a, G> {
         Gps {
             state: MapCell::new(State::Init),
             hw: uart,
             tx_buffer: TakeCell::empty(),
             apps,
+            en_pin
         }
     }
 
     pub fn initialize(&self, tx_buf: &'static mut [u8], rx_buf: &'static mut [u8]) {
+        self.en_pin.clear();
         for i in 0..::core::cmp::min(PMTK_SET_NMEA_OUTPUT_RMCGGA.len(), tx_buf.len()) {
             tx_buf[i] = PMTK_SET_NMEA_OUTPUT_RMCGGA[i];
         }
@@ -68,7 +73,7 @@ impl<'a> Gps<'a> {
     }
 }
 
-impl<'a> hil::uart::TransmitClient for Gps<'a> {
+impl<'a, G: hil::gpio::Pin + hil::gpio::PinCtl> hil::uart::TransmitClient for Gps<'a, G> {
     fn transmitted_buffer(&self, tx_buf: &'static mut [u8], _tx_len: usize, _rcode: ReturnCode) {
         let mut send = false;
 
@@ -98,7 +103,7 @@ impl<'a> hil::uart::TransmitClient for Gps<'a> {
     }
 }
 
-impl<'a> hil::uart::ReceiveClient for Gps<'a> {
+impl<'a, G: hil::gpio::Pin + hil::gpio::PinCtl> hil::uart::ReceiveClient for Gps<'a, G> {
     fn received_buffer(
         &self,
         buffer: &'static mut [u8],
@@ -131,7 +136,7 @@ impl<'a> hil::uart::ReceiveClient for Gps<'a> {
     }
 }
 
-impl Driver for Gps<'a> {
+impl<'a, G: hil::gpio::Pin + hil::gpio::PinCtl> Driver for Gps<'a, G> {
     fn allow(&self, appid: AppId, arg2: usize, slice: Option<AppSlice<Shared, u8>>) -> ReturnCode {
         let cmd = COMMAND::from_usize(arg2).expect("Invalid command passed by userspace driver");
         match cmd {
@@ -168,6 +173,14 @@ impl Driver for Gps<'a> {
                     app.rx_read += read;
                     ReturnCode::SUCCESS
                 }).unwrap_or_else(|err| err.into())
+            },
+            COMMAND::SLEEP /* get lines */ => {
+                self.en_pin.set();
+                ReturnCode::SUCCESS
+            },
+            COMMAND::WAKE /* get lines */ => {
+                self.en_pin.clear();
+                ReturnCode::SUCCESS
             },
         }
     }
