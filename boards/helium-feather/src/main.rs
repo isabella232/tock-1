@@ -500,6 +500,28 @@ pub unsafe fn reset_handler() {
         &process_management_capability,
     );
 
+    for (proc_num, proc_) in PROCESSES.as_ref().iter().enumerate() {
+        match proc_ {
+            Some(p) => load_process_hook(
+                proc_num as u32,
+                p.get_process_name(),
+                p.flash_non_protected_start() as u32,
+            ),
+            None => (),
+        }
+    }
+
     debug!("Kernel loop");
     board_kernel.kernel_loop(&launchxl, chip, Some(&launchxl.ipc), &main_loop_capability);
+}
+
+// This function's sole purpose is to allow GDB to observe process loading
+// and load debug symbols from the `.elf` that corresponds to that
+// process.
+#[no_mangle]
+pub extern "C" fn load_process_hook(proc_num: u32, name: &str, text_addr: u32) {
+    debug!(
+        "Loading app {}: name \"{}\", `.text` 0x{:08x}",
+        proc_num, name, text_addr
+    );
 }
