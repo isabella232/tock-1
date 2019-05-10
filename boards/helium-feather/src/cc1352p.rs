@@ -49,6 +49,8 @@ pub static PINMAP: Pinmap = Pinmap {
     green_led: PIN_FN::GREEN_LED as usize,
     button1: PIN_FN::BUTTON_1 as usize,
     a2: PIN_FN::A2 as usize,
+    a3: PIN_FN::A3 as usize,
+    a4: PIN_FN::A4 as usize,
     skyworks_csd: PIN_FN::SE_CSD as usize,
     skyworks_cps: PIN_FN::SE_CPS as usize,
     skyworks_ctx: PIN_FN::SE_CTX as usize,

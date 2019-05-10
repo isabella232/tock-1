@@ -111,6 +111,8 @@ pub struct Pinmap {
     green_led: usize,
     button1: usize,
     a2: usize,
+    a3: usize,
+    a4: usize,
     skyworks_csd: usize,
     skyworks_cps: usize,
     skyworks_ctx: usize,
@@ -134,8 +136,8 @@ unsafe fn configure_pins(pin: &Pinmap) {
     // cc26x2::gpio::PORT[pin.i2c0_sda].enable_gpio();
     // cc26x2::gpio::PORT[pin.i2c0_sda].set();
 
-    cc26x2::gpio::PORT[pin.red_led].enable_gpio();
-    cc26x2::gpio::PORT[pin.green_led].enable_gpio();
+    cc26x2::gpio::PORT[pin.a3].enable_gpio();
+    cc26x2::gpio::PORT[pin.a4].enable_gpio();
 
     cc26x2::gpio::PORT[pin.button1].enable_gpio();
     cc26x2::gpio::PORT[pin.skyworks_csd].make_output();
@@ -209,11 +211,11 @@ pub unsafe fn reset_handler() {
         ); 2],
         [
             (
-                &cc26x2::gpio::PORT[pinmap.red_led],
+                &cc26x2::gpio::PORT[pinmap.a3],
                 capsules::led::ActivationMode::ActiveHigh
             ), // Red
             (
-                &cc26x2::gpio::PORT[pinmap.green_led],
+                &cc26x2::gpio::PORT[pinmap.a4],
                 capsules::led::ActivationMode::ActiveHigh
             ), // Green
         ]

@@ -63,7 +63,7 @@ impl<'a, G: hil::gpio::Pin + hil::gpio::PinCtl> Gps<'a, G> {
     }
 
     pub fn initialize(&self, tx_buf: &'static mut [u8], rx_buf: &'static mut [u8]) {
-        self.en_pin.clear();
+        self.en_pin.set();
         for i in 0..::core::cmp::min(PMTK_SET_NMEA_OUTPUT_RMCGGA.len(), tx_buf.len()) {
             tx_buf[i] = PMTK_SET_NMEA_OUTPUT_RMCGGA[i];
         }
